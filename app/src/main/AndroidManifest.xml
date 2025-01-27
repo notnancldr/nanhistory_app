@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.NanHistory"
+        tools:targetApi="34">
+        <activity
+            android:name=".BackupActivity"
+            android:exported="false"
+            android:label="@string/title_activity_backup"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".EventLocationActivity"
+            android:exported="false"
+            android:label="@string/title_activity_event_location"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="@string/title_activity_settings"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".debug.DebugActivity"
+            android:exported="false"
+            android:label="@string/title_activity_debug"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".debug.FileSystemActivity"
+            android:exported="false"
+            android:label="@string/title_activity_filesystem"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".debug.LogListActivity"
+            android:exported="false"
+            android:label="@string/title_activity_log_list"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".debug.FilePreviewActivity"
+            android:exported="false"
+            android:label="@string/title_activity_filepreview"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".debug.ConfigViewActivity"
+            android:exported="false"
+            android:label="@string/title_activity_config_view"
+            android:theme="@style/Theme.NanHistory" />
+
+        <service
+            android:name=".service.RecordService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
+        <activity
+            android:name=".EditEventActivity"
+            android:exported="false"
+            android:label="@string/title_activity_edit_event"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".EventDetailActivity"
+            android:exported="false"
+            android:label="@string/title_activity_event_detail_acitivity"
+            android:theme="@style/Theme.NanHistory" />
+<!--        <activity-->
+<!--            android:name=".MapLibreTest"-->
+<!--            android:exported="false"-->
+<!--            android:label="MapLibreTest"-->
+<!--            android:theme="@style/Theme.NanHistory" />-->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.NanHistory">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

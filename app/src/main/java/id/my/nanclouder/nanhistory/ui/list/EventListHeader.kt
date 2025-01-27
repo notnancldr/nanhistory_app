@@ -1,0 +1,103 @@
+package id.my.nanclouder.nanhistory.ui.list
+
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.em
+import id.my.nanclouder.nanhistory.R
+import id.my.nanclouder.nanhistory.lib.DateFormatter
+import id.my.nanclouder.nanhistory.lib.history.HistoryTag
+import id.my.nanclouder.nanhistory.lib.history.HistoryDay
+import id.my.nanclouder.nanhistory.lib.history.get
+import id.my.nanclouder.nanhistory.ui.TagsView
+import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
+import java.time.ZonedDateTime
+
+@Composable
+fun EventListHeader(
+    historyDay: HistoryDay,
+    modifier: Modifier = Modifier,
+    onFavoriteChanged: (Boolean) -> Unit,
+) {
+    val context = LocalContext.current
+    val tagData = historyDay.tags.mapNotNull { HistoryTag.get(context, it) }
+    val headlineFontSize = 3.9.em
+    val headlineFontWeight = FontWeight.W500
+    var favorite by remember { mutableStateOf(historyDay.favorite) }
+//    HorizontalDivider(modifier = dividerModifier)
+    ListItem(
+        modifier = modifier,
+        headlineContent = {
+            val format = DateFormatter
+            val dateStr = historyDay.date.format(format)
+            Text(
+                dateStr,
+                fontSize = headlineFontSize,
+                fontWeight = headlineFontWeight,
+                textAlign = TextAlign.Center
+            )
+        },
+        trailingContent = {
+            IconButton(
+                onClick = {
+                    onFavoriteChanged(!favorite)
+                    favorite = !favorite
+                }
+            ) {
+                if (favorite) Icon(
+                    painterResource(R.drawable.ic_favorite_filled), "",
+                    tint = Color(0xFFFF7070)
+                )
+                else Icon(
+                    painterResource(R.drawable.ic_favorite), ""
+                )
+            }
+        },
+        supportingContent = {
+            TagsView(tagData)
+        },
+        colors = ListItemDefaults.colors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        )
+    )
+}
+
+@Preview(showBackground = true)
+@Composable
+fun EventListHeaderPreview() {
+    NanHistoryTheme {
+        EventListHeader(
+            HistoryDay(
+                date = ZonedDateTime.now().toLocalDate(),
+                description = null,
+                favorite = true,
+                tags = listOf(
+                    "TAG-193CAB4E4F4-BBAB71DE329F7000",
+                    "TAG-193CAB4E4F4-BBAB71DE329F7000",
+                    "TAG-193CAB4E4F4-BBAB71DE329F7000",
+                    "TAG-193CAB4E4F4-BBAB71DE329F7000",
+                    "TAG-193CAB4E4F4-BBAB71DE329F7000",
+                    "TAG-193CAB4E4F4-BBAB71DE329F7000",
+                    "TAG-193CAD9B196-DAB61E715F5FC000"
+                )
+            )
+        ) {
+
+        }
+    }
+}

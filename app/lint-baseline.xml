@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 8.3.2" type="baseline" client="gradle" dependencies="false" name="AGP (8.3.2)" variant="fatal" version="8.3.2">
+
+    <issue
+        id="InvalidFragmentVersionForActivityResult"
+        message="Upgrade Fragment version to at least 1.3.0."
+        errorLine1="        resultLauncher = registerForActivityResult("
+        errorLine2="                         ^">
+        <location
+            file="src/main/java/id/my/nanclouder/nanhistory/MainActivity.kt"
+            line="58"
+            column="26"/>
+    </issue>
+
+</issues>
