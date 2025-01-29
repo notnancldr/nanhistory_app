@@ -95,7 +95,7 @@ class RecordService : Service() {
         event = EventRange(
             id = generateEventId(),
             title = now
-                .format(DateTimeFormatter.ofPattern("'Event' dd MMM yyyy, hh:mm:ss")),
+                .format(DateTimeFormatter.ofPattern("'Event' dd MMM yyyy, HH:mm:ss")),
             description = "",
             time = now,
             end = now,
