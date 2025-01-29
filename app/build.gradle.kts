@@ -81,8 +81,8 @@ android {
         applicationId = "id.my.nanclouder.nanhistory"
         minSdk = 31
         targetSdk = 33
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

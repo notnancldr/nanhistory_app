@@ -183,7 +183,7 @@ fun DetailContent(eventId: String, path: String) {
                     ) {
                         if (favorite == true) Icon(
                             painterResource(R.drawable.ic_favorite_filled), "",
-                            tint =  Color(0xFFFF7070)
+                            tint = Color(0xFFFF7070)
                         )
                         else Icon(
                             painterResource(R.drawable.ic_favorite), ""
@@ -225,12 +225,17 @@ fun DetailContent(eventId: String, path: String) {
                         eventData = eventData,
                         modifier = Modifier.height(200.dp)
                     )
-                    Box(modifier = Modifier.fillMaxSize().clickable {
-                        val intent = Intent(context, EventLocationActivity::class.java)
-                        intent.putExtra("eventId", eventData.id)
-                        intent.putExtra("path", getFilePathFromDate(eventData.time.toLocalDate()))
-                        context.startActivity(intent)
-                    })
+                    Box(modifier = Modifier
+                        .fillMaxSize()
+                        .clickable {
+                            val intent = Intent(context, EventLocationActivity::class.java)
+                            intent.putExtra("eventId", eventData.id)
+                            intent.putExtra(
+                                "path",
+                                getFilePathFromDate(eventData.time.toLocalDate())
+                            )
+                            context.startActivity(intent)
+                        })
                 }
             }
 
@@ -241,7 +246,7 @@ fun DetailContent(eventId: String, path: String) {
                     acc + item.distance
                 }
                 // In Km/h
-                val avgSpeed = (distance / 100f / ( duration / 3600f )).roundToInt() / 10f
+                val avgSpeed = (distance / 100f / (duration / 3600f)).roundToInt() / 10f
 
                 ListItem(
                     headlineContent = {
@@ -251,9 +256,10 @@ fun DetailContent(eventId: String, path: String) {
                         Column {
                             Text("Average speed: $avgSpeed Km/h")
                             Text("Max speed: $maxSpeed Km/h")
-                            Text("Total distance: " +
-                                    if (distance < 1000) "$distance m"
-                                    else "${round(distance / 100) / 10} Km"
+                            Text(
+                                "Total distance: " +
+                                        if (distance < 1000) "$distance m"
+                                        else "${round(distance / 100) / 10} Km"
                             )
                         }
                     }
@@ -339,7 +345,9 @@ fun DetailContent(eventId: String, path: String) {
                     Text(
                         eventData.time.format(DateFormatter) + " " +
                                 eventData.time.format(TimeFormatter) +
-                                if (eventData.time.second != 0) ":${eventData.time.second}" else ""
+                                if (eventData.time.second != 0) ":${
+                                    eventData.time.second.toString().padStart(2, '0')
+                                }" else ""
                     )
                 },
             )
@@ -381,7 +389,9 @@ fun DetailContent(eventId: String, path: String) {
                         Text(
                             eventData.end.format(DateFormatter) + " " +
                                     eventData.end.format(TimeFormatter) +
-                                    if (eventData.end.second != 0) ":${eventData.end.second}" else ""
+                                    if (eventData.end.second != 0) ":${
+                                        eventData.end.second.toString().padStart(2, '0')
+                                    }" else ""
                         )
                     },
                 )
@@ -510,6 +520,7 @@ fun MapHistoryPreview(eventData: HistoryEvent, modifier: Modifier = Modifier) {
 
 
                 post {
+                    maxZoomLevel = 18.0
                     zoomToBoundingBox(geoPoints.toBoundingBox(), false)
                     setScrollableAreaLimitLatitude(mapCenter.latitude, mapCenter.latitude, 0)
                     setScrollableAreaLimitLongitude(mapCenter.longitude, mapCenter.longitude, 0)
@@ -519,13 +530,13 @@ fun MapHistoryPreview(eventData: HistoryEvent, modifier: Modifier = Modifier) {
                     postOnAnimation {
                         val shownPoints =
                             if (geoPoints.size > 2) {
-                                val coordinates = geoPoints.dropLast(1).mapIndexed { a, b -> a to b }.filter {
-                                    it.first % (2.0.pow((15 - zoomLevelDouble.roundToInt()))) == 0.0
-                                }.map { it.second }.toMutableList()
+                                val coordinates =
+                                    geoPoints.dropLast(1).mapIndexed { a, b -> a to b }.filter {
+                                        it.first % (2.0.pow((15 - zoomLevelDouble.roundToInt()))) == 0.0
+                                    }.map { it.second }.toMutableList()
                                 coordinates.add(geoPoints.last())
                                 coordinates.toList()
-                            }
-                            else geoPoints
+                            } else geoPoints
 
                         val polyline = Polyline(this).apply {
                             setPoints(shownPoints)

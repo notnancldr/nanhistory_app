@@ -327,6 +327,7 @@ fun MainView() {
             loader = loadTop@{
                 firstLoad = true
                 scope.launch load@{
+                    lock = true
                     val data = withContext(Dispatchers.IO) {
                         when (selectedPage) {
                             NanHistoryPages.Favorite -> HistoryFileData
@@ -344,6 +345,7 @@ fun MainView() {
                         }
                     }
                     fileDataList = data
+                    lock = false
                     isLoading = false
                 }
             }
@@ -466,7 +468,7 @@ fun MainView() {
                 Icon(Icons.Rounded.Warning, "Warning")
             },
             onDismissRequest = {
-                deleteDialogState = false
+                if (!lock) deleteDialogState = false
             },
             title = {
                 Text(deleteDialogTitle)
@@ -487,10 +489,11 @@ fun MainView() {
                 if (deleteButtonState) Button(
                     onClick = {
                         scope.launch {
+                            lock = true
                             deleteButtonState = false
                             val selectedItemsCount = selectedItems.size
                             deleteDialogTitle = "Deleting Events"
-                            deleteDialogText = "Initializing..."
+                            deleteDialogText = "Deleting..."
                             withContext(Dispatchers.IO) {
                                 val events = mutableListOf<HistoryEvent>()
                                 for (day in HistoryFileData.getList(context)) {
@@ -502,9 +505,10 @@ fun MainView() {
                                         deleteDialogText = "Deleting ${index + 1} of $selectedItemsCount"
                                     }
                             }
+                            lock = false
                             resetSelectionMode()
-                            closeDeleteDialog()
                             loader()
+                            closeDeleteDialog()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(

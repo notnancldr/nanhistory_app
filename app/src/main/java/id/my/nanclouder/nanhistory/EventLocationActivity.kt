@@ -490,6 +490,8 @@ fun MapHistoryView(locations: Map<ZonedDateTime, Coordinate>, modifier: Modifier
                         }
                     }
 
+                    minZoomLevel = 4.0
+                    maxZoomLevel = 20.0
                     post {
                         updateMap()
                         mapViewObj = this
