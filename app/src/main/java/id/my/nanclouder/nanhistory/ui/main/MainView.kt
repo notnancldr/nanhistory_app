@@ -4,10 +4,12 @@ import android.content.Context
 import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -22,6 +24,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DockedSearchBar
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -36,6 +39,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
@@ -71,6 +75,7 @@ import id.my.nanclouder.nanhistory.lib.history.getFilePathFromDate
 import id.my.nanclouder.nanhistory.lib.history.getList
 import id.my.nanclouder.nanhistory.lib.history.save
 import id.my.nanclouder.nanhistory.service.RecordService
+import id.my.nanclouder.nanhistory.ui.SearchAppBar
 import id.my.nanclouder.nanhistory.ui.SelectionAppBar
 import id.my.nanclouder.nanhistory.ui.list.EventListHeader
 import id.my.nanclouder.nanhistory.ui.list.EventListItem
@@ -79,6 +84,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Instant
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 @OptIn(
     ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class,
@@ -100,9 +108,11 @@ fun MainView() {
         NanHistoryPages.Recent -> "Recent Events"
         NanHistoryPages.Favorite -> "Favorite Events"
         NanHistoryPages.All -> "All Events"
+        NanHistoryPages.Search -> "Search"
     }
 
     var loader by remember { mutableStateOf({ }) }
+    var searchQuery by remember { mutableStateOf("") }
 
     val recordPermissionState = rememberMultiplePermissionsState(
         listOf(
@@ -153,6 +163,8 @@ fun MainView() {
     }
 
     var fileDataList by remember { mutableStateOf(listOf<HistoryFileData>()) }
+
+    val expanded = remember { mutableStateListOf<LocalDate>() }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -216,46 +228,65 @@ fun MainView() {
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             modifier = Modifier.fillMaxSize(),
             topBar = {
-                if (selectionMode)
-                    SelectionAppBar(selectedItems, { resetSelectionMode() }) {
-                        IconButton(onClick = {
-                            scope.launch {
-                                lock = true
-                                withContext(Dispatchers.IO) {
-                                    fileDataList.forEach {
-                                        it.events
-                                            .filter { event -> selectedItems.contains(event.id) }
-                                            .forEach { event ->
-                                                event.favorite = !event.favorite
-                                                event.save(context)
-                                            }
-                                    }
+                if (selectionMode) SelectionAppBar(
+                    selectedItems, { resetSelectionMode() }
+                ) {
+                    IconButton(onClick = {
+                        scope.launch {
+                            lock = true
+                            withContext(Dispatchers.IO) {
+                                fileDataList.forEach {
+                                    it.events
+                                        .filter { event -> selectedItems.contains(event.id) }
+                                        .forEach { event ->
+                                            event.favorite = !event.favorite
+                                            event.save(context)
+                                        }
                                 }
-                                lock = false
-                                resetSelectionMode()
                             }
-                        }) {
-                            Icon(painterResource(R.drawable.ic_favorite), "Favorite")
+                            lock = false
+                            resetSelectionMode()
                         }
-                        IconButton(onClick = { openDeleteDialog() }) {
-                            Icon(painterResource(R.drawable.ic_delete), "Delete")
+                    }) {
+                        Icon(painterResource(R.drawable.ic_favorite), "Favorite")
+                    }
+                    IconButton(onClick = { openDeleteDialog() }) {
+                        Icon(painterResource(R.drawable.ic_delete), "Delete")
+                    }
+                }
+                else if (selectedPage == NanHistoryPages.Search) SearchAppBar(
+                    onSearch = {
+                        isLoading = true
+                        searchQuery = it
+                        loader()
+                    }
+                )
+                else TopAppBar(
+                    title = { Text(appBarTitle) },
+                    scrollBehavior = scrollBehavior,
+                    navigationIcon = {
+                        IconButton(
+                            onClick = {
+                                scope.launch { drawerState.open() }
+                            }
+                        ) { Icon(Icons.Rounded.Menu, "Open sidebar") }
+                    },
+                    actions = {
+                        val expandedAll = expanded.size == fileDataList.size
+                        IconButton(
+                            onClick = {
+                                expanded.clear()
+                                if (!expandedAll)
+                                    expanded.addAll(fileDataList.map { it.date })
+                            }
+                        ) {
+                            if (expandedAll)
+                                Icon(painterResource(R.drawable.ic_collapse_all), "Collapse all")
+                            else
+                                Icon(painterResource(R.drawable.ic_expand_all), "Expand all")
                         }
                     }
-                else
-                    TopAppBar(
-                        title = { Text(appBarTitle) },
-                        scrollBehavior = scrollBehavior,
-                        navigationIcon = {
-                            IconButton(
-                                onClick = {
-                                    scope.launch { drawerState.open() }
-                                }
-                            ) { Icon(Icons.Rounded.Menu, "Open sidebars") }
-                        },
-                        actions = {
-
-                        }
-                    )
+                )
             },
             bottomBar = {
                 NavigationBar {
@@ -314,6 +345,21 @@ fun MainView() {
                             Text("All")
                         }
                     )
+                    NavigationBarItem(
+                        selected = selectedPage == NanHistoryPages.Search,
+                        onClick = navigationOnClick {
+                            selectedPage = NanHistoryPages.Search
+                        },
+                        icon = {
+                            val icon = painterResource(
+                                R.drawable.ic_search
+                            )
+                            Icon(icon, "Search events")
+                        },
+                        label = {
+                            Text("Search")
+                        }
+                    )
                 }
             },
         ) { paddingValues ->
@@ -323,6 +369,14 @@ fun MainView() {
             val fromZero = Instant.ofEpochSecond(0L)
 
             var firstLoad by rememberSaveable { mutableStateOf(false) }
+
+            val filterSearchEvent = { event: HistoryEvent ->
+                event.title.contains(searchQuery, true) ||
+                event.description.contains(searchQuery, true) ||
+//                (searchQuery.startsWith("duration") && )
+                event.time.format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.FULL))
+                    .toString().contains(searchQuery, true)
+            }
 
             loader = loadTop@{
                 firstLoad = true
@@ -339,11 +393,23 @@ fun MainView() {
                                 .getList(context, from = fromZero)
                                 .sortedByDescending { it.date }
 
+                            NanHistoryPages.Search -> HistoryFileData
+                                .getList(context, from = fromZero)
+                                .filter {
+                                    it.events.find { event ->
+                                        filterSearchEvent(event)
+                                    } != null
+                                }
+                                .sortedByDescending { it.date }
+
                             else -> HistoryFileData
                                 .getList(context, from = fromRecent)
                                 .sortedByDescending { it.date }
                         }
                     }
+                    expanded.clear()
+                    if (selectedPage == NanHistoryPages.Recent)
+                        expanded.addAll(data.map { it.date })
                     fileDataList = data
                     lock = false
                     isLoading = false
@@ -402,9 +468,42 @@ fun MainView() {
                     ) {
                         fileDataList.filter { it.events.isNotEmpty() }.forEach { day ->
                             stickyHeader(key = "${day.date}_$selectedPage") {
+                                val selected = selectedItems.containsAll(day.events.map { it.id })
+                                val eventIds = day.events.map { it.id }
                                 EventListHeader(
                                     historyDay = day.historyDay,
-                                    modifier = Modifier.animateItem()
+                                    selected = selected,
+                                    expanded = expanded.contains(day.date),
+                                    onExpandButtonClicked = {
+                                        if (expanded.contains(day.historyDay.date))
+                                            expanded.remove(day.historyDay.date)
+                                        else
+                                            expanded.add(day.historyDay.date)
+                                    },
+                                    modifier = Modifier
+                                        .animateItem()
+                                        .combinedClickable(
+                                            onClick = {
+                                                if (!selectionMode) {
+                                                    if (expanded.contains(day.historyDay.date))
+                                                        expanded.remove(day.historyDay.date)
+                                                    else
+                                                        expanded.add(day.historyDay.date)
+                                                } else {
+                                                    if (!selected) selectedItems.addAll(eventIds)
+                                                    else selectedItems.removeAll(eventIds)
+                                                }
+                                                val distinct = selectedItems.distinct()
+                                                selectedItems.clear()
+                                                selectedItems.addAll(distinct)
+                                            },
+                                            onLongClick = listHeaderOnLongClick@{
+                                                if (lock) return@listHeaderOnLongClick
+                                                selectionMode = true
+                                                if (selected) selectedItems.removeAll(eventIds)
+                                                else selectedItems.addAll(eventIds)
+                                            }
+                                        )
                                 ) {
                                     day.favorite = it
                                     day.save(context)
@@ -413,46 +512,49 @@ fun MainView() {
                             val events = day.events.sortedByDescending { it.time }.let {
                                 if (selectedPage == NanHistoryPages.Favorite && !day.favorite)
                                     it.filter { event -> event.favorite }
+                                else if (selectedPage == NanHistoryPages.Search)
+                                    it.filter { event -> filterSearchEvent(event) }
                                 else
                                     it
                             }
-                            items(events.size, key = { "${events[it].id}_$selectedPage" }) {
-                                val eventData = events[it]
-                                val selected = selectedItems.contains(eventData.id)
-                                EventListItem(
-                                    eventData,
-                                    selected = selected,
-                                    modifier = Modifier
-                                        .animateItem()
-                                        .combinedClickable(
-                                            onClick = listItemOnClick@{
-                                                if (lock) return@listItemOnClick
-                                                if (!selectionMode) {
-                                                    val intent =
-                                                        Intent(
-                                                            context,
-                                                            EventDetailActivity::class.java
+                            if (expanded.contains(day.historyDay.date))
+                                items(events.size, key = { "${events[it].id}_$selectedPage" }) {
+                                    val eventData = events[it]
+                                    val selected = selectedItems.contains(eventData.id)
+                                    EventListItem(
+                                        eventData,
+                                        selected = selected,
+                                        modifier = Modifier
+                                            .animateItem()
+                                            .combinedClickable(
+                                                onClick = listItemOnClick@{
+                                                    if (lock) return@listItemOnClick
+                                                    if (!selectionMode) {
+                                                        val intent =
+                                                            Intent(
+                                                                context,
+                                                                EventDetailActivity::class.java
+                                                            )
+                                                        intent.putExtra("eventId", eventData.id)
+                                                        intent.putExtra(
+                                                            "path",
+                                                            getFilePathFromDate(eventData.time.toLocalDate())
                                                         )
-                                                    intent.putExtra("eventId", eventData.id)
-                                                    intent.putExtra(
-                                                        "path",
-                                                        getFilePathFromDate(eventData.time.toLocalDate())
-                                                    )
-                                                    context.startActivity(intent)
-                                                } else {
+                                                        context.startActivity(intent)
+                                                    } else {
+                                                        if (selected) selectedItems.remove(eventData.id)
+                                                        else selectedItems.add(eventData.id)
+                                                    }
+                                                },
+                                                onLongClick = listItemOnLongClick@{
+                                                    if (lock) return@listItemOnLongClick
+                                                    selectionMode = true
                                                     if (selected) selectedItems.remove(eventData.id)
                                                     else selectedItems.add(eventData.id)
                                                 }
-                                            },
-                                            onLongClick = listItemOnLongClick@{
-                                                if (lock) return@listItemOnLongClick
-                                                selectionMode = true
-                                                if (selected) selectedItems.remove(eventData.id)
-                                                else selectedItems.add(eventData.id)
-                                            }
-                                        ),
-                                )
-                            }
+                                            ),
+                                    )
+                                }
                         }
                         item {
                             Box(modifier = Modifier.height(136.dp))
@@ -502,7 +604,8 @@ fun MainView() {
                                 events.filter { selectedItems.contains(it.id) }
                                     .forEachIndexed { index, event ->
                                         event.delete(context)
-                                        deleteDialogText = "Deleting ${index + 1} of $selectedItemsCount"
+                                        deleteDialogText =
+                                            "Deleting ${index + 1} of $selectedItemsCount"
                                     }
                             }
                             lock = false

@@ -242,9 +242,7 @@ fun DetailContent(eventId: String, path: String) {
             if (eventData is EventRange && eventData.locations.size > 1) {
                 val data = eventData.locations.getLocationData()
                 val maxSpeed = round(data.maxOf { it.speed } * 10) / 10
-                val distance = data.fold(0f) { acc, item ->
-                    acc + item.distance
-                }
+                val distance = data.sumOf { item -> item.distance.toDouble() }
                 // In Km/h
                 val avgSpeed = (distance / 100f / (duration / 3600f)).roundToInt() / 10f
 

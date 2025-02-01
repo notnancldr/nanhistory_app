@@ -33,9 +33,19 @@
             android:label="@string/title_activity_event_location"
             android:theme="@style/Theme.NanHistory" />
         <activity
-            android:name=".SettingsActivity"
+            android:name=".settings.SettingsActivity"
             android:exported="false"
             android:label="@string/title_activity_settings"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".settings.RecordSettingsActivity"
+            android:exported="false"
+            android:label="@string/title_activity_settings_record"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".settings.StorageSettingsActivity"
+            android:exported="false"
+            android:label="@string/title_activity_settings_storage"
             android:theme="@style/Theme.NanHistory" />
         <activity
             android:name=".debug.DebugActivity"

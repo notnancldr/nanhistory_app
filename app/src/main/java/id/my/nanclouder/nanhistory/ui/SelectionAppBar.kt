@@ -34,7 +34,7 @@ fun SelectionAppBar(
             Text(topBarText, fontWeight = FontWeight.Medium)
         },
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
             titleContentColor = MaterialTheme.colorScheme.primary,
         ),
         navigationIcon = {

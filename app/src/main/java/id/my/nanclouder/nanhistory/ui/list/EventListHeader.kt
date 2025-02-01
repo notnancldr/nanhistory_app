@@ -1,5 +1,9 @@
 package id.my.nanclouder.nanhistory.ui.list
 
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -18,6 +22,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.lib.DateFormatter
@@ -32,6 +37,9 @@ import java.time.ZonedDateTime
 fun EventListHeader(
     historyDay: HistoryDay,
     modifier: Modifier = Modifier,
+    selected: Boolean,
+    expanded: Boolean? = null,
+    onExpandButtonClicked: (() -> Unit)? = null,
     onFavoriteChanged: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
@@ -42,6 +50,15 @@ fun EventListHeader(
 //    HorizontalDivider(modifier = dividerModifier)
     ListItem(
         modifier = modifier,
+        leadingContent = if (expanded != null) ({
+            IconButton(
+                modifier = Modifier.width(32.dp),
+                onClick = onExpandButtonClicked ?: { }
+            ) {
+                if (expanded) Icon(Icons.Rounded.KeyboardArrowUp, "Collapse")
+                else Icon(Icons.Rounded.KeyboardArrowDown, "Expand")
+            }
+        }) else null,
         headlineContent = {
             val format = DateFormatter
             val dateStr = historyDay.date.format(format)
@@ -71,33 +88,15 @@ fun EventListHeader(
         supportingContent = {
             TagsView(tagData)
         },
-        colors = ListItemDefaults.colors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        )
+        colors = if (selected) ListItemDefaults.colors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            headlineColor = MaterialTheme.colorScheme.primary,
+        ) else ListItemDefaults.colors(),
+        shadowElevation = if (expanded == true) 4.dp else ListItemDefaults.Elevation,
+//        else ListItemDefaults.colors(
+//            containerColor =
+//                if (false) MaterialTheme.colorScheme.surfaceContainer
+//                else MaterialTheme.colorScheme.surface,
+//        ),
     )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun EventListHeaderPreview() {
-    NanHistoryTheme {
-        EventListHeader(
-            HistoryDay(
-                date = ZonedDateTime.now().toLocalDate(),
-                description = null,
-                favorite = true,
-                tags = listOf(
-                    "TAG-193CAB4E4F4-BBAB71DE329F7000",
-                    "TAG-193CAB4E4F4-BBAB71DE329F7000",
-                    "TAG-193CAB4E4F4-BBAB71DE329F7000",
-                    "TAG-193CAB4E4F4-BBAB71DE329F7000",
-                    "TAG-193CAB4E4F4-BBAB71DE329F7000",
-                    "TAG-193CAB4E4F4-BBAB71DE329F7000",
-                    "TAG-193CAD9B196-DAB61E715F5FC000"
-                )
-            )
-        ) {
-
-        }
-    }
 }

@@ -11,4 +11,6 @@
     <string name="title_activity_settings">SettingsActivity</string>
     <string name="title_activity_config_view">ConfigViewActivity</string>
     <string name="record_notification_action">Stop Button</string>
+    <string name="title_activity_settings_record">RecordSettingsActivity</string>
+    <string name="title_activity_settings_storage">StorageSettingsActivity</string>
 </resources>

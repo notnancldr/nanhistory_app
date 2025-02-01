@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.em
 import id.my.nanclouder.nanhistory.BackupActivity
 import id.my.nanclouder.nanhistory.debug.DebugActivity
 import id.my.nanclouder.nanhistory.R
-import id.my.nanclouder.nanhistory.SettingsActivity
+import id.my.nanclouder.nanhistory.settings.SettingsActivity
 import id.my.nanclouder.nanhistory.lib.getPackageInfo
 
 @Composable
