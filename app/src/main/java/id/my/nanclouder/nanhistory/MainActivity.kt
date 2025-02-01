@@ -19,7 +19,7 @@ import org.osmdroid.library.BuildConfig
 import java.time.Instant
 
 enum class NanHistoryPages {
-    Recent, Favorite, All
+    Recent, Favorite, All, Search
 }
 
 class MainActivity : ComponentActivity() {
