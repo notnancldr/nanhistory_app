@@ -81,7 +81,7 @@ android {
         applicationId = "id.my.nanclouder.nanhistory"
         minSdk = 31
         targetSdk = 33
-        versionCode = 5
+        versionCode = 7
         versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

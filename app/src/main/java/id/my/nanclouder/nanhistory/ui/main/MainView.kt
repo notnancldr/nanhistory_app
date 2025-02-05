@@ -4,32 +4,37 @@ import android.content.Context
 import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DockedSearchBar
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -39,22 +44,25 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -68,11 +76,15 @@ import id.my.nanclouder.nanhistory.EditEventActivity
 import id.my.nanclouder.nanhistory.EventDetailActivity
 import id.my.nanclouder.nanhistory.NanHistoryPages
 import id.my.nanclouder.nanhistory.R
+import id.my.nanclouder.nanhistory.config.Config
+import id.my.nanclouder.nanhistory.lib.history.EventRange
 import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
 import id.my.nanclouder.nanhistory.lib.history.HistoryFileData
 import id.my.nanclouder.nanhistory.lib.history.delete
+import id.my.nanclouder.nanhistory.lib.history.getDateFromFilePath
 import id.my.nanclouder.nanhistory.lib.history.getFilePathFromDate
 import id.my.nanclouder.nanhistory.lib.history.getList
+import id.my.nanclouder.nanhistory.lib.history.getListStream
 import id.my.nanclouder.nanhistory.lib.history.save
 import id.my.nanclouder.nanhistory.service.RecordService
 import id.my.nanclouder.nanhistory.ui.SearchAppBar
@@ -80,13 +92,22 @@ import id.my.nanclouder.nanhistory.ui.SelectionAppBar
 import id.my.nanclouder.nanhistory.ui.list.EventListHeader
 import id.my.nanclouder.nanhistory.ui.list.EventListItem
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+
+fun MutableList<HistoryFileData>.insertSorted(data: HistoryFileData) {
+    val index = binarySearch(data, compareByDescending { it.date })
+    val insertIndex = if (index >= 0) index else -index - 1
+    add(insertIndex, data)
+}
 
 @OptIn(
     ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class,
@@ -95,6 +116,7 @@ import java.time.format.FormatStyle
 @Composable
 fun MainView() {
     var selectedPage by remember { mutableStateOf(NanHistoryPages.Recent) }
+    var pageIndex by remember { mutableIntStateOf(0) }
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
@@ -111,7 +133,7 @@ fun MainView() {
         NanHistoryPages.Search -> "Search"
     }
 
-    var loader by remember { mutableStateOf({ }) }
+    var loader by remember { mutableStateOf({ _: Boolean -> }) }
     var searchQuery by remember { mutableStateOf("") }
 
     val recordPermissionState = rememberMultiplePermissionsState(
@@ -131,7 +153,7 @@ fun MainView() {
 
     var selectionMode by remember { mutableStateOf(false) }
     val selectedItems = remember { mutableStateListOf<String>() }
-    var isLoading by rememberSaveable { mutableStateOf(true) }
+    val isLoading = remember { mutableStateListOf(true, true, true, true) }
 
     var deleteDialogState by remember { mutableStateOf(false) }
     var deleteDialogTitle by remember { mutableStateOf("") }
@@ -162,9 +184,22 @@ fun MainView() {
         deleteDialogText = ""
     }
 
-    var fileDataList by remember { mutableStateOf(listOf<HistoryFileData>()) }
+    val fileDataList = remember { listOf<SnapshotStateList<HistoryFileData>>(
+        mutableStateListOf(),
+        mutableStateListOf(),
+        mutableStateListOf(),
+        mutableStateListOf()
+    ) }
+    val loaderJob = remember { mutableStateListOf<Job?>(
+        null, null, null, null
+    ) }
 
-    val expanded = remember { mutableStateListOf<LocalDate>() }
+    val expanded = remember { listOf<SnapshotStateList<LocalDate>>(
+        mutableStateListOf(),
+        mutableStateListOf(),
+        mutableStateListOf(),
+        mutableStateListOf()
+    ) }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -187,22 +222,35 @@ fun MainView() {
                     }
                     FloatingActionButton(
                         onClick = {
-                            // TODO
                             val intent = Intent(context, RecordService::class.java)
+                            val now = ZonedDateTime.now()
                             if (isRecording) {
                                 context.stopService(intent)
                                 scope.launch {
                                     delay(100L)
                                     sharedPreferences.edit().putBoolean("isRunning", false).apply()
                                     isRecording = false
-                                    loader()
+                                    loader(false)
                                 }
                             } else {
                                 if (recordPermissionState.allPermissionsGranted) {
+                                    val event = EventRange(
+                                        title = RecordService.titleFormatter.format(now),
+                                        description = "",
+                                        time = now,
+                                        end = now
+                                    )
+                                    event.save(context)
+                                    intent.putExtra("eventId", event.id)
+                                    intent.putExtra("path", getFilePathFromDate(event.time.toLocalDate()))
+                                    fileDataList[pageIndex]
+                                        .find { day -> day.date == event.time.toLocalDate() }
+                                            ?.events?.add(event)
+
                                     context.startForegroundService(intent)
                                     scope.launch {
                                         delay(100L)
-                                        loader()
+                                        loader(false)
                                     }
                                 } else
                                     recordPermissionState.launchMultiplePermissionRequest()
@@ -235,7 +283,7 @@ fun MainView() {
                         scope.launch {
                             lock = true
                             withContext(Dispatchers.IO) {
-                                fileDataList.forEach {
+                                fileDataList[pageIndex].forEach {
                                     it.events
                                         .filter { event -> selectedItems.contains(event.id) }
                                         .forEach { event ->
@@ -255,10 +303,11 @@ fun MainView() {
                     }
                 }
                 else if (selectedPage == NanHistoryPages.Search) SearchAppBar(
+                    searchButtonEnabled = !isLoading[pageIndex],
                     onSearch = {
-                        isLoading = true
+                        isLoading[pageIndex] = true
                         searchQuery = it
-                        loader()
+                        loader(false)
                     }
                 )
                 else TopAppBar(
@@ -272,36 +321,58 @@ fun MainView() {
                         ) { Icon(Icons.Rounded.Menu, "Open sidebar") }
                     },
                     actions = {
-                        val expandedAll = expanded.size == fileDataList.size
+                        val collapsedAll = expanded[pageIndex].isEmpty()
                         IconButton(
                             onClick = {
-                                expanded.clear()
-                                if (!expandedAll)
-                                    expanded.addAll(fileDataList.map { it.date })
+                                expanded[pageIndex].clear()
+                                if (collapsedAll)
+                                    expanded[pageIndex].addAll(fileDataList[pageIndex].map { it.date })
                             }
                         ) {
-                            if (expandedAll)
+                            if (!collapsedAll)
                                 Icon(painterResource(R.drawable.ic_collapse_all), "Collapse all")
                             else
                                 Icon(painterResource(R.drawable.ic_expand_all), "Expand all")
+                        }
+                        IconButton(
+                            onClick = {
+                                expanded[pageIndex].clear()
+                                if (collapsedAll)
+                                    expanded[pageIndex].addAll(fileDataList[pageIndex].map { it.date })
+                            }
+                        ) {
+                            IconButton(enabled = !isLoading[pageIndex], onClick = {
+                                isLoading[pageIndex] = true
+                                loader(false)
+                            }) {
+                                Icon(Icons.Rounded.Refresh, "Refresh")
+                            }
                         }
                     }
                 )
             },
             bottomBar = {
                 NavigationBar {
-                    val navigationOnClick: ((() -> Unit) -> (() -> Unit)) = { onClick ->
-                        {
-                            onClick()
-                            isLoading = true
-                            loader()
+                    val navigationOnClick = { page: NanHistoryPages ->
+                        navOnClick@{
+                            if (selectedPage == page) return@navOnClick
+                            val streamDataListEnabled = Config.experimentalStreamList.get(context)
+                            selectedPage = page
+                            pageIndex = page.ordinal
+//                            onClick()
+//                            isLoading[pageIndex] = true
+                            isLoading[pageIndex] = true
+                            if (fileDataList[pageIndex].isEmpty() && streamDataListEnabled) {
+                                loader(true)
+                            }
+                            else if (!streamDataListEnabled) {
+                                loader(true)
+                            }
                         }
                     }
                     NavigationBarItem(
                         selected = selectedPage == NanHistoryPages.Recent,
-                        onClick = navigationOnClick {
-                            selectedPage = NanHistoryPages.Recent
-                        },
+                        onClick = navigationOnClick(NanHistoryPages.Recent),
                         icon = {
                             val icon = painterResource(
                                 if (selectedPage == NanHistoryPages.Recent) R.drawable.ic_schedule_filled
@@ -315,9 +386,7 @@ fun MainView() {
                     )
                     NavigationBarItem(
                         selected = selectedPage == NanHistoryPages.Favorite,
-                        onClick = navigationOnClick {
-                            selectedPage = NanHistoryPages.Favorite
-                        },
+                        onClick = navigationOnClick(NanHistoryPages.Favorite),
                         icon = {
                             val icon = painterResource(
                                 if (selectedPage == NanHistoryPages.Favorite) R.drawable.ic_favorite_filled
@@ -331,9 +400,7 @@ fun MainView() {
                     )
                     NavigationBarItem(
                         selected = selectedPage == NanHistoryPages.All,
-                        onClick = navigationOnClick {
-                            selectedPage = NanHistoryPages.All
-                        },
+                        onClick = navigationOnClick(NanHistoryPages.All),
                         icon = {
                             val icon = painterResource(
                                 if (selectedPage == NanHistoryPages.All) R.drawable.ic_event_filled
@@ -347,9 +414,7 @@ fun MainView() {
                     )
                     NavigationBarItem(
                         selected = selectedPage == NanHistoryPages.Search,
-                        onClick = navigationOnClick {
-                            selectedPage = NanHistoryPages.Search
-                        },
+                        onClick = navigationOnClick(NanHistoryPages.Search),
                         icon = {
                             val icon = painterResource(
                                 R.drawable.ic_search
@@ -363,7 +428,18 @@ fun MainView() {
                 }
             },
         ) { paddingValues ->
-            val lazyListState = rememberLazyListState()
+            val lazyListState = listOf(
+                rememberLazyListState(),
+                rememberLazyListState(),
+                rememberLazyListState(),
+                rememberLazyListState()
+            )
+
+            var lastUpdate by remember { mutableStateOf(Instant.ofEpochMilli(0)) }
+            var queuedUpdate by remember { mutableStateOf(false) }
+
+            val updateBuffer = remember { mutableStateListOf<HistoryFileData>() }
+            val expandedBuffer = remember { mutableStateListOf<LocalDate>() }
 
             val fromRecent = Instant.now().minusSeconds(2_592_000) // 30 days = 3600 * 24 * 30
             val fromZero = Instant.ofEpochSecond(0L)
@@ -378,12 +454,53 @@ fun MainView() {
                     .toString().contains(searchQuery, true)
             }
 
-            loader = loadTop@{
+            var updateFromBuffer = {}
+            updateFromBuffer = bufferUpdater@{
+                val now = Instant.now()
+                if (now.toEpochMilli() - lastUpdate.toEpochMilli() < 100L) {
+                    if (!queuedUpdate) scope.launch {
+                        queuedUpdate = true
+                        delay(100L)
+                        updateFromBuffer()
+                    }
+                    return@bufferUpdater
+                }
+
+                lastUpdate = Instant.now()
+                queuedUpdate = false
+                fileDataList[pageIndex].addAll(updateBuffer)
+                fileDataList[pageIndex].sortByDescending { it.date }
+                expanded[pageIndex].addAll(expandedBuffer)
+
+                updateBuffer.clear()
+                expandedBuffer.clear()
+            }
+
+            val insertNoDuplicate: suspend (HistoryFileData) -> Unit = { data: HistoryFileData ->
+                if (fileDataList[pageIndex].find { it.date == data.date } == null) {
+//                    fileDataList[pageIndex].add(data)
+//                    updateBuffer.add(data)
+//                    expandedBuffer.add(data.date)
+
+                    fileDataList[pageIndex].insertSorted(data)
+                    expanded[pageIndex].add(data.date)
+
+//                    updateFromBuffer()
+                }
+            }
+
+            loader = loadTop@{ updateExpanded ->
                 firstLoad = true
-                scope.launch load@{
+                val previousJob = loaderJob[pageIndex]
+                val currentIndex = pageIndex
+                val streamDataListEnabled = Config.experimentalStreamList.get(context)
+                loaderJob[pageIndex] = scope.launch load@{
+                    previousJob?.cancelAndJoin()
                     lock = true
-                    val data = withContext(Dispatchers.IO) {
-                        when (selectedPage) {
+                    withContext(Dispatchers.IO) {
+                        if (streamDataListEnabled) fileDataList[currentIndex].clear()
+                        if (updateExpanded) expanded[currentIndex].clear()
+                        if (!streamDataListEnabled) when (selectedPage) {
                             NanHistoryPages.Favorite -> HistoryFileData
                                 .getList(context, from = fromZero)
                                 .filter { it.favorite || it.events.find { event -> event.favorite } != null }
@@ -405,14 +522,48 @@ fun MainView() {
                             else -> HistoryFileData
                                 .getList(context, from = fromRecent)
                                 .sortedByDescending { it.date }
+                        }.let {
+                            fileDataList[currentIndex].let { list ->
+                                list.clear()
+                                list.addAll(it)
+                            }
+                        }
+                        else when (selectedPage) {
+                            NanHistoryPages.Favorite -> HistoryFileData
+                                .getListStream(context, from = fromZero).apply {
+                                    sortedByDescending { getDateFromFilePath(it.absolutePath) }
+                                }.forEachAsync {
+                                    if (it.favorite || it.events.find { event -> event.favorite } != null &&
+                                        fileDataList[currentIndex].find { day -> day.date == it.date } == null) fileDataList[currentIndex].add(it)
+                                }
+
+                            NanHistoryPages.All -> HistoryFileData
+                                .getListStream(context, from = fromZero).apply {
+                                    sortedByDescending { getDateFromFilePath(it.absolutePath) }
+                                }.forEachAsync {
+                                    if (fileDataList[currentIndex].find { day -> day.date == it.date } == null)
+                                        fileDataList[currentIndex].add(it)
+                                }
+
+                            NanHistoryPages.Search -> HistoryFileData
+                                .getListStream(context, from = fromZero).apply {
+                                    sortedByDescending { getDateFromFilePath(it.absolutePath) }
+                                }.forEachAsync {
+                                    if (it.events.find { event ->
+                                        filterSearchEvent(event) && fileDataList[currentIndex].find { day -> day.date == it.date } == null
+                                    } != null) {
+                                        fileDataList[currentIndex].add(it)
+                                    }
+                                }
+
+                            else -> HistoryFileData
+                                .getListStream(context, from = fromRecent).apply {
+                                    sortedByDescending { getDateFromFilePath(it.absolutePath) }
+                                }.forEachAsync { fileDataList[currentIndex].add(it) }
                         }
                     }
-                    expanded.clear()
-                    if (selectedPage == NanHistoryPages.Recent)
-                        expanded.addAll(data.map { it.date })
-                    fileDataList = data
                     lock = false
-                    isLoading = false
+                    isLoading[currentIndex] = false
                 }
             }
 
@@ -423,15 +574,15 @@ fun MainView() {
             }
 
             if (!firstLoad) {
-                isLoading = true
-                loader()
+                isLoading[pageIndex] = true
+                loader(true)
             }
 
             val lifecycleOwner = LocalLifecycleOwner.current
 
             DisposableEffect(Unit) {
                 val observer = LifecycleEventObserver { _, event ->
-                    if (event == Lifecycle.Event.ON_RESUME) loader()
+                    if (event == Lifecycle.Event.ON_RESUME) loader(false)
                 }
                 lifecycleOwner.lifecycle.addObserver(observer)
 
@@ -442,7 +593,7 @@ fun MainView() {
 
             if (selectedItems.isEmpty() && selectionMode) resetSelectionMode()
 
-            if (isLoading) {
+            if (isLoading[pageIndex] == null) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize(),
@@ -458,37 +609,64 @@ fun MainView() {
                 Column(
                     modifier = Modifier
                         .padding(paddingValues)
+                        .background(
+                            if (isSystemInDarkTheme()) MaterialTheme.colorScheme.surface
+                            else MaterialTheme.colorScheme.surfaceContainer
+                        )
                 ) {
                     LazyColumn(
                         modifier = Modifier
                             .nestedScroll(scrollBehavior.nestedScrollConnection)
                             .selectableGroup()
                             .fillMaxSize(),
-                        state = lazyListState,
+                        state = lazyListState[pageIndex],
                     ) {
-                        fileDataList.filter { it.events.isNotEmpty() }.forEach { day ->
-                            stickyHeader(key = "${day.date}_$selectedPage") {
+                        val listCurrent = fileDataList[pageIndex].toList()
+                        val expandedCurrent = expanded[pageIndex].toList()
+                        item { Box(Modifier.height(16.dp)) }
+
+                        if (isLoading[pageIndex]) item(key = "LoadIndicator") {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .padding(top = 0.dp, start = 16.dp, end = 16.dp, bottom = 32.dp)
+                                        .animateItem()
+                                )
+                            }
+                        }
+
+                        listCurrent.filter { it.events.isNotEmpty() }.forEach { day ->
+                            val dayExpanded = expandedCurrent.contains(day.date)
+
+                            val header: (@Composable LazyItemScope.() -> Unit) = {
                                 val selected = selectedItems.containsAll(day.events.map { it.id })
                                 val eventIds = day.events.map { it.id }
                                 EventListHeader(
                                     historyDay = day.historyDay,
                                     selected = selected,
-                                    expanded = expanded.contains(day.date),
+                                    expanded = dayExpanded,
                                     onExpandButtonClicked = {
-                                        if (expanded.contains(day.historyDay.date))
-                                            expanded.remove(day.historyDay.date)
+                                        if (expandedCurrent.contains(day.historyDay.date))
+                                            expanded[pageIndex].remove(day.historyDay.date)
                                         else
-                                            expanded.add(day.historyDay.date)
+                                            expanded[pageIndex].add(day.historyDay.date)
                                     },
                                     modifier = Modifier
                                         .animateItem()
+                                        .padding(bottom = if (dayExpanded) 0.dp else 16.dp)
                                         .combinedClickable(
                                             onClick = {
                                                 if (!selectionMode) {
-                                                    if (expanded.contains(day.historyDay.date))
-                                                        expanded.remove(day.historyDay.date)
+                                                    if (dayExpanded)
+                                                        expanded[pageIndex].remove(day.date)
                                                     else
-                                                        expanded.add(day.historyDay.date)
+                                                        expanded[pageIndex].add(day.date)
                                                 } else {
                                                     if (!selected) selectedItems.addAll(eventIds)
                                                     else selectedItems.removeAll(eventIds)
@@ -509,6 +687,10 @@ fun MainView() {
                                     day.save(context)
                                 }
                             }
+
+                            /*if (dayExpanded) */stickyHeader(key = "${day.date}_$selectedPage", content = header)
+                            // else item(key = "${day.date}_$selectedPage", content = header)
+
                             val events = day.events.sortedByDescending { it.time }.let {
                                 if (selectedPage == NanHistoryPages.Favorite && !day.favorite)
                                     it.filter { event -> event.favorite }
@@ -517,14 +699,22 @@ fun MainView() {
                                 else
                                     it
                             }
-                            if (expanded.contains(day.historyDay.date))
+                            if (dayExpanded) {
                                 items(events.size, key = { "${events[it].id}_$selectedPage" }) {
                                     val eventData = events[it]
                                     val selected = selectedItems.contains(eventData.id)
+                                    val lastItem = it + 1 >= events.size
                                     EventListItem(
                                         eventData,
                                         selected = selected,
                                         modifier = Modifier
+                                            .padding(bottom = if (lastItem) 16.dp else 0.dp)
+                                            .clip(
+                                                if (lastItem) RoundedCornerShape(
+                                                    bottomStart = 24.dp, bottomEnd = 24.dp
+                                                )
+                                                else RectangleShape
+                                            )
                                             .animateItem()
                                             .combinedClickable(
                                                 onClick = listItemOnClick@{
@@ -555,6 +745,10 @@ fun MainView() {
                                             ),
                                     )
                                 }
+                            }
+//                            item {
+////                                Box(Modifier.height(16.dp))
+//                            }
                         }
                         item {
                             Box(modifier = Modifier.height(136.dp))
@@ -610,7 +804,7 @@ fun MainView() {
                             }
                             lock = false
                             resetSelectionMode()
-                            loader()
+                            loader(false)
                             closeDeleteDialog()
                         }
                     },

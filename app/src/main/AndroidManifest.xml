@@ -48,6 +48,11 @@
             android:label="@string/title_activity_settings_storage"
             android:theme="@style/Theme.NanHistory" />
         <activity
+            android:name=".settings.ExperimentalSettingsActivity"
+            android:exported="false"
+            android:label="@string/title_activity_settings_experimental"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
             android:name=".debug.DebugActivity"
             android:exported="false"
             android:label="@string/title_activity_debug"

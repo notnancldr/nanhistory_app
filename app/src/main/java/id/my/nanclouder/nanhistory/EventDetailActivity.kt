@@ -6,8 +6,10 @@ import android.content.Intent
 import android.graphics.Paint
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,7 +46,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -97,17 +98,17 @@ class EventDetailActivity : ComponentActivity() {
         val path = intent.getStringExtra("path") ?: "NULL!"
         setContent {
             var setUpdate by remember { mutableStateOf(false) }
-            update = { setUpdate = !setUpdate }
+//            update = { setUpdate = !setUpdate }
             NanHistoryTheme {
-                key(setUpdate) { DetailContent(eventId, path) }
+                DetailContent(eventId, path)
             }
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        update()
-    }
+//    override fun onResume() {
+//        super.onResume()
+//        update()
+//    }
 }
 
 fun Context.getActivity(): ComponentActivity? = when (this) {
@@ -127,14 +128,20 @@ fun DetailContent(eventId: String, path: String) {
     var showSignatureInfo by rememberSaveable { mutableStateOf(false) }
     var deleteDialogState by rememberSaveable { mutableStateOf(false) }
 
-    val eventData: HistoryEvent? = remember {
-        val fileData = HistoryFileData.get(context, path)
-//        Log.d("NanHistoryDebug", "File data: $fileData")
+    var currentPath by rememberSaveable { mutableStateOf(path) }
+
+    val getEvent = {
+        val fileData = HistoryFileData.get(context, currentPath)
         fileData?.events?.firstOrNull {
-//            Log.d("NanHistoryDebug", "Event check: ${it.id} == $eventId -> ${it.id == eventId}")
             it.id == eventId
         }
     }
+
+    var savedEvent by remember {
+        mutableStateOf(getEvent())
+    }
+
+    val eventData = savedEvent
 
     // EventRange only
     val duration = when (eventData) {
@@ -149,6 +156,17 @@ fun DetailContent(eventId: String, path: String) {
         is EventPoint -> eventData.location != null
         else -> false
     }
+
+    val launcher =
+        rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == 1) {
+                result.data?.getStringExtra("path")?.let {
+                    currentPath = it
+                    savedEvent = getEvent()
+                }
+            }
+        }
+
 
     if (eventData != null) Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
@@ -193,8 +211,8 @@ fun DetailContent(eventId: String, path: String) {
                         onClick = {
                             val intent = Intent(context, EditEventActivity::class.java)
                             intent.putExtra("eventId", eventId)
-                            intent.putExtra("path", path)
-                            context.startActivity(intent)
+                            intent.putExtra("path", currentPath)
+                            launcher.launch(intent)
                         }
                     ) {
                         Icon(Icons.Rounded.Edit, "Edit")
@@ -256,7 +274,7 @@ fun DetailContent(eventId: String, path: String) {
                             Text("Max speed: $maxSpeed Km/h")
                             Text(
                                 "Total distance: " +
-                                        if (distance < 1000) "$distance m"
+                                        if (distance < 1000) "${round(distance).toInt()} m"
                                         else "${round(distance / 100) / 10} Km"
                             )
                         }

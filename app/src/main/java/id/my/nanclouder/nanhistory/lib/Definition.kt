@@ -22,6 +22,7 @@ import androidx.compose.runtime.toMutableStateList
 import org.osmdroid.util.GeoPoint
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import kotlin.math.round
 
 // The numbers before 5 is reserved for Flutter application
 const val FILE_VERSION = 5
@@ -136,3 +137,14 @@ fun getPackageInfo(context: Context): PackageInfo? {
         null
     }
 }
+
+fun readableSize(size: Double): String {
+    return if (size > 1_000_000_000) "${round(size / 100_000_000) / 10} GB"
+        else if (size > 1_000_000) "${round(size / 100_000) / 10} MB"
+        else if (size > 1_000) "${round(size / 100) / 10} KB"
+        else "${size.toInt()} Bytes"
+}
+
+fun readableSize(size: Float) = readableSize(size.toDouble())
+fun readableSize(size: Int) = readableSize(size.toDouble())
+fun readableSize(size: Long) = readableSize(size.toDouble())

@@ -52,6 +52,8 @@ class RecordService : Service() {
                 context.getSharedPreferences("recordEvent", Context.MODE_PRIVATE)
             return sharedPreferences.getBoolean("isRunning", false)
         }
+
+        val titleFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("'Event' dd MMM yyyy, HH:mm:ss")
     }
 
     private lateinit var wakeLock: PowerManager.WakeLock
@@ -95,7 +97,7 @@ class RecordService : Service() {
         event = EventRange(
             id = generateEventId(),
             title = now
-                .format(DateTimeFormatter.ofPattern("'Event' dd MMM yyyy, HH:mm:ss")),
+                .format(titleFormatter),
             description = "",
             time = now,
             end = now,
@@ -114,21 +116,6 @@ class RecordService : Service() {
                 onLocationUpdate(locationResult.locations)
             }
         }
-
-        logData.append("Title: ${event.title}\n")
-        logData.append("Start: $now")
-        logData.append("\n")
-        logData.append(
-            "TIME".padEnd(10) +
-                    "valid".padEnd(7) +
-                    "updates".padEnd(9) +
-                    "got".padEnd(5) +
-                    "current".padEnd(9) +
-                    "elapsed".padEnd(9) +
-                    "acc".padEnd(18)
-        )
-
-        logData.save(applicationContext)
     }
 
     private fun onLocationUpdate(locations: List<Location>) {
@@ -264,6 +251,8 @@ class RecordService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val now = ZonedDateTime.now()
+
         if (intent == null) Log.d("NanHistoryDebug", "Received null intent")
         Log.d("NanHistoryDebug", "Starting foreground service...")
         Log.d("NanHistoryDebug", "Recording event...")
@@ -320,6 +309,21 @@ class RecordService : Service() {
 
         startForeground(1, notificationBuilder.build())
         startLocationUpdates()
+
+        logData.append("Title: ${event.title}\n")
+        logData.append("Start: $now")
+        logData.append("\n")
+        logData.append(
+            "TIME".padEnd(10) +
+                    "valid".padEnd(7) +
+                    "updates".padEnd(9) +
+                    "got".padEnd(5) +
+                    "current".padEnd(9) +
+                    "elapsed".padEnd(9) +
+                    "acc".padEnd(18)
+        )
+
+        logData.save(applicationContext)
 
         sharedPreferences.edit().putBoolean("isRunning", true).apply()
         return START_STICKY

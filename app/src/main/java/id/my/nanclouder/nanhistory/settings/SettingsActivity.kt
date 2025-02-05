@@ -100,7 +100,22 @@ class SettingsActivity : ComponentActivity() {
                         Text("Storage")
                     },
                     supportingContent = {
-                        Text("Storage usage, clear logs data.")
+                        Text("Storage usage, clear logs data")
+                    }
+                )
+                ListItem(
+                    modifier = Modifier.clickable {
+                        val intent = Intent(context, ExperimentalSettingsActivity::class.java)
+                        context.startActivity(intent)
+                    },
+                    leadingContent = {
+                        Icon(painterResource(R.drawable.ic_code), "Experimental settings")
+                    },
+                    headlineContent = {
+                        Text("Experimental")
+                    },
+                    supportingContent = {
+                        Text("Experimental options")
                     }
                 )
             }

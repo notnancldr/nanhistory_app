@@ -1,5 +1,6 @@
 package id.my.nanclouder.nanhistory
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -43,9 +44,11 @@ import id.my.nanclouder.nanhistory.lib.TimeFormatter
 import id.my.nanclouder.nanhistory.lib.TimePickerDialog
 import id.my.nanclouder.nanhistory.lib.history.EventPoint
 import id.my.nanclouder.nanhistory.lib.history.EventRange
+import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
 import id.my.nanclouder.nanhistory.lib.history.HistoryFileData
 import id.my.nanclouder.nanhistory.lib.history.delete
 import id.my.nanclouder.nanhistory.lib.history.get
+import id.my.nanclouder.nanhistory.lib.history.getFilePathFromDate
 import id.my.nanclouder.nanhistory.lib.history.save
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import java.time.Instant
@@ -190,6 +193,10 @@ fun EditEventView(eventId: String, path: String) {
                             }
                             eventData?.delete(context)
                             event.save(context)
+                            val result = Intent().apply {
+                                putExtra("path", getFilePathFromDate(event.time.toLocalDate()))
+                            }
+                            context.getActivity()?.setResult(1, result)
                             context.getActivity()?.finish()
                         },
                         enabled = confirmButtonEnabled

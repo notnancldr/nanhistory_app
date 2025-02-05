@@ -17,6 +17,8 @@ import kotlin.random.Random
 import id.my.nanclouder.nanhistory.lib.matchOrNull
 import id.my.nanclouder.nanhistory.lib.toCoordinateOrNull
 import id.my.nanclouder.nanhistory.lib.toZonedDateTimeOrNull
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.time.ZoneId
 
 fun getFilePathFromDate(date: LocalDate): String =
@@ -123,6 +125,62 @@ data class HistoryFileData(
         favorite = favorite,
         tags = tags
     )
+}
+
+class HistoryFileDataStream(private var list: List<String>, val context: Context) {
+    private var index = 0
+    private var currPath: String? = null
+
+    init {
+        currPath = if (list.isNotEmpty()) list[0] else null
+        Log.d("NanHistoryDebug", "list: $list")
+        Log.d("NanHistoryDebug", "index: $index")
+        Log.d("NanHistoryDebug", "currPath: $currPath")
+    }
+
+    val size: Int
+        get() = list.size
+
+    val fileData: HistoryFileData?
+        get() = currPath?.let { HistoryFileData.get(context, it.removePrefix(context.filesDir.absolutePath)) }
+
+    fun <T : Comparable<T>> sortedBy(selector: (File) -> T?) {
+        list = list.sortedBy { selector(File(it)) }
+    }
+    fun <T : Comparable<T>> sortedByDescending(selector: (File) -> T?) {
+        list = list.sortedByDescending { selector(File(it)) }
+    }
+    fun <T : Comparable<T>> filter(predicate: (File) -> Boolean) {
+        list = list.filter { predicate(File(it)) }
+    }
+
+    fun reset() {
+        index = 0
+        currPath = list[index]
+    }
+
+    fun next(): Boolean {
+        index++
+        if (index < list.size) {
+            currPath = list[index]
+            return true
+        }
+        return false
+    }
+
+    suspend fun forEachAsync(block: suspend (HistoryFileData) -> Unit) {
+        withContext(Dispatchers.IO) {
+            list.forEach {
+                currPath = it
+                fileData?.let { data ->
+                    block(data)
+                }
+            }
+        }
+    }
+//    suspend fun forEachAsync(block: (HistoryFileData) -> Unit) {
+//        forEachAsync { block(it) }
+//    }
 }
 
 /*
@@ -360,10 +418,34 @@ fun HistoryFileData.Companion.get(context: Context, path: String): HistoryFileDa
 fun HistoryFileData.Companion.get(context: Context, date: LocalDate): HistoryFileData? =
     HistoryFileData.get(context, getFilePathFromDate(date))
 
+fun HistoryFileData.Companion.getListStream(
+    context: Context,
+    from: Instant = Instant.MIN,
+    until: Instant = Instant.MAX,
+): HistoryFileDataStream {
+    val fileList = File(context.filesDir, "history").walkTopDown().filter { it.isFile }
+    return HistoryFileDataStream(
+        fileList.mapNotNull {
+            val fileTime = try {
+                getDateFromFilePath(it.absolutePath)?.atStartOfDay(ZoneId.systemDefault())
+                    ?.toInstant()
+            }
+            catch (e: Exception) {
+                Log.e("NanHistoryDebug", "ERROR: $e")
+                null
+            } ?: Instant.MIN
+
+            if (fileTime < from || fileTime > until) null
+            else it.absolutePath
+        }.toList(),
+        context
+    )
+}
+
 fun HistoryFileData.Companion.getList(
     context: Context,
     from: Instant = Instant.ofEpochMilli(0),
-    until: Instant = Instant.now(),
+    until: Instant = Instant.MAX,
 ): List<HistoryFileData> {
     val fileList = File(context.filesDir, "history").walkTopDown().filter { it.isFile }
     return fileList.mapNotNull {

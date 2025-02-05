@@ -29,7 +29,7 @@ import id.my.nanclouder.nanhistory.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SearchAppBar(onSearch: ((String) -> Unit)) {
+fun SearchAppBar(searchButtonEnabled: Boolean = true, onSearch: ((String) -> Unit)) {
     var searchQuery by remember { mutableStateOf("") }
     TopAppBar(
         title = {
@@ -66,6 +66,7 @@ fun SearchAppBar(onSearch: ((String) -> Unit)) {
         },
         actions = {
             IconButton(
+                enabled = searchButtonEnabled,
                 modifier = Modifier.padding(end = 8.dp),
                 onClick = {
                     onSearch(searchQuery)

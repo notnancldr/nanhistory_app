@@ -66,11 +66,17 @@ fun FileListView(
         }?.sortedByDescending { it.name } ?: mutableListOf()
     }
 
-    BackHandler(
-        enabled = dirTree.size > 1
-    ) {
-        dirTree = dirTree.dropLast(1)
+    val backHandler = {
+        if (dirTree.size > 1) {
+            dirTree = dirTree.dropLast(1)
+            true
+        }
+        else false
     }
+
+    BackHandler(
+        dirTree.size > 1
+    ) { backHandler() }
 
     updateView()
 
@@ -88,7 +94,7 @@ fun FileListView(
                 navigationIcon = {
                     IconButton(
                         onClick = {
-                            context.getActivity()!!.finish()
+                            if (!backHandler()) context.getActivity()!!.finish()
                         }
                     ) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
@@ -106,7 +112,7 @@ fun FileListView(
                 stickyHeader(key = 9999999) {
                     ListItem(
                         headlineContent = {
-                            Text(dirTree.map { it.name }.joinToString("/"))
+                            Text(dirTree.joinToString("/") { it.name })
                         }
                     )
                 }

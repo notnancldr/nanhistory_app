@@ -1,7 +1,5 @@
 package id.my.nanclouder.nanhistory.settings
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,6 +22,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,7 +30,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,18 +41,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.R
-import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
-import id.my.nanclouder.nanhistory.lib.history.HistoryFileData
-import id.my.nanclouder.nanhistory.lib.history.delete
-import id.my.nanclouder.nanhistory.lib.history.getList
+import id.my.nanclouder.nanhistory.lib.readableSize
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import kotlin.math.round
 
 class StorageSettingsActivity : SubSettingsActivity("Storage") {
     @Composable
@@ -63,23 +57,25 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
 
-        val eventsColor = Color(0xFF24A6C2)
-        val logsColor = Color(0xFF4E9752)
-        val otherColor = Color(0xFF5960A2)
+        val eventsColor = Color(0xFF7FB86A)
+        val logsColor = Color(0xFF24AD98)
+        val otherColor = Color(0xFF558EAD)
+        val cacheColor = Color(0xFF5960A2)
         val restColor = Color.Gray
-
-        val filesDir = context.filesDir
 
         var eventsSize by rememberSaveable { mutableLongStateOf(0L) }
         var logsSize by rememberSaveable { mutableLongStateOf(0L) }
+        var cacheSize by rememberSaveable { mutableLongStateOf(0L) }
         var otherSize by rememberSaveable { mutableLongStateOf(0L) }
+        var dataSize by rememberSaveable { mutableLongStateOf(0L) }
 
         var isLoading by rememberSaveable { mutableStateOf(true) }
 
         var deleteDialogState by remember { mutableStateOf(false) }
         var fileToDelete by remember { mutableStateOf<File?>(null) }
 
-        val dirs = remember { mutableStateMapOf<File, Long>() }
+        val cacheDirs = remember { mutableStateMapOf<File, Long>() }
+        val dataDirs = remember { mutableStateMapOf<File, Long>() }
 
         val lazyListState = rememberLazyListState()
 
@@ -91,12 +87,20 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
             withContext(Dispatchers.IO) {
                 eventsSize = getSize(File(filesDir, "history"))
                 logsSize = getSize(File(filesDir, "logs"))
-                otherSize = getSize(filesDir)
+                cacheSize = getSize(cacheDir)
+                dataSize = getSize(dataDir)
+                otherSize = dataSize - (eventsSize + logsSize + cacheSize)
 
-                dirs.clear()
+                cacheDirs.clear()
+                dataDirs.clear()
 
                 filesDir.listFiles()?.forEach {
-                    dirs[it] = it.walk()
+                    dataDirs[it] = it.walk()
+                        .filter { file -> file.isFile }
+                        .map { file -> file.length() }.sum()
+                }
+                cacheDir.listFiles()?.forEach {
+                    cacheDirs[it] = it.walk()
                         .filter { file -> file.isFile }
                         .map { file -> file.length() }.sum()
                 }
@@ -122,16 +126,10 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
                 )
             }
         } else {
-            val humanReadable = { size: Float ->
-                if (size > 1_000_000) "${round(size / 100_000) / 10} MB"
-                else if (size > 1_000) "${round(size / 100) / 10} KB"
-                else "$size Bytes"
-            }
             val rowLabel =
                 @Composable { color: Color, label: String, size: Float ->
                     ListItem(
-                        modifier = Modifier
-                            .height(56.dp),
+                        modifier = Modifier,
                         leadingContent = {
                             Icon(
                                 painterResource(R.drawable.ic_circle_filled),
@@ -142,8 +140,13 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
                         headlineContent = {
                             Text(label)
                         },
+                        trailingContent = {
+                            Text(readableSize(size), Modifier.width(56.dp), textAlign = TextAlign.End)
+                        },
                         supportingContent = {
-                            Text(humanReadable(size))
+                            LinearProgressIndicator(
+                                progress = { size / dataSize }
+                            )
                         }
                     )
 //                    Row(
@@ -159,37 +162,55 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
 //                        Text(label, modifier = Modifier.padding(start = 8.dp))
 //                    }
                 }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-            ) {
-                Box(Modifier.width(32.dp))
-                PieChart(
-                    modifier = Modifier
-                        .size(96.dp)
-                        .padding(8.dp),
-                    segments = listOf(
-                        eventsSize.toFloat() to eventsColor,
-                        logsSize.toFloat() to logsColor,
-                        otherSize.toFloat() to otherColor
-                    )
-                )
-                Column(Modifier.padding(start = 16.dp)) {
-                    rowLabel(eventsColor, "Events", eventsSize.toFloat())
-                    rowLabel(logsColor, "Logs data", logsSize.toFloat())
-                    rowLabel(otherColor, "Other", otherSize.toFloat())
-                }
-            }
             LazyColumn(
                 state = lazyListState
             ) {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            PieChart(
+                                modifier = Modifier
+                                    .size(132.dp)
+                                    .padding(16.dp),
+                                segments = listOf(
+                                    eventsSize.toFloat() to eventsColor,
+                                    logsSize.toFloat() to logsColor,
+                                    otherSize.toFloat() to otherColor
+                                )
+                            )
+                            Box(Modifier.width(16.dp))
+                            Column {
+                                Text("Used storage:", fontWeight = FontWeight.Medium)
+                                Text(readableSize(getSize(dataDir)))
+                            }
+                        }
+                        Column(Modifier.padding(16.dp)) {
+                            rowLabel(eventsColor, "Events", eventsSize.toFloat())
+                            rowLabel(logsColor, "Logs data", logsSize.toFloat())
+                            rowLabel(cacheColor, "Cache", cacheSize.toFloat())
+                            rowLabel(otherColor, "Other", otherSize.toFloat())
+                        }
+                    }
+                }
+                item {
+                    ListItem(
+                        headlineContent = {
+                            Text("cache (${cacheDirs.size})", fontWeight = FontWeight.Medium)
+                        }
+                    )
+                }
                 itemsIndexed(
-                    dirs.keys.sortedByDescending { dirs[it] }.toList(),
+                    cacheDirs.keys.sortedByDescending { cacheDirs[it] }.toList(),
                     key = { _, item -> item.name + item.lastModified() + item.hashCode() }
                 ) { _, item ->
-                    val size = dirs[item]!!
+                    val size = cacheDirs[item]!!
                     ListItem(
                         modifier = Modifier
                             .animateItem(),
@@ -200,7 +221,47 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
                             Text(item.name)
                         },
                         supportingContent = {
-                            Text(humanReadable(size.toFloat()))
+                            Text(readableSize(size.toFloat()))
+                        },
+                        trailingContent = {
+                            IconButton(
+                                onClick = {
+                                    fileToDelete = item
+                                    deleteDialogState = true
+                                }
+                            ) {
+                                Icon(
+                                    painterResource(R.drawable.ic_delete),
+                                    "Delete",
+                                    tint = Color.Red
+                                )
+                            }
+                        }
+                    )
+                }
+                item {
+                    ListItem(
+                        headlineContent = {
+                            Text("data (${dataDirs.size})", fontWeight = FontWeight.Medium)
+                        }
+                    )
+                }
+                itemsIndexed(
+                    dataDirs.keys.sortedByDescending { dataDirs[it] }.toList(),
+                    key = { _, item -> item.name + item.lastModified() + item.hashCode() }
+                ) { _, item ->
+                    val size = dataDirs[item]!!
+                    ListItem(
+                        modifier = Modifier
+                            .animateItem(),
+                        leadingContent = {
+                            Icon(painterResource(R.drawable.ic_folder), "Folder")
+                        },
+                        headlineContent = {
+                            Text(item.name)
+                        },
+                        supportingContent = {
+                            Text(readableSize(size.toFloat()))
                         },
                         trailingContent = {
                             if (!listOf("history", "logs", "config").contains(item.name)) {

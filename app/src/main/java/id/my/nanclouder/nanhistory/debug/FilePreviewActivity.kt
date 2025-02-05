@@ -166,7 +166,6 @@ fun FilePreview(intent: Intent) {
                             }
                         )
                     }
-                    TextContainer(lines, modifier = Modifier.fillMaxSize())
                 }
             }
             else {

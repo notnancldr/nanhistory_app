@@ -13,4 +13,5 @@
     <string name="record_notification_action">Stop Button</string>
     <string name="title_activity_settings_record">RecordSettingsActivity</string>
     <string name="title_activity_settings_storage">StorageSettingsActivity</string>
+    <string name="title_activity_settings_experimental">ExperimentalSettingsActivity</string>
 </resources>

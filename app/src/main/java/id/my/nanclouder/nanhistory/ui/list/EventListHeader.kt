@@ -1,6 +1,9 @@
 package id.my.nanclouder.nanhistory.ui.list
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
@@ -16,7 +19,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -44,12 +49,19 @@ fun EventListHeader(
 ) {
     val context = LocalContext.current
     val tagData = historyDay.tags.mapNotNull { HistoryTag.get(context, it) }
-    val headlineFontSize = 3.9.em
+    val headlineFontSize = 4.em
     val headlineFontWeight = FontWeight.W500
     var favorite by remember { mutableStateOf(historyDay.favorite) }
 //    HorizontalDivider(modifier = dividerModifier)
     ListItem(
-        modifier = modifier,
+        modifier = modifier
+            .clip(
+                when (expanded) {
+                    false -> RoundedCornerShape(24.dp)
+                    true -> RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+                    else -> RectangleShape
+                }
+            ),
         leadingContent = if (expanded != null) ({
             IconButton(
                 modifier = Modifier.width(32.dp),
@@ -91,7 +103,10 @@ fun EventListHeader(
         colors = if (selected) ListItemDefaults.colors(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             headlineColor = MaterialTheme.colorScheme.primary,
-        ) else ListItemDefaults.colors(),
+        ) else ListItemDefaults.colors(
+            containerColor = if (isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceContainer
+                else MaterialTheme.colorScheme.surface
+        ),
         shadowElevation = if (expanded == true) 4.dp else ListItemDefaults.Elevation,
 //        else ListItemDefaults.colors(
 //            containerColor =

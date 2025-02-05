@@ -1,5 +1,6 @@
 package id.my.nanclouder.nanhistory.ui.list
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
@@ -87,7 +88,10 @@ fun EventListItem(eventData: HistoryEvent, selected: Boolean = false, modifier: 
         colors = if (selected) ListItemDefaults.colors(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             headlineColor = MaterialTheme.colorScheme.primary,
-        ) else ListItemDefaults.colors(),
+        ) else ListItemDefaults.colors(
+            containerColor = if (isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceContainer
+                else MaterialTheme.colorScheme.surface
+        ),
     )
 }
 

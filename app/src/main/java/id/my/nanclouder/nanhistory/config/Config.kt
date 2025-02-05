@@ -9,10 +9,12 @@ import java.io.File
 object Config {
     private const val PATH = "config/config.json"
 
-    object default {
+    object Default {
         const val LOCATION_ACCURACY_THRESHOLD = 20
         const val LOCATION_MINIMUM_DISTANCE = 30
         const val LOCATION_UPDATE_INTERVAL = 5
+        const val RECORD_EVENT_RANGE_MINIMUM_DURATION = 10
+        const val EXPERIMENTAL_STREAM_LIST = false
     }
 
     private fun readOrCreateNew(context: Context): String {
@@ -48,13 +50,26 @@ object Config {
             setConfig(context, name, value)
     }
 
+    class BooleanValue internal constructor(val name: String, private val default: Boolean) {
+        fun get(context: Context) =
+            matchOrNull<Boolean>(getConfig(context)[name]) ?: default
+        fun set(context: Context, value: Boolean) =
+            setConfig(context, name, value)
+    }
+
     val locationAccuracyThreshold = IntValue(
-        "locationAccuracyThreshold", default.LOCATION_ACCURACY_THRESHOLD
+        "locationAccuracyThreshold", Default.LOCATION_ACCURACY_THRESHOLD
     )
     val locationMinimumDistance = IntValue(
-        "locationMinimumDistance", default.LOCATION_MINIMUM_DISTANCE
+        "locationMinimumDistance", Default.LOCATION_MINIMUM_DISTANCE
     )
     val locationUpdateInterval = IntValue(
-        "locationUpdateInterval", default.LOCATION_UPDATE_INTERVAL
+        "locationUpdateInterval", Default.LOCATION_UPDATE_INTERVAL
+    )
+    val recordEventRangeMinimumDuration = IntValue(
+        "recordEventRangeMinimumDuration", Default.RECORD_EVENT_RANGE_MINIMUM_DURATION
+    )
+    val experimentalStreamList = BooleanValue(
+        "experimentalStreamList", Default.EXPERIMENTAL_STREAM_LIST
     )
 }
