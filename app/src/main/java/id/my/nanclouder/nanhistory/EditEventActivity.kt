@@ -14,8 +14,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,9 +49,11 @@ import id.my.nanclouder.nanhistory.lib.history.EventRange
 import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
 import id.my.nanclouder.nanhistory.lib.history.HistoryFileData
 import id.my.nanclouder.nanhistory.lib.history.delete
+import id.my.nanclouder.nanhistory.lib.history.generateSignature
 import id.my.nanclouder.nanhistory.lib.history.get
 import id.my.nanclouder.nanhistory.lib.history.getFilePathFromDate
 import id.my.nanclouder.nanhistory.lib.history.save
+import id.my.nanclouder.nanhistory.ui.style.DangerButtonColors
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import java.time.Instant
 import java.time.ZonedDateTime
@@ -76,22 +80,23 @@ fun EditEventView(eventId: String, path: String) {
 
     val fileData = HistoryFileData.get(context, path)
 //    Log.d("NanHistoryDebug", "File data: $fileData")
-    val eventData = remember {
+    val oldEvent = remember {
         fileData?.events?.firstOrNull {
             Log.d("NanHistoryDebug", "Event check: ${it.id} == $eventId")
             it.id == eventId
         }
     }
+    var newEvent by rememberSaveable { mutableStateOf<HistoryEvent?>(null) }
 
-    val addMode = eventData == null
+    val addMode = oldEvent == null
 
-    var eventTitle by rememberSaveable { mutableStateOf(eventData?.title ?:"") }
-    var eventDescription by rememberSaveable { mutableStateOf(eventData?.description ?: "") }
-    var rangeEvent by rememberSaveable { mutableStateOf(eventData is EventRange) }
-    var time by rememberSaveable { mutableStateOf(eventData?.time ?: ZonedDateTime.now()) }
+    var eventTitle by rememberSaveable { mutableStateOf(oldEvent?.title ?:"") }
+    var eventDescription by rememberSaveable { mutableStateOf(oldEvent?.description ?: "") }
+    var rangeEvent by rememberSaveable { mutableStateOf(oldEvent is EventRange) }
+    var time by rememberSaveable { mutableStateOf(oldEvent?.time ?: ZonedDateTime.now()) }
     var timeEnd by rememberSaveable {
         mutableStateOf(
-            (if (eventData is EventRange) eventData.end else null)
+            (if (oldEvent is EventRange) oldEvent.end else null)
                 ?: ZonedDateTime.now()
         )
     }
@@ -100,6 +105,8 @@ fun EditEventView(eventId: String, path: String) {
     var timePickerIsOpened by rememberSaveable { mutableStateOf(false) }
     var dateEndPickerIsOpened by rememberSaveable { mutableStateOf(false) }
     var timeEndPickerIsOpened by rememberSaveable { mutableStateOf(false) }
+
+    var invalidSignatureWarning by remember { mutableStateOf(false) }
 
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = time.toInstant().toEpochMilli()
@@ -117,19 +124,31 @@ fun EditEventView(eventId: String, path: String) {
     )
 
     val confirmButtonEnabled =
-        if (eventData != null) {
-            eventTitle != eventData.title ||
-                    eventDescription != eventData.description ||
-                    rangeEvent != (eventData is EventRange) ||
-                    time != eventData.time
+        if (oldEvent != null) {
+            eventTitle != oldEvent.title ||
+                    eventDescription != oldEvent.description ||
+                    rangeEvent != (oldEvent is EventRange) ||
+                    time != oldEvent.time
         } else {
             eventTitle.isNotBlank()
         }. let {
-            if (eventData is EventRange) {
-                it || timeEnd != eventData.end
+            if (oldEvent is EventRange) {
+                it || timeEnd != oldEvent.end
             }
             else it
         }
+
+    val saveEvent = {
+        oldEvent?.delete(context)
+        if (newEvent != null) {
+            newEvent!!.save(context)
+            val result = Intent().apply {
+                putExtra("path", getFilePathFromDate(newEvent!!.time.toLocalDate()))
+            }
+            context.getActivity()?.setResult(1, result)
+            context.getActivity()?.finish()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -158,7 +177,7 @@ fun EditEventView(eventId: String, path: String) {
                 ) {
                     Button(
                         onClick = {
-                            val event = (
+                            newEvent = (
                                 if (rangeEvent) EventRange(
                                     title = eventTitle,
                                     description = eventDescription,
@@ -172,32 +191,31 @@ fun EditEventView(eventId: String, path: String) {
 
                                 )
                             ).apply {
-                                if (eventData != null) {
-                                    id = eventData.id
-                                    created = eventData.created
-                                    favorite = eventData.favorite
-                                    signature = eventData.signature
+                                if (oldEvent != null) {
+                                    id = oldEvent.id
+                                    created = oldEvent.created
+                                    favorite = oldEvent.favorite
+                                    signature = oldEvent.signature
                                 }
-                                if (eventData is EventRange && this is EventRange) {
-                                    locations = eventData.locations
+                                if (oldEvent is EventRange && this is EventRange) {
+                                    locations = oldEvent.locations
                                 }
-                                else if (eventData is EventPoint && this is EventPoint) {
-                                    location = eventData.location
+                                else if (oldEvent is EventPoint && this is EventPoint) {
+                                    location = oldEvent.location
                                 }
-                                else if (eventData is EventRange && this is EventPoint && eventData.locations.isNotEmpty()) {
-                                    location = eventData.locations[eventData.locations.keys.first()]!!
+                                else if (oldEvent is EventRange && this is EventPoint && oldEvent.locations.isNotEmpty()) {
+                                    location = oldEvent.locations[oldEvent.locations.keys.first()]!!
                                 }
-                                else if (eventData is EventPoint && this is EventRange && eventData.location != null) {
-                                    locations = mutableMapOf(eventData.time to eventData.location!!)
+                                else if (oldEvent is EventPoint && this is EventRange && oldEvent.location != null) {
+                                    locations = mutableMapOf(oldEvent.time to oldEvent.location!!)
                                 }
                             }
-                            eventData?.delete(context)
-                            event.save(context)
-                            val result = Intent().apply {
-                                putExtra("path", getFilePathFromDate(event.time.toLocalDate()))
-                            }
-                            context.getActivity()?.setResult(1, result)
-                            context.getActivity()?.finish()
+
+                            if (oldEvent != null && oldEvent.generateSignature() != newEvent!!.generateSignature())
+                                invalidSignatureWarning = true
+                            else
+                                saveEvent()
+
                         },
                         enabled = confirmButtonEnabled
                     ) { Text(if (addMode) "Add" else "Edit") }
@@ -333,6 +351,34 @@ fun EditEventView(eventId: String, path: String) {
         },
         onDismiss = {
             timeEndPickerIsOpened = false
+        }
+    )
+
+    if (invalidSignatureWarning) AlertDialog(
+        onDismissRequest = {
+            newEvent = null
+            invalidSignatureWarning = false
+        },
+        title = {
+            Text("Invalid Signature Warning!")
+        },
+        text = {
+            Text("You have changed the important property of the event, " +
+                   "continue saving this event will leave the signature invalid.")
+        },
+        dismissButton = {
+            TextButton(
+                onClick = {
+                    newEvent = null
+                    invalidSignatureWarning = false
+                },
+            ) { Text("Cancel") }
+        },
+        confirmButton = {
+            Button(
+                onClick = { saveEvent() },
+                colors = DangerButtonColors
+            ) { Text("Continue") }
         }
     )
 }

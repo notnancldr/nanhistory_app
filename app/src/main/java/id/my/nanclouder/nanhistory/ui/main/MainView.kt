@@ -108,6 +108,7 @@ import id.my.nanclouder.nanhistory.ui.SearchAppBar
 import id.my.nanclouder.nanhistory.ui.SelectionAppBar
 import id.my.nanclouder.nanhistory.ui.list.EventListHeader
 import id.my.nanclouder.nanhistory.ui.list.EventListItem
+import id.my.nanclouder.nanhistory.ui.style.DangerButtonColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -720,12 +721,7 @@ fun MainView() {
                             closeDeleteDialog()
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF910C0C),
-                        contentColor = Color.White,
-                        disabledContainerColor = Color.Gray,
-                        disabledContentColor = Color.White
-                    ),
+                    colors = DangerButtonColors
                 ) {
                     Text("Delete")
                 }
