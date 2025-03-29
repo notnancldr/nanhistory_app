@@ -1,6 +1,5 @@
 package id.my.nanclouder.nanhistory.ui.list
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,7 +25,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import id.my.nanclouder.nanhistory.R
@@ -34,9 +32,7 @@ import id.my.nanclouder.nanhistory.lib.DateFormatter
 import id.my.nanclouder.nanhistory.lib.history.HistoryTag
 import id.my.nanclouder.nanhistory.lib.history.HistoryDay
 import id.my.nanclouder.nanhistory.lib.history.get
-import id.my.nanclouder.nanhistory.ui.TagsView
-import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
-import java.time.ZonedDateTime
+import id.my.nanclouder.nanhistory.ui.tags.TagsView
 
 @Composable
 fun EventListHeader(

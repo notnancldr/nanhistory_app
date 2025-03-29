@@ -112,8 +112,6 @@ fun BackupView() {
                 var outputStream: OutputStream? = null
                 backupStage = BackupProgressStage.Init
                 try {
-                    snackbarHostState.showSnackbar("Creating backup...")
-
                     data?.data?.let { uri ->
                         withContext(Dispatchers.IO) {
                             val inputDirectory = context.filesDir
@@ -212,8 +210,6 @@ fun BackupView() {
                 importStage = ImportProgressStage.Init
 
                 try {
-                    snackbarHostState.showSnackbar("Importing backup...")
-
                     data?.data?.let { uri ->
                         withContext(Dispatchers.IO) {
                             inputStream = context.contentResolver.openInputStream(uri)

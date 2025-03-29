@@ -1,11 +1,13 @@
 package id.my.nanclouder.nanhistory.settings
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
@@ -15,23 +17,33 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.config.Config
+import id.my.nanclouder.nanhistory.lib.withHaptic
+import kotlin.math.absoluteValue
+import kotlin.math.max
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsSlider(
+    modifier: Modifier = Modifier,
     configValue: Config.IntValue,
     title: String,
     description: String,
@@ -41,13 +53,22 @@ fun SettingsSlider(
     icon: Painter? = null,
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
 
     val sliderState = remember {
         SliderState(value = configValue.get(context).toFloat(),valueRange = valueRange, steps = steps)
     }
+
+    var previousInt by remember { mutableIntStateOf(sliderState.value.toInt()) }
+
     sliderState.onValueChangeFinished = {
         configValue.set(context, sliderState.value.toInt())
     }
+    if ((sliderState.value.toInt() - previousInt).absoluteValue >= 1) {
+        previousInt = sliderState.value.toInt()
+        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+    }
+
     ListItem(
         leadingContent = {
             if (icon != null) Icon(icon, "Icon")
@@ -72,19 +93,24 @@ fun SettingsSlider(
         supportingContent = {
             Text(description)
         },
-        trailingContent = {  }
+        trailingContent = {  },
+        modifier = modifier
     )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsSwitch(
+    modifier: Modifier = Modifier,
     configValue: Config.BooleanValue,
     title: String,
     description: String,
+    enabled: Boolean = true,
     icon: Painter? = null,
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+
     var active by rememberSaveable { mutableStateOf(configValue.get(context)) }
 
     ListItem(
@@ -100,13 +126,15 @@ fun SettingsSwitch(
         trailingContent = {
             Switch(
                 checked = active,
-                onCheckedChange = {
+                onCheckedChange = withHaptic<Boolean>(haptic) {
                     active = it
                     configValue.set(context, active)
                 },
+                enabled = enabled,
                 modifier = Modifier.height(32.dp)
             )
-        }
+        },
+        modifier = modifier
     )
 }
 
@@ -123,13 +151,38 @@ fun CategoryHeader(icon: Painter, iconDescription: String, title: String) {
 }
 
 @Composable
+fun BarChart(segments: List<Pair<Float, Color>>, modifier: Modifier = Modifier, threshold: Float = 5f) {
+    val shownSegments = segments.filter { it.first > threshold }
+    val total = shownSegments.sumOf { it.first.toDouble() }.toFloat()
+    var offset = 0f
+
+    Canvas(modifier = modifier.clip(RoundedCornerShape(32.dp)).background(Color.White)) {
+        val barWidth = size.width
+        for ((index, segment) in shownSegments.withIndex()) {
+            val (value, color) = segment
+            val percentage = (value / total)
+            val gap = if (index < shownSegments.size - 1) 10 else 0
+            val elementWidth = max(percentage * barWidth - gap, 0f)
+            drawIntoCanvas { _ ->
+                drawRect(
+                    color = color,
+                    topLeft = Offset(offset, 0f),
+                    size = Size(elementWidth, size.height)
+                )
+            }
+            offset += elementWidth + gap
+        }
+    }
+}
+
+@Composable
 fun PieChart(segments: List<Pair<Float, Color>>, modifier: Modifier = Modifier) {
     val total = segments.sumOf { it.first.toDouble() }.toFloat()
     var startAngle = 0f
 
     Canvas(modifier = modifier) {
         for ((value, color) in segments) {
-            val sweepAngle = (value / total) * 360f
+            val sweepAngle = max((value / total) * 360f, 0f)
             drawIntoCanvas { _ ->
                 drawArc(
                     color = color,

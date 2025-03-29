@@ -13,21 +13,23 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SelectionAppBar(
-    selectedItems: List<String>,
+    selectedItems: List<HistoryEvent>,
     onCancel: (() -> Unit),
     modifier: Modifier = Modifier,
     actions: (@Composable RowScope.() -> Unit) = {}
 ) {
     val hasSelection = selectedItems.isNotEmpty()
-    val topBarText = if (hasSelection) {
-        "${selectedItems.size} items"
-    } else {
-        "List of items"
-    }
+//    val topBarText = if (hasSelection) {
+//        "${selectedItems.size} items"
+//    } else {
+//        "List of items"
+//    }
+    val topBarText = selectedItems.size.toString()
 
     TopAppBar(
         title = {

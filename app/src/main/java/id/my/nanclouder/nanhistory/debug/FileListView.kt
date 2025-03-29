@@ -45,7 +45,7 @@ import java.io.File
 @Composable
 fun FileListView(
     appBarTitle: String,
-    child: String = "history",
+    child: String? = null,
     deleteButton: Boolean = false
 ) {
     val scope = rememberCoroutineScope()
@@ -53,7 +53,12 @@ fun FileListView(
     val lazyListState = rememberLazyListState()
     val context = LocalContext.current
 
-    var dirTree by rememberSaveable { mutableStateOf(listOf(File(context.filesDir, child))) }
+    var dirTree by rememberSaveable {
+        if (child != null)
+            mutableStateOf(listOf(File(context.dataDir, child)))
+        else
+            mutableStateOf(listOf(context.dataDir))
+    }
 
     var files by remember {
         mutableStateOf<List<File>>(listOf())

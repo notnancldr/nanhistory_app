@@ -14,7 +14,7 @@ class LogListActivity : ComponentActivity() {
             NanHistoryTheme {
                 FileListView(
                     appBarTitle = "App Logs",
-                    child = "logs",
+                    child = "files/logs",
                     deleteButton = true
                 )
             }

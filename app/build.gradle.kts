@@ -74,6 +74,17 @@ plugins {
 }
 
 android {
+    val versionCodeFile = File("versionCode.txt")
+    val incrementFile = File("increment.txt")
+    val increment = !(if (incrementFile.exists()) incrementFile.readText().isBlank() else true)
+    val fileVersionCode = (if (versionCodeFile.exists()) versionCodeFile.readText() else "0").toInt().let {
+        if (increment) it + 1 else it
+    }
+
+    versionCodeFile.createNewFile()
+    incrementFile.createNewFile()
+    versionCodeFile.writeText(fileVersionCode.toString())
+    incrementFile.writeText("")
     namespace = "id.my.nanclouder.nanhistory"
     compileSdk = 34
 
@@ -81,8 +92,8 @@ android {
         applicationId = "id.my.nanclouder.nanhistory"
         minSdk = 31
         targetSdk = 33
-        versionCode = 7
-        versionName = "1.1.0"
+        versionCode = 8
+        versionName = "1.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -92,6 +103,7 @@ android {
 
     buildTypes {
         release {
+            versionNameSuffix = "r"
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -99,7 +111,11 @@ android {
             )
             signingConfig = signingConfigs.getByName("debug")
         }
+        debug {
+            versionNameSuffix = "d"
+        }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11

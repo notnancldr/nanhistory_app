@@ -31,7 +31,7 @@ import id.my.nanclouder.nanhistory.lib.history.EventPoint
 import id.my.nanclouder.nanhistory.lib.history.EventRange
 import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
 import id.my.nanclouder.nanhistory.lib.history.validateSignature
-import id.my.nanclouder.nanhistory.ui.TagsView
+import id.my.nanclouder.nanhistory.ui.tags.TagsView
 import java.time.ZonedDateTime
 
 @Composable

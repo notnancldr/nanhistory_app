@@ -6,17 +6,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 
-class ConfigViewActivity : ComponentActivity() {
+class DataDirActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             NanHistoryTheme {
-                FileListView(
-                    appBarTitle = "App Logs",
-                    child = "files/config",
-                    deleteButton = true
-                )
+                FileListView("Data Directory")
             }
         }
     }

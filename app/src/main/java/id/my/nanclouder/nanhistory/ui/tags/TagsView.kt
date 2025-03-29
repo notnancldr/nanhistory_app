@@ -1,4 +1,4 @@
-package id.my.nanclouder.nanhistory.ui
+package id.my.nanclouder.nanhistory.ui.tags
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll

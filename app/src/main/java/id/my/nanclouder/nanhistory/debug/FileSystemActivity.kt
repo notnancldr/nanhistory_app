@@ -12,7 +12,7 @@ class FileSystemActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             NanHistoryTheme {
-                FileListView("App Filesystem")
+                FileListView("App Filesystem", "files/history")
             }
         }
     }

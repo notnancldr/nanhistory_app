@@ -1,5 +1,6 @@
 package id.my.nanclouder.nanhistory.settings
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
@@ -24,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -38,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -59,8 +63,9 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
 
         val eventsColor = Color(0xFF7FB86A)
         val logsColor = Color(0xFF24AD98)
-        val otherColor = Color(0xFF558EAD)
-        val cacheColor = Color(0xFF5960A2)
+        val cacheColor = Color(0xFF558EAD)
+        val otherColor = Color(0xFF5960A2)
+
         val restColor = Color.Gray
 
         var eventsSize by rememberSaveable { mutableLongStateOf(0L) }
@@ -169,29 +174,43 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .padding(16.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                shape = RoundedCornerShape(16.dp)
+                            )
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center,
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            PieChart(
+                            BarChart(
                                 modifier = Modifier
-                                    .size(132.dp)
+                                    .fillMaxWidth()
+                                    .height(56.dp)
                                     .padding(16.dp),
                                 segments = listOf(
                                     eventsSize.toFloat() to eventsColor,
                                     logsSize.toFloat() to logsColor,
+                                    cacheSize.toFloat() to cacheColor,
                                     otherSize.toFloat() to otherColor
                                 )
                             )
                             Box(Modifier.width(16.dp))
-                            Column {
-                                Text("Used storage:", fontWeight = FontWeight.Medium)
-                                Text(readableSize(getSize(dataDir)))
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Used storage", fontWeight = FontWeight.Medium)
+                                Text(
+                                    readableSize(getSize(dataDir)),
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
                             }
                         }
-                        Column(Modifier.padding(16.dp)) {
+                        Column(Modifier.padding(16.dp).clip(RoundedCornerShape(16.dp))) {
                             rowLabel(eventsColor, "Events", eventsSize.toFloat())
                             rowLabel(logsColor, "Logs data", logsSize.toFloat())
                             rowLabel(cacheColor, "Cache", cacheSize.toFloat())

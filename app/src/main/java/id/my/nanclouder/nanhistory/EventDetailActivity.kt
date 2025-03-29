@@ -14,6 +14,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,27 +24,33 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -130,6 +137,8 @@ fun DetailContent(eventId: String, path: String) {
 
     var currentPath by rememberSaveable { mutableStateOf(path) }
 
+    var showInfo by remember { mutableStateOf(false) }
+
     val getEvent = {
         val fileData = HistoryFileData.get(context, currentPath)
         fileData?.events?.firstOrNull {
@@ -163,6 +172,10 @@ fun DetailContent(eventId: String, path: String) {
                 result.data?.getStringExtra("path")?.let {
                     currentPath = it
                     savedEvent = getEvent()
+                    val intent = Intent().apply {
+                        putExtra("path", it)
+                    }
+                    context.getActivity()?.setResult(1, intent)
                 }
             }
         }
@@ -217,12 +230,40 @@ fun DetailContent(eventId: String, path: String) {
                     ) {
                         Icon(Icons.Rounded.Edit, "Edit")
                     }
-                    IconButton(
-                        onClick = {
-                            deleteDialogState = true
+
+                    var menuExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { menuExpanded = !menuExpanded }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More options")
                         }
-                    ) {
-                        Icon(painterResource(R.drawable.ic_delete), "Delete")
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                leadingIcon = {
+                                    Icon(Icons.Outlined.Info, "Info", tint = Color.Gray)
+                                },
+                                text = { Text("Info") },
+                                onClick = { showInfo = true; menuExpanded = false }
+                            )
+                            DropdownMenuItem(
+                                leadingIcon = {
+                                    Icon(
+                                        painterResource(R.drawable.ic_delete),
+                                        "Delete",
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                },
+                                text = {
+                                    Text(
+                                        "Delete",
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                },
+                                onClick = { deleteDialogState = true; menuExpanded = false }
+                            )
+                        }
                     }
                 }
             )
@@ -412,6 +453,56 @@ fun DetailContent(eventId: String, path: String) {
                     },
                 )
             }
+
+            val sheetState = rememberModalBottomSheetState(
+                skipPartiallyExpanded = false
+            )
+
+            if (showInfo) ModalBottomSheet(
+                modifier = Modifier
+                    .fillMaxHeight(),
+                sheetState = sheetState,
+                onDismissRequest = {
+                    showInfo = false
+                }
+            ) {
+                val timeFormat = { time: ZonedDateTime ->
+                    "${time.format(DateFormatter)} ${time.format(TimeFormatter)}"
+                }
+                ListItem(
+                    overlineContent = {
+                        Text("Created")
+                    },
+                    headlineContent = {
+                        Text(eventData.created.let(timeFormat))
+                    }
+                )
+                ListItem(
+                    overlineContent = {
+                        Text("Last modified")
+                    },
+                    headlineContent = {
+                        Text(eventData.modified.let(timeFormat))
+                    }
+                )
+                ListItem(
+                    overlineContent = {
+                        Text("Event ID")
+                    },
+                    headlineContent = {
+                        Text(eventData.id)
+                    }
+                )
+                if (eventData is EventRange) ListItem(
+                    overlineContent = {
+                        Text("Location points")
+                    },
+                    headlineContent = {
+                        Text(eventData.locations.size.toString())
+                    }
+                )
+            }
+
             if (deleteDialogState) {
                 AlertDialog(
                     icon = {
@@ -439,7 +530,10 @@ fun DetailContent(eventId: String, path: String) {
                         Button(
                             onClick = {
                                 eventData.delete(context)
-                                context.getActivity()?.finish()
+                                context.getActivity()?.run {
+                                    setResult(1)
+                                    finish()
+                                }
                             },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Color(0xFF910C0C),

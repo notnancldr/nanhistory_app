@@ -420,20 +420,19 @@ fun HistoryFileData.Companion.get(context: Context, date: LocalDate): HistoryFil
 
 fun HistoryFileData.Companion.getListStream(
     context: Context,
-    from: Instant = Instant.MIN,
-    until: Instant = Instant.MAX,
+    from: LocalDate = LocalDate.MIN,
+    until: LocalDate = LocalDate.MAX,
 ): HistoryFileDataStream {
     val fileList = File(context.filesDir, "history").walkTopDown().filter { it.isFile }
     return HistoryFileDataStream(
         fileList.mapNotNull {
             val fileTime = try {
-                getDateFromFilePath(it.absolutePath)?.atStartOfDay(ZoneId.systemDefault())
-                    ?.toInstant()
+                getDateFromFilePath(it.absolutePath)
             }
             catch (e: Exception) {
                 Log.e("NanHistoryDebug", "ERROR: $e")
                 null
-            } ?: Instant.MIN
+            } ?: LocalDate.MIN
 
             if (fileTime < from || fileTime > until) null
             else it.absolutePath

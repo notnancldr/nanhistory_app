@@ -34,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,6 +43,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.boundsInParent
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -166,6 +169,7 @@ fun FilePreview(intent: Intent) {
                             }
                         )
                     }
+                    TextContainer(lines)
                 }
             }
             else {
@@ -188,6 +192,7 @@ fun TextContainer(lines: List<String>, modifier: Modifier = Modifier) {
     val horizontalScrollState = rememberScrollState()
 
     val sliderState = remember { SliderState(value = 0.5f) }
+    var width by remember { mutableDoubleStateOf(1.0) }
 
     Column(
         modifier = modifier

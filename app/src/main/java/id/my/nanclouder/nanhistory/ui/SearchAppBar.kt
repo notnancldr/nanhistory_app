@@ -4,6 +4,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -29,7 +32,7 @@ import id.my.nanclouder.nanhistory.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SearchAppBar(searchButtonEnabled: Boolean = true, onSearch: ((String) -> Unit)) {
+fun SearchAppBar(isLoading: Boolean = false, onSearch: ((String) -> Unit), onCancel: () -> Unit) {
     var searchQuery by remember { mutableStateOf("") }
     TopAppBar(
         title = {
@@ -59,20 +62,23 @@ fun SearchAppBar(searchButtonEnabled: Boolean = true, onSearch: ((String) -> Uni
                 ),
                 keyboardActions = KeyboardActions(
                     onSearch = {
-                        onSearch(searchQuery)
+                        if (!isLoading && searchQuery.isNotBlank()) onSearch(searchQuery)
                     }
                 )
             )
         },
         actions = {
+            if (isLoading) CircularProgressIndicator()
             IconButton(
-                enabled = searchButtonEnabled,
+                enabled = !isLoading && searchQuery.isNotBlank(),
                 modifier = Modifier.padding(end = 8.dp),
                 onClick = {
-                    onSearch(searchQuery)
+                    if (!isLoading) onSearch(searchQuery)
+                    else onCancel()
                 }
             ) {
-                Icon(painterResource(R.drawable.ic_search), "Search")
+                /*if (!isLoading)*/ Icon(painterResource(R.drawable.ic_search), "Search")
+//                else Icon(Icons.Rounded.Close, "Cancel")
             }
         }
     )

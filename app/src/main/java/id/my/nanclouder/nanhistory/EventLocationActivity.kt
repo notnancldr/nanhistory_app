@@ -1,9 +1,12 @@
 package id.my.nanclouder.nanhistory
 
+import android.content.Intent
 import android.graphics.Paint
 import android.location.Location
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -23,7 +26,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -35,6 +37,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -45,7 +48,6 @@ import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -58,6 +60,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat.startActivity
 import id.my.nanclouder.nanhistory.lib.Coordinate
 import id.my.nanclouder.nanhistory.lib.TimeFormatterWithSecond
 import id.my.nanclouder.nanhistory.lib.getLocationData
@@ -77,7 +80,6 @@ import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
-import org.osmdroid.views.overlay.Overlay
 import org.osmdroid.views.overlay.Polyline
 import java.time.ZonedDateTime
 import kotlin.math.absoluteValue
@@ -249,7 +251,7 @@ fun MapHistoryView(locations: Map<ZonedDateTime, Coordinate>, modifier: Modifier
 
     // User Options
     var showPoints by rememberSaveable { mutableStateOf(false) }
-    var showMovementSpeed by rememberSaveable { mutableStateOf(false) }
+    var showData by rememberSaveable { mutableStateOf(false) }
 
     var needUpdate by remember { mutableStateOf(false) }
     var firstLoad by remember { mutableStateOf(true) }
@@ -273,7 +275,7 @@ fun MapHistoryView(locations: Map<ZonedDateTime, Coordinate>, modifier: Modifier
 
     var updateRemaining by remember { mutableIntStateOf(0) }
 
-    isSelected = showMovementSpeed && isSelected
+    isSelected = showData && isSelected
 
     val shownCoordinates =
         if (geoPoints.size > 2) {
@@ -324,7 +326,7 @@ fun MapHistoryView(locations: Map<ZonedDateTime, Coordinate>, modifier: Modifier
         }
 
         mapViewObj?.overlays?.add(polylineBorder)
-        if (!showMovementSpeed) {
+        if (!showData) {
             mapViewObj?.overlays?.add(polyline)
         }
         else {
@@ -537,30 +539,77 @@ fun MapHistoryView(locations: Map<ZonedDateTime, Coordinate>, modifier: Modifier
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row {
-                    Icon(
-                        painterResource(R.drawable.ic_schedule),
-                        contentDescription = "Time",
-                        modifier = Modifier.padding(end = 8.dp),
-                        tint = Color.Gray
-                    )
-                    Text(
-                        selectedTime,
-                        color = Color.Gray
-                    )
+                val infoScrollState = rememberScrollState()
+                Row(
+                    Modifier.weight(1f)
+                ) {
+                    Row(
+                        Modifier
+                            .horizontalScroll(infoScrollState),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.ic_schedule),
+                            contentDescription = "Time",
+                            modifier = Modifier.padding(end = 8.dp),
+                            tint = Color.Gray
+                        )
+                        Text(
+                            selectedTime,
+                            color = Color.Gray
+                        )
 
-                    Box(modifier = Modifier.width(16.dp))
+                        Box(modifier = Modifier.width(16.dp))
 
-                    Icon(
-                        painterResource(R.drawable.ic_speed),
-                        contentDescription = "Speed",
-                        modifier = Modifier.padding(end = 8.dp),
-                        tint = Color.Gray
-                    )
-                    Text(
-                        "$selectedSpeed Km/h",
-                        color = Color.Gray
-                    )
+                        Icon(
+                            painterResource(R.drawable.ic_speed),
+                            contentDescription = "Speed",
+                            modifier = Modifier.padding(end = 8.dp),
+                            tint = Color.Gray
+                        )
+                        Text(
+                            "$selectedSpeed Km/h",
+                            color = Color.Gray
+                        )
+
+                        Box(modifier = Modifier.width(16.dp))
+
+                        Button(
+                            onClick = handler@{
+                                val location = locations[selectedFirstKey]
+                                val stringLocation = location?.toString()
+                                if (stringLocation == null) {
+                                    Toast.makeText(
+                                        context,
+                                        "Selected coordinate unknown",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    return@handler
+                                }
+                                val gmmIntentUri =
+                                    Uri.parse("geo:$stringLocation?q=$stringLocation") // Replace with your latitude & longitude
+                                val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
+                                mapIntent.setPackage("com.google.android.apps.maps")
+
+                                if (mapIntent.resolveActivity(context.packageManager) != null) {
+                                    context.startActivity(mapIntent)
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        "Google Maps is not installed",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        ) {
+                            Icon(
+                                painterResource(R.drawable.ic_location_filled),
+                                contentDescription = "Location",
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                            Text("Open")
+                        }
+                    }
                 }
                 IconButton(
                     onClick = {
@@ -609,7 +658,7 @@ fun MapHistoryView(locations: Map<ZonedDateTime, Coordinate>, modifier: Modifier
                     needUpdate = true
                 }
                 val onShowMovementSpeedClicked: () -> Unit = {
-                    showMovementSpeed = !showMovementSpeed
+                    showData = !showData
                     needUpdate = true
                 }
                 Button(
@@ -625,11 +674,11 @@ fun MapHistoryView(locations: Map<ZonedDateTime, Coordinate>, modifier: Modifier
                 Button(
                     onClick = onShowMovementSpeedClicked,
                     colors =
-                    if (showMovementSpeed) ButtonDefaults.buttonColors()
+                    if (showData) ButtonDefaults.buttonColors()
                     else ButtonDefaults.textButtonColors(),
                     contentPadding = PaddingValues(8.dp)
                 ) {
-                    Text("Movement speed")
+                    Text("Show Data")
                 }
             }
         }

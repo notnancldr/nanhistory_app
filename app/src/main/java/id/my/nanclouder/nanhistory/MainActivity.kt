@@ -19,7 +19,11 @@ import org.osmdroid.library.BuildConfig
 import java.time.Instant
 
 enum class NanHistoryPages {
-    Recent, Favorite, All, Search
+    Events, Search
+}
+
+enum class ListFilters {
+    Recent, Favorite, All/*, Search*/
 }
 
 class MainActivity : ComponentActivity() {

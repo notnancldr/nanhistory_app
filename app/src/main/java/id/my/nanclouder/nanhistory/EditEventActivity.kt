@@ -344,3 +344,38 @@ fun EditEventPreview() {
         EditEventView("", "")
     }
 }
+
+/*
+BasicTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = eventDescription,
+                onValueChange = {
+                    eventDescription = it
+                },
+                textStyle = TextStyle.Default.copy(color = Color.Black),
+                decorationBox = { innerTextField ->
+                    Text(
+                        buildAnnotatedString {
+                            val regex = "(?<!\\\\)\\*(.*?)(?<!\\\\)\\*".toRegex() // Detects *text* but not \*text*
+                            var lastIndex = 0
+
+                            regex.findAll(eventDescription).forEach { matchResult ->
+                                val beforeText = eventDescription.substring(lastIndex, matchResult.range.first)
+                                append(beforeText.replace("\\*", "*")) // Replace escaped * with normal *
+
+                                pushStyle(SpanStyle(fontWeight = FontWeight.Bold))
+                                append(matchResult.groupValues[1]) // Bold text inside valid asterisks
+                                pop()
+
+                                lastIndex = matchResult.range.last + 1
+                            }
+
+                            if (lastIndex < eventDescription.length) {
+                                append(eventDescription.substring(lastIndex).replace("\\*", "*")) // Replace escaped * at the end
+                            }
+                        },
+                        color = Color.Black
+                    )
+                }
+            )
+* */
