@@ -33,29 +33,8 @@ class EventListViewModel(
     val isLoading: StateFlow<Boolean> = _isLoading // Expose as immutable
 
     private var _searchQuery = MutableStateFlow("")
-    var _expandSetter by mutableStateOf({ _: Boolean -> })
-
-//    val list: StateFlow<List<HistoryFileData>> =
-//        combine(_list, _searchQuery) { historyList, query ->
-//            if (!searchMode) historyList
-//            else if (query.isBlank()) emptyList() // Return empty list if no search query
-//            else historyList.map { day ->
-//                day.apply {
-//                    events.removeIf { event -> !(
-//                        event.title.contains(query, ignoreCase = true) ||
-//                        event.description.contains(query, ignoreCase = true) ||
-//                        event.time.format(
-//                            DateTimeFormatter.ofLocalizedDateTime(
-//                                FormatStyle.FULL
-//                            )
-//                        )
-//                        .contains(query, ignoreCase = true)
-//                    )}
-//                }
-//                day
-//            }.filter { it.events.isNotEmpty() }
-//        }
-//        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList()) // Keeps state and updates UI
+    private var _expandSetter by mutableStateOf({ _: Boolean -> })
+    private var _selector by mutableStateOf({ })
 
     init {
         if (!searchMode) load(context) // Start loading files when ViewModel initializes
@@ -66,9 +45,8 @@ class EventListViewModel(
         reload(context)
     }
 
-    fun expandStateChange(setter: (Boolean) -> Unit) {
-        _expandSetter = setter
-    }
+    fun expandStateChange(setter: (Boolean) -> Unit) { _expandSetter = setter }
+    fun selector(selector: () -> Unit) { _selector = selector }
 
     private fun MutableList<HistoryFileData>.filterItem(day: HistoryFileData) {
         if (day.events.isNotEmpty()) {
@@ -121,8 +99,10 @@ class EventListViewModel(
         }
     }
 
-    fun collapseAll() =_expandSetter.invoke(false)
+    fun collapseAll() = _expandSetter.invoke(false)
     fun expandAll() = _expandSetter.invoke(true)
+    fun selectAll() = _selector.invoke()
+
     fun cancelLoading() {
         viewModelScope.cancel()
         _isLoading.value = false

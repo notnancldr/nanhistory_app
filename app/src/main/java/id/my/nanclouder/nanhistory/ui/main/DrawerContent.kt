@@ -36,7 +36,7 @@ fun DrawerContent() {
     val context = LocalContext.current
 
     val drawerItemText = @Composable { text: String ->
-        Text(text, fontSize = 3.em, fontWeight = FontWeight.W700)
+        Text(text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.W700)
     }
 
     ModalDrawerSheet(modifier = Modifier.width(300.dp)) {
@@ -92,7 +92,7 @@ fun DrawerContent() {
                     "v${packageInfo.versionName} - build ${packageInfo.longVersionCode}",
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.primary,
-                    fontSize = 3.em
+                    style = MaterialTheme.typography.labelLarge
                 )
             }
         }

@@ -329,13 +329,14 @@ fun MainView() {
                     selectedItems, { resetSelectionMode() }
                 ) {
                     IconButton(onClick = {
-                        val selected = selectedItems.size
-                        val items = fileDataList[filterIndex].flatMap {
-                            it.events
-                        }
-                        selectedItems.clear()
-                        if (selected < items.size)
-                            selectedItems.addAll(items)
+//                        val selected = selectedItems.size
+//                        val items = fileDataList[filterIndex].flatMap {
+//                            it.events
+//                        }
+//                        selectedItems.clear()
+//                        if (selected < items.size)
+//                            selectedItems.addAll(items)
+                        viewModels[filterIndex].value?.selectAll()
                     }) {
                         Icon(painterResource(R.drawable.ic_select_all), "Select all")
                     }
@@ -344,10 +345,11 @@ fun MainView() {
                         scope.launch {
                             lock = true
                             withContext(Dispatchers.IO) {
-                                selectedItems.forEach {event ->
+                                selectedItems.map { event ->
                                     event.favorite = !event.favorite
                                     event.save(context)
-                                }
+                                    event.time.toLocalDate()
+                                }.distinct().forEach(updateData)
                             }
                             lock = false
                             resetSelectionMode()
@@ -768,7 +770,15 @@ fun EventList(
 
         viewModel.expandStateChange {
             expanded.clear()
-            if (it) expanded.addAll(eventList.map { it.date })
+            if (it) expanded.addAll(eventList.map { day -> day.date })
+        }
+
+        viewModel.selector {
+            val selected = selectedItems.size
+            val events = eventList.flatMap { day -> day.events }
+            selectedItems.clear()
+            if (selected < events.size) selectedItems.addAll(events)
+            onSelect(selectedItems)
         }
 
         val filterOnClick = { thisFilter: ListFilters ->
@@ -825,6 +835,7 @@ fun EventList(
                         else
                             expanded.add(day.historyDay.date)
                     },
+                    eventCount = day.events.size,
                     modifier = Modifier
                         .combinedClickable(
                             onClick = {

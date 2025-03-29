@@ -10,6 +10,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -45,9 +46,7 @@ fun SearchAppBar(isLoading: Boolean = false, onSearch: ((String) -> Unit), onCan
                 onValueChange = {
                     searchQuery = it
                 },
-                textStyle = TextStyle(
-                    fontSize = 4.em
-                ),
+                textStyle = MaterialTheme.typography.bodyLarge,
                 shape = RectangleShape,
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color(0x00000000),

@@ -63,7 +63,7 @@ fun EventListItem(eventData: HistoryEvent, selected: Boolean = false, modifier: 
                     )
                 Text(
                     eventData.title.trimIndent().replace("\n", " "),
-                    fontSize = 3.5.em,
+//                    fontSize = 3.5.em,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )

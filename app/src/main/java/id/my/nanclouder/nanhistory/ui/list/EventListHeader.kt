@@ -1,6 +1,8 @@
 package id.my.nanclouder.nanhistory.ui.list
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -17,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -37,6 +40,7 @@ import id.my.nanclouder.nanhistory.ui.tags.TagsView
 @Composable
 fun EventListHeader(
     historyDay: HistoryDay,
+    eventCount: Int,
     modifier: Modifier = Modifier,
     selected: Boolean,
     expanded: Boolean? = null,
@@ -72,25 +76,31 @@ fun EventListHeader(
             val dateStr = historyDay.date.format(format)
             Text(
                 dateStr,
-                fontSize = headlineFontSize,
+//                fontSize = headlineFontSize,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = headlineFontWeight,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                color = if (isSystemInDarkTheme()) Color.LightGray else Color.DarkGray
             )
         },
         trailingContent = {
-            IconButton(
-                onClick = {
-                    onFavoriteChanged(!favorite)
-                    favorite = !favorite
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("($eventCount)", style = MaterialTheme.typography.labelLarge)
+                Box(Modifier.width(8.dp))
+                IconButton(
+                    onClick = {
+                        onFavoriteChanged(!favorite)
+                        favorite = !favorite
+                    }
+                ) {
+                    if (favorite) Icon(
+                        painterResource(R.drawable.ic_favorite_filled), "",
+                        tint = Color(0xFFFF7070)
+                    )
+                    else Icon(
+                        painterResource(R.drawable.ic_favorite), ""
+                    )
                 }
-            ) {
-                if (favorite) Icon(
-                    painterResource(R.drawable.ic_favorite_filled), "",
-                    tint = Color(0xFFFF7070)
-                )
-                else Icon(
-                    painterResource(R.drawable.ic_favorite), ""
-                )
             }
         },
         supportingContent = {
