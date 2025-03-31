@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.AlertDialog
@@ -21,6 +23,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -37,7 +40,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.lib.DateFormatter
@@ -53,6 +60,7 @@ import id.my.nanclouder.nanhistory.lib.history.generateSignature
 import id.my.nanclouder.nanhistory.lib.history.get
 import id.my.nanclouder.nanhistory.lib.history.getFilePathFromDate
 import id.my.nanclouder.nanhistory.lib.history.save
+import id.my.nanclouder.nanhistory.lib.withHaptic
 import id.my.nanclouder.nanhistory.ui.style.DangerButtonColors
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import java.time.Instant
@@ -77,10 +85,10 @@ class EditEventActivity : ComponentActivity() {
 @Composable
 fun EditEventView(eventId: String, path: String) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
 
-    val fileData = HistoryFileData.get(context, path)
-//    Log.d("NanHistoryDebug", "File data: $fileData")
     val oldEvent = remember {
+        val fileData = HistoryFileData.get(context, path)
         fileData?.events?.firstOrNull {
             Log.d("NanHistoryDebug", "Event check: ${it.id} == $eventId")
             it.id == eventId
@@ -164,7 +172,6 @@ fun EditEventView(eventId: String, path: String) {
                     }
                 },
                 title = { Text(if (addMode) "Add Event" else "Edit Event") },
-
             )
         },
         bottomBar = {
@@ -229,13 +236,21 @@ fun EditEventView(eventId: String, path: String) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            val optionLabel = @Composable { text: String, painter: Painter ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(painter, text, Modifier.padding(end = 24.dp), Color.Gray)
+                    Text(text, style = MaterialTheme.typography.labelLarge)
+                }
+            }
+
             OutlinedTextField(
                 modifier = Modifier.fillMaxWidth(),
                 value = eventTitle,
                 onValueChange = {
                     eventTitle = it
                 },
-                label = { Text("Title") }
+                label = { Text("Title") },
+                shape = RoundedCornerShape(16.dp)
             )
             OutlinedTextField(
                 modifier = Modifier.fillMaxWidth(),
@@ -243,68 +258,97 @@ fun EditEventView(eventId: String, path: String) {
                 onValueChange = {
                     eventDescription = it
                 },
-                label = { Text("Description") }
+                label = { Text("Description") },
+                shape = RoundedCornerShape(16.dp)
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Range Event")
+                optionLabel("Range Event", painterResource(R.drawable.ic_arrow_range))
                 Switch(
                     checked = rangeEvent,
-                    onCheckedChange = {
+                    onCheckedChange = withHaptic<Boolean>(haptic) {
                         rangeEvent = it
                     }
                 )
             }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(if (rangeEvent) "Start" else "Time")
-                Row {
-                    TextButton(
-                        onClick = {
-                            /* TODO */
-                            datePickerIsOpened = true
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    optionLabel("Time", painterResource(R.drawable.ic_calendar_month))
+//                    TextButton({ rangeEvent = !rangeEvent }) { Text(if (rangeEvent) "Ranged" else "Point") }
+//                Row {
+//                    TextButton(
+//                        onClick = {
+//                            /* TODO */
+//                            datePickerIsOpened = true
+//                        }
+//                    ) {
+//                        Text(time.format(DateFormatter))
+//                    }
+//                    TextButton(
+//                        onClick = {
+//                            /* TODO */
+//                            timePickerIsOpened = true
+//                        }
+//                    ) {
+//                        Text(time.format(TimeFormatter))
+//                    }
+//                }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (rangeEvent) Text("Start", style = MaterialTheme.typography.labelLarge, color = Color.Gray)
+                    Row {
+                        TextButton(
+                            onClick = {
+                                /* TODO */
+                                datePickerIsOpened = true
+                            }
+                        ) {
+                            Text(time.format(DateFormatter))
                         }
-                    ) {
-                        Text(time.format(DateFormatter))
-                    }
-                    TextButton(
-                        onClick = {
-                            /* TODO */
-                            timePickerIsOpened = true
+                        TextButton(
+                            onClick = {
+                                /* TODO */
+                                timePickerIsOpened = true
+                            }
+                        ) {
+                            Text(time.format(TimeFormatter))
                         }
-                    ) {
-                        Text(time.format(TimeFormatter))
                     }
                 }
-            }
-            if (rangeEvent) Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("End")
-                Row {
-                    TextButton(
-                        onClick = {
-                            /* TODO */
-                            dateEndPickerIsOpened = true
+                if (rangeEvent) Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("End", style = MaterialTheme.typography.labelLarge, color = Color.Gray)
+                    Row {
+                        TextButton(
+                            onClick = {
+                                /* TODO */
+                                dateEndPickerIsOpened = true
+                            }
+                        ) {
+                            Text(timeEnd.format(DateFormatter))
                         }
-                    ) {
-                        Text(timeEnd.format(DateFormatter))
-                    }
-                    TextButton(
-                        onClick = {
-                            /* TODO */
-                            timeEndPickerIsOpened = true
+                        TextButton(
+                            onClick = {
+                                /* TODO */
+                                timeEndPickerIsOpened = true
+                            }
+                        ) {
+                            Text(timeEnd.format(TimeFormatter))
                         }
-                    ) {
-                        Text(timeEnd.format(TimeFormatter))
                     }
                 }
             }

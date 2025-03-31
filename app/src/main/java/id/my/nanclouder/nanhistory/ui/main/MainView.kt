@@ -877,7 +877,7 @@ fun EventList(
                                 rememberLauncherForActivityResult(
                                     ActivityResultContracts.StartActivityForResult()
                                 ) { result ->
-                                    if (result.resultCode == 1) {
+                                    if (result.resultCode == 1 || result.resultCode == 2) {
                                         result.data?.getStringExtra("path")
                                             ?.let { path ->
                                                 val date = getDateFromFilePath(path)

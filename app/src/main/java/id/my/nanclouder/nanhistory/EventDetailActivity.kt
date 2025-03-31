@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -56,6 +57,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -178,6 +180,14 @@ fun DetailContent(eventId: String, path: String) {
                     context.getActivity()?.setResult(1, intent)
                 }
             }
+            else if (result.resultCode == 2) {
+                result.data?.getStringExtra("path")?.let {
+                    val intent = Intent().apply {
+                        putExtra("path", it)
+                    }
+                    context.getActivity()?.setResult(2, intent)
+                }
+            }
         }
 
 
@@ -246,6 +256,26 @@ fun DetailContent(eventId: String, path: String) {
                                 },
                                 text = { Text("Info") },
                                 onClick = { showInfo = true; menuExpanded = false }
+                            )
+                            DropdownMenuItem(
+                                leadingIcon = {
+                                    Icon(
+                                        painterResource(R.drawable.ic_content_cut),
+                                        contentDescription = "Cut Event",
+                                        tint = Color.Gray
+                                    )
+                                },
+                                text = { Text("Cut Event") },
+                                onClick = {
+                                    val intent = Intent(context, EventLocationActivity::class.java)
+                                        .apply {
+                                            putExtra("eventId", eventId)
+                                            putExtra("path", currentPath)
+                                            putExtra("cutMode", true)
+                                        }
+                                    launcher.launch(intent)
+                                    // TODO
+                                }
                             )
                             DropdownMenuItem(
                                 leadingIcon = {
@@ -466,41 +496,64 @@ fun DetailContent(eventId: String, path: String) {
                     showInfo = false
                 }
             ) {
-                val timeFormat = { time: ZonedDateTime ->
-                    "${time.format(DateFormatter)} ${time.format(TimeFormatter)}"
+                Column(
+                    Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .padding(16.dp)
+                        .verticalScroll(rememberScrollState())) {
+                    val timeFormat = { time: ZonedDateTime ->
+                        "${time.format(DateFormatter)} ${time.format(TimeFormatter)}"
+                    }
+                    ListItem(
+                        overlineContent = {
+                            Text("Created")
+                        },
+                        headlineContent = {
+                            Text(eventData.created.let(timeFormat))
+                        }
+                    )
+                    ListItem(
+                        overlineContent = {
+                            Text("Last modified")
+                        },
+                        headlineContent = {
+                            Text(eventData.modified.let(timeFormat))
+                        }
+                    )
+                    ListItem(
+                        overlineContent = {
+                            Text("Event ID")
+                        },
+                        headlineContent = {
+                            Text(eventData.id)
+                        }
+                    )
+                    if (eventData is EventRange) ListItem(
+                        overlineContent = {
+                            Text("Location points")
+                        },
+                        headlineContent = {
+                            Text(eventData.locations.size.toString())
+                        }
+                    )
+                    if (eventData.metadata.isNotEmpty()) {
+                        Box(Modifier.height(8.dp))
+                        ListItem(
+                            headlineContent = { Text("Metadata", style = MaterialTheme.typography.titleMedium) }
+                        )
+
+                        for ((name, value) in eventData.metadata) {
+                            ListItem(
+                                overlineContent = {
+                                    Text(name)
+                                },
+                                headlineContent = {
+                                    Text(value.toString())
+                                }
+                            )
+                        }
+                    }
                 }
-                ListItem(
-                    overlineContent = {
-                        Text("Created")
-                    },
-                    headlineContent = {
-                        Text(eventData.created.let(timeFormat))
-                    }
-                )
-                ListItem(
-                    overlineContent = {
-                        Text("Last modified")
-                    },
-                    headlineContent = {
-                        Text(eventData.modified.let(timeFormat))
-                    }
-                )
-                ListItem(
-                    overlineContent = {
-                        Text("Event ID")
-                    },
-                    headlineContent = {
-                        Text(eventData.id)
-                    }
-                )
-                if (eventData is EventRange) ListItem(
-                    overlineContent = {
-                        Text("Location points")
-                    },
-                    headlineContent = {
-                        Text(eventData.locations.size.toString())
-                    }
-                )
             }
 
             if (deleteDialogState) {

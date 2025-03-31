@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -21,10 +23,14 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.lib.TimeFormatter
 import id.my.nanclouder.nanhistory.lib.history.EventPoint
@@ -54,15 +60,35 @@ fun EventListItem(eventData: HistoryEvent, selected: Boolean = false, modifier: 
         modifier = modifier,
         headlineContent = {
             Row (verticalAlignment = Alignment.CenterVertically) {
-                if (eventData.validateSignature())
-                    Icon(
-                        Icons.Rounded.CheckCircle,
-                        contentDescription = "Signed",
-                        modifier = Modifier.padding(end = 8.dp).size(16.dp).requiredSize(16.dp),
-                        tint = Color(0xFF008000)
-                    )
+
+                val iconId = "inlineIcon"
+                val annotatedString = buildAnnotatedString {
+                    append(eventData.title.trimIndent().replace("\n", " "))
+                    if (eventData.validateSignature()) {
+                        append("  ")
+                        appendInlineContent(iconId, "[icon]") // Placeholder for icon
+                    }
+                }
+
+                val inlineContent = mapOf(
+                    iconId to InlineTextContent(
+                        Placeholder(20.sp, 20.sp, PlaceholderVerticalAlign.Center)
+                    ) {
+                        Icon(
+                            Icons.Rounded.CheckCircle,
+                            contentDescription = "Signed",
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .size(16.dp)
+                                .requiredSize(16.dp),
+                            tint = Color(0xFF008000)
+                        )
+                    }
+                )
+
                 Text(
-                    eventData.title.trimIndent().replace("\n", " "),
+                    annotatedString,
+                    inlineContent = inlineContent,
 //                    fontSize = 3.5.em,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis

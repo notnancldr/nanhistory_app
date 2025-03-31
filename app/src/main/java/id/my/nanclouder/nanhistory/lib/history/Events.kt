@@ -59,7 +59,8 @@ abstract class HistoryEvent (
     open var modified: ZonedDateTime = ZonedDateTime.now(),
     open var broken: Boolean = false,
     open var signature: String = "",
-    open var type: String
+    open var type: String,
+    open var metadata: MutableMap<String, Any> = mutableMapOf()
 )
 
 data class EventPoint(
@@ -71,6 +72,7 @@ data class EventPoint(
     override var tags: List<String> = listOf(),
     override var created: ZonedDateTime = ZonedDateTime.now(),
     override var modified: ZonedDateTime = ZonedDateTime.now(),
+    override var metadata: MutableMap<String, Any> = mutableMapOf(),
     var location: Coordinate? = null
 ) : HistoryEvent(id, title, description, time, favorite,
     created = created,
@@ -87,6 +89,7 @@ data class EventRange(
     override var tags: List<String> = listOf(),
     override var created: ZonedDateTime = ZonedDateTime.now(),
     override var modified: ZonedDateTime = ZonedDateTime.now(),
+    override var metadata: MutableMap<String, Any> = mutableMapOf(),
     var end: ZonedDateTime,
     var locations: MutableMap<ZonedDateTime, Coordinate> = mutableMapOf(),
     var locationDescriptions: MutableMap<ZonedDateTime, String> = mutableMapOf()
@@ -103,6 +106,7 @@ data class HistoryFileData(
     var favorite: Boolean = false,
     var tags: MutableList<String> = mutableListOf(),
     val events: MutableList<HistoryEvent>,
+    var metadata: MutableMap<String, Any> = mutableMapOf(),
     var broken: Boolean = false
 ) {
     companion object {
@@ -222,6 +226,7 @@ fun HistoryEvent.generateSignature(apply: Boolean = false): String {
         data.remove("modified")
         data.remove("favorite")
         data.remove("signature")
+        data.remove("metadata")
         Gson().toJson(data)
     }
     val result = messageDigest.digest(stringData.toByteArray()).let {
@@ -247,6 +252,7 @@ fun Map<String, Any>.toHistoryEvent(): HistoryEvent {
     val favorite = matchOrNull<Boolean>(this["favorite"])
     val eventSignatureOrNull = matchOrNull<String>(this["signature"])
     val tags = matchOrNull<List<String>>(this["tags"])
+    val metadata = matchOrNull<Map<String, Any>>(this["metadata"]) ?: mapOf()
 
     val timeStr = matchOrNull<String>(this["time"])
     val createdStr = matchOrNull<String>(this["created"])
@@ -285,6 +291,7 @@ fun Map<String, Any>.toHistoryEvent(): HistoryEvent {
                 created = created,
                 modified = modified,
                 location = location,
+                metadata = metadata.toMutableMap()
             )
         }
         "range" -> {
@@ -313,6 +320,7 @@ fun Map<String, Any>.toHistoryEvent(): HistoryEvent {
                 created = created,
                 modified = modified,
                 end = end,
+                metadata = metadata.toMutableMap(),
                 locations = locations.toMutableMap(),
                 locationDescriptions = locationDescriptions.toMutableMap()
             )
@@ -339,6 +347,7 @@ fun HistoryEvent.toMap(): Map<String, Any> {
     map["created"] = this.created.toOffsetDateTime().toString()
     map["modified"] = this.modified.toOffsetDateTime().toString()
     map["signature"] = this.signature
+    map["metadata"] = this.metadata
     map["type"] = this.type
     when (this) {
         is EventPoint -> {
@@ -380,6 +389,7 @@ fun Map<String, Any?>.toHistoryFileData(): HistoryFileData {
     val description = matchOrNull<String?>(this["description"])
     val favorite = matchOrNull<Boolean>(this["favorite"]) ?: noValue(false)
     val tags = matchOrNull<List<String>>(this["tags"]) ?: noValue(listOf())
+    val metadata = matchOrNull<Map<String, Any>>(this["metadata"]) ?: mapOf()
     val events = (matchOrNull<List<Map<String, Any>>>(this["events"]) ?: noValue(listOf())).toHistoryEvent()
     return HistoryFileData(
         fileVersion = fileVersion,
@@ -388,6 +398,7 @@ fun Map<String, Any?>.toHistoryFileData(): HistoryFileData {
         favorite = favorite,
         tags = tags.toMutableList(),
         events = events.toMutableList(),
+        metadata = metadata.toMutableMap(),
         broken = brokenData
     )
 }
@@ -398,7 +409,8 @@ fun HistoryFileData.toMap(): Map<String, Any?> = mapOf(
     "description" to this.description,
     "favorite" to this.favorite,
     "tags" to this.tags,
-    "events" to this.events.toMap()
+    "events" to this.events.toMap(),
+    "metadata" to this.metadata
 )
 
 fun HistoryFileData.toJson(): String =
@@ -496,4 +508,9 @@ fun HistoryFileData.save(context: Context) {
         file.createNewFile()
     }
     file.writeText(this.toJson())
+}
+
+fun HistoryFileData.delete(context: Context) {
+    val file = File(getFilePathFromDate(this.date))
+    if (file.exists()) file.delete()
 }

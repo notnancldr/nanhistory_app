@@ -26,6 +26,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -37,7 +38,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -60,7 +60,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat.startActivity
 import id.my.nanclouder.nanhistory.lib.Coordinate
 import id.my.nanclouder.nanhistory.lib.TimeFormatterWithSecond
 import id.my.nanclouder.nanhistory.lib.getLocationData
@@ -69,7 +68,11 @@ import id.my.nanclouder.nanhistory.lib.history.EventRange
 import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
 import id.my.nanclouder.nanhistory.lib.history.HistoryFileData
 import id.my.nanclouder.nanhistory.lib.history.generateEventId
+import id.my.nanclouder.nanhistory.lib.history.generateSignature
 import id.my.nanclouder.nanhistory.lib.history.get
+import id.my.nanclouder.nanhistory.lib.history.getFilePathFromDate
+import id.my.nanclouder.nanhistory.lib.history.save
+import id.my.nanclouder.nanhistory.lib.history.validateSignature
 import id.my.nanclouder.nanhistory.lib.toGeoPoint
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import org.osmdroid.events.MapListener
@@ -96,13 +99,14 @@ class EventLocationActivity : ComponentActivity() {
         enableEdgeToEdge()
         val eventId = intent.getStringExtra("eventId") ?: generateEventId()
         val path = intent.getStringExtra("path") ?: "NULL!"
+        val startAsCutMode = intent.getBooleanExtra("cutMode", false)
         setContent {
             var setUpdate by remember { mutableStateOf(false) }
             update = { setUpdate = !setUpdate }
             NanHistoryTheme {
 //                Log.d("NanHistoryDebug", "data (eventId) : $eventId")
 //                Log.d("NanHistoryDebug", "data (path)    : $path")
-                key(setUpdate) { EventLocationView(eventId, path) }
+                key(setUpdate) { EventLocationView(eventId, path, startAsCutMode) }
             }
         }
     }
@@ -115,7 +119,7 @@ class EventLocationActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EventLocationView(eventId: String, path: String) {
+fun EventLocationView(eventId: String, path: String, startAsCutMode: Boolean = false) {
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
 //    val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -137,6 +141,10 @@ fun EventLocationView(eventId: String, path: String) {
         else -> false
     }
 
+    var cutMode by rememberSaveable { mutableStateOf(startAsCutMode) }
+    var cutStart by rememberSaveable { mutableStateOf<ZonedDateTime?>(null) }
+    var cutEnd by rememberSaveable { mutableStateOf<ZonedDateTime?>(null) }
+
     Log.d("NanHistoryDebug", "eventData: $eventData")
 
     if (eventData != null) Scaffold(
@@ -145,7 +153,7 @@ fun EventLocationView(eventId: String, path: String) {
         topBar = {
             TopAppBar(
                 title = {
-                    Text("Event Map")
+                    Text(if (cutMode) "Cut Event" else "Event Map")
                 },
                 navigationIcon = {
                     IconButton(
@@ -157,6 +165,67 @@ fun EventLocationView(eventId: String, path: String) {
                     }
                 },
                 actions = {
+                    if (cutMode && eventData is EventRange) IconButton(
+                        onClick = {
+                            // TODO
+                            val event = EventRange(
+                                title = "Cut of ${eventData.title}",
+                                description = eventData.description +
+                                    if (eventData.description.isBlank()) "" else "\n" +
+                                    "Cut of ${eventData.title}",
+                                time = cutStart!!,
+                                favorite = eventData.favorite,
+                                tags = eventData.tags,
+                                end = cutEnd!!,
+                                locations = eventData.locations.filter {
+                                    it.key >= cutStart!! && it.key <= cutEnd!!
+                                }.toMutableMap(),
+                                locationDescriptions = eventData.locationDescriptions.filter {
+                                    it.key >= cutStart!! && it.key <= cutEnd!!
+                                }.toMutableMap(),
+                                metadata = eventData.metadata
+                            ).apply {
+                                if (eventData.validateSignature()) generateSignature(true)
+                                metadata["original_event_id"] = eventData.id
+                                metadata["original_event_time"] = eventData.time.toOffsetDateTime().toString()
+                                metadata["original_event_end"] = eventData.end.toOffsetDateTime().toString()
+                                if (metadata["root_event_id"] == null)
+                                    metadata["root_event_id"] = eventData.id
+                                if (metadata["root_event_time"] == null)
+                                    metadata["root_event_time"] = eventData.time.toOffsetDateTime().toString()
+                                if (metadata["root_event_end"] == null)
+                                    metadata["root_event_end"] = eventData.end.toOffsetDateTime().toString()
+                            }
+                            event.save(context)
+                            cutMode = false
+                            Toast.makeText(context, "${event.title} has been saved", Toast.LENGTH_SHORT).show()
+
+                            val resultIntent = Intent().apply {
+                                putExtra("path", getFilePathFromDate(event.time.toLocalDate()))
+                            }
+
+                            context.getActivity()?.setResult(2, resultIntent)
+                            if (startAsCutMode) context.getActivity()?.finish()
+
+                            // TODO
+                        },
+                        enabled = cutStart != null && cutEnd != null
+                    ) {
+                        Icon(
+                            Icons.Rounded.Check,
+                            contentDescription = "Confirm",
+                        )
+                    }
+                    if (eventData is EventRange) IconButton({ cutMode = !cutMode }) {
+                        if (!cutMode) Icon(
+                            painterResource(R.drawable.ic_content_cut),
+                            "Cut Mode"
+                        )
+                        else Icon(
+                            Icons.Rounded.Close,
+                            "Exit Cut Mode"
+                        )
+                    }
                 }
             )
         }
@@ -173,7 +242,20 @@ fun EventLocationView(eventId: String, path: String) {
 
                     else -> mapOf()
                 }
-                MapHistoryView(locations = locations)
+                MapHistoryView(
+                    locations = locations,
+                    onPointsSelected = { time1, time2 ->
+                        if (time1 != null && time2 != null) {
+                            cutStart = if (time1 < time2) time1 else time2
+                            cutEnd = if (time1 > time2) time1 else time2
+                        }
+                        else {
+                            cutStart = time1
+                            cutEnd = null
+                        }
+                    },
+                    cutMode = cutMode
+                )
             }
         }
     }
@@ -238,7 +320,12 @@ fun calculateColor(speed: Int): Color {
 }
 
 @Composable
-fun MapHistoryView(locations: Map<ZonedDateTime, Coordinate>, modifier: Modifier = Modifier) {
+fun MapHistoryView(
+    locations: Map<ZonedDateTime, Coordinate>,
+    onPointsSelected: (ZonedDateTime?, ZonedDateTime?) -> Unit,
+    cutMode: Boolean = false,
+    modifier: Modifier = Modifier
+) {
     val context = LocalContext.current
 
     val mapKeys = locations.keys.sorted()
@@ -248,6 +335,13 @@ fun MapHistoryView(locations: Map<ZonedDateTime, Coordinate>, modifier: Modifier
     }
 
     val bottomBarScrollState = rememberScrollState()
+
+    // Cut Event Mode: Cut based on location at start and end of the event
+    var cutTime1 by rememberSaveable { mutableStateOf<ZonedDateTime?>(null) }
+    var cutTime2 by rememberSaveable { mutableStateOf<ZonedDateTime?>(null) }
+    var cutModeCheck by remember { mutableStateOf(cutMode) }
+
+    var selectedCutPoint by rememberSaveable { mutableStateOf<ZonedDateTime?>(null) }
 
     // User Options
     var showPoints by rememberSaveable { mutableStateOf(false) }
@@ -299,6 +393,37 @@ fun MapHistoryView(locations: Map<ZonedDateTime, Coordinate>, modifier: Modifier
 
     var updateMap = { }
 
+    val updateCutSelection = {
+        onPointsSelected(cutTime1, cutTime2)
+        if (cutTime1 == null || cutTime2 == null) updateMap()
+        else needUpdate = true
+    }
+
+    val setCutPoint = cutPointSetter@{ time: ZonedDateTime ->
+        if (time == cutTime1 || time == cutTime2) return@cutPointSetter
+
+        if (cutTime1 == null) cutTime1 = time
+        else if (cutTime2 == null) cutTime2 = time
+        else return@cutPointSetter
+
+        updateCutSelection()
+    }
+
+    val undoCutSelection = undo@{
+        if (cutTime2 != null) cutTime2 = null
+        else if (cutTime1 != null) cutTime1 = null
+        else return@undo
+
+        updateCutSelection()
+    }
+
+    if (cutMode != cutModeCheck) {
+        cutModeCheck = cutMode
+        cutTime1 = null
+        cutTime2 = null
+        needUpdate = true
+    }
+
     updateMap = updater@{
         if (mapViewObj == null) return@updater
 
@@ -306,7 +431,9 @@ fun MapHistoryView(locations: Map<ZonedDateTime, Coordinate>, modifier: Modifier
 
         val polyline = Polyline(mapViewObj).apply {
             setPoints(shownCoordinates)
-            outlinePaint.color = android.graphics.Color.BLUE
+            outlinePaint.color =
+                if (!cutMode) android.graphics.Color.BLUE
+                else android.graphics.Color.GRAY
             outlinePaint.strokeWidth = 8f
             outlinePaint.strokeCap = Paint.Cap.ROUND
         }
@@ -317,16 +444,24 @@ fun MapHistoryView(locations: Map<ZonedDateTime, Coordinate>, modifier: Modifier
             outlinePaint.strokeCap = Paint.Cap.ROUND
         }
         val markerStart = Marker(mapViewObj).apply {
-            position = shownCoordinates.first()
+            position = geoPoints.first()
             icon = context.getDrawable(R.drawable.ic_location_start)
+            setOnMarkerClickListener { _, _ ->
+                setCutPoint(locations.keys.first())
+                true
+            }
         }
         val markerEnd = Marker(mapViewObj).apply {
-            position = shownCoordinates.last()
+            position = geoPoints.last()
             icon = context.getDrawable(R.drawable.ic_location_end)
+            setOnMarkerClickListener { _, _ ->
+                setCutPoint(locations.keys.last())
+                true
+            }
         }
 
         mapViewObj?.overlays?.add(polylineBorder)
-        if (!showData) {
+        if (!showData || cutMode) {
             mapViewObj?.overlays?.add(polyline)
         }
         else {
@@ -434,14 +569,56 @@ fun MapHistoryView(locations: Map<ZonedDateTime, Coordinate>, modifier: Modifier
             }
         }
 
-        if (showPoints) {
-            for (shownCoordinate in shownCoordinates) {
-                mapViewObj?.overlays?.add(Marker(mapViewObj).apply {
-                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                    position = shownCoordinate
-                    icon = context.getDrawable(R.drawable.ic_map_point)
-                })
+        val currentCutTime1 = cutTime1
+        val currentCutTime2 = cutTime2
+        if (cutMode && currentCutTime1 != null && currentCutTime2 != null) {
+            val startTime =
+                if (currentCutTime1 < currentCutTime2) currentCutTime1
+                else currentCutTime2
+            val endTime =
+                if (currentCutTime1 > currentCutTime2) currentCutTime1
+                else currentCutTime2
+            val selectedArea = mutableListOf<ZonedDateTime>()
+//            Log.d("NanHistoryDebug", "START TIME: $startTime, END TIME: $endTime")
+            shownKeys
+                .forEach selectionIterator@{
+                    if (it < startTime || it > endTime)
+                        return@selectionIterator
+                    selectedArea.add(it)
+                }
+            val selectedPolyline = Polyline(mapViewObj).apply {
+                setPoints(selectedArea.map { locations[it]!!.toGeoPoint() })
+                outlinePaint.color = android.graphics.Color.BLUE
+                outlinePaint.strokeWidth = 8f
+                outlinePaint.strokeCap = Paint.Cap.ROUND
             }
+            mapViewObj?.overlays?.add(selectedPolyline)
+        }
+
+        if (showPoints || cutMode) {
+            if (cutTime1 == null || cutTime2 == null)
+                for ((shownKey, shownCoordinate) in shownCoordinates.mapIndexed { idx, it -> shownKeys[idx] to it }) {
+                    mapViewObj?.overlays?.add(Marker(mapViewObj).apply {
+                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                        position = shownCoordinate
+                        icon = context.getDrawable(R.drawable.ic_map_touch_point)
+
+                        setOnMarkerClickListener { _, _ ->
+                            setCutPoint(shownKey)
+                            true
+                        }
+                    })
+                }
+            if (cutTime1 != null) mapViewObj?.overlays?.add(Marker(mapViewObj).apply {
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                position = locations[cutTime1]!!.toGeoPoint()
+                icon = context.getDrawable(R.drawable.ic_map_stop_point)
+            })
+            if (cutTime2 != null) mapViewObj?.overlays?.add(Marker(mapViewObj).apply {
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                position = locations[cutTime2]!!.toGeoPoint()
+                icon = context.getDrawable(R.drawable.ic_map_stop_point)
+            })
         }
 
         if (shownCoordinates.size > 1) mapViewObj?.overlays?.add(markerStart)
@@ -648,10 +825,11 @@ fun MapHistoryView(locations: Map<ZonedDateTime, Coordinate>, modifier: Modifier
                 )
             }
             Box(modifier = Modifier.width(8.dp))
-            Row(
+            if (!cutMode) Row(
                 modifier = Modifier
                     .horizontalScroll(bottomBarScrollState)
                     .padding(start = 8.dp)
+                    .weight(1f)
             ) {
                 val onShowPointsClicked: () -> Unit = {
                     showPoints = !showPoints
@@ -679,6 +857,21 @@ fun MapHistoryView(locations: Map<ZonedDateTime, Coordinate>, modifier: Modifier
                     contentPadding = PaddingValues(8.dp)
                 ) {
                     Text("Show Data")
+                }
+            }
+            else Row(
+                modifier = Modifier
+                    .horizontalScroll(bottomBarScrollState)
+                    .padding(start = 8.dp)
+                    .weight(1f)
+            ) {
+                Button(
+                    onClick = undoCutSelection,
+                    colors = ButtonDefaults.buttonColors(),
+                    contentPadding = PaddingValues(8.dp),
+                    enabled = cutTime1 != null || cutTime2 != null
+                ) {
+                    Text("Undo Selection")
                 }
             }
         }

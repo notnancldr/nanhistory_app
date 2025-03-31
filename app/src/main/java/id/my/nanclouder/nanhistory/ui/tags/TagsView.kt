@@ -6,27 +6,35 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.FlowRowScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.lib.history.HistoryTag
 import id.my.nanclouder.nanhistory.lib.copyWith
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun TagsView(tags: List<HistoryTag>, maximum: Int = 3, wrap: Boolean = false, favorite: Boolean = false) {
+fun TagsView(tags: List<HistoryTag>, limit: Int = 3, wrap: Boolean = false, favorite: Boolean = false) {
     if (tags.isEmpty() && !favorite) return
+
+    var tagLimit = limit
 
     val backgroundValue = if (isSystemInDarkTheme()) .2f else .95f
     val backgroundSaturation = if (isSystemInDarkTheme()) .2f else .2f
@@ -37,21 +45,31 @@ fun TagsView(tags: List<HistoryTag>, maximum: Int = 3, wrap: Boolean = false, fa
     val rowModifier = Modifier.horizontalScroll(state = scrollState)
 
     val shownTags = mutableListOf<HistoryTag>()
-    if (favorite) shownTags.add(HistoryTag(
-        name = "Favorite",
-        tint = Color(0xFFFF0000)
-    ))
+//    if (favorite) tagLimit--
+//        shownTags.add(HistoryTag(
+//            name = "Favorite",
+//            tint = Color(0xFFFFFF00)
+//        ))
 
     shownTags.addAll(tags)
 
-    val components = @Composable {
-        shownTags.take(maximum).forEach { tag ->
+    val components: @Composable FlowRowScope.() -> Unit = @Composable {
+        if (favorite) Icon(
+            painterResource(R.drawable.ic_favorite_filled),
+            contentDescription = "Favorite",
+            tint = Color(0xFFFF7070),
+            modifier = Modifier.align(Alignment.CenterVertically)
+        )
+        shownTags.take(tagLimit).forEach { tag ->
             Text(
                 tag.name,
                 color = tag.tint.copyWith(saturation = onBackgroundSaturation, value = onBackgroundValue),
                 modifier = Modifier
                     .background(
-                        color = tag.tint.copyWith(saturation = backgroundSaturation, value = backgroundValue),
+                        color = tag.tint.copyWith(
+                            saturation = backgroundSaturation,
+                            value = backgroundValue
+                        ),
                         shape = RoundedCornerShape(100.dp)
                     )
                     .padding(PaddingValues(horizontal = 8.dp, vertical = 2.dp))
@@ -60,9 +78,9 @@ fun TagsView(tags: List<HistoryTag>, maximum: Int = 3, wrap: Boolean = false, fa
                 softWrap = false
             )
         }
-        if (tags.size > maximum) {
+        if (tags.size > tagLimit) {
             Text(
-                "${tags.size - maximum}+",
+                "${tags.size - tagLimit}+",
                 color = Color.White,
                 modifier = Modifier
                     .background(
@@ -74,19 +92,21 @@ fun TagsView(tags: List<HistoryTag>, maximum: Int = 3, wrap: Boolean = false, fa
         }
     }
 
-    if (wrap) FlowRow(
+    FlowRow(
         modifier = Modifier.padding(PaddingValues(vertical = 8.dp)),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.CenterVertically),
+        maxLines = if (wrap) Int.MAX_VALUE else 1
     ) {
         components()
     }
-    else Row(
-        modifier = rowModifier.padding(PaddingValues(vertical = 8.dp)),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        components()
-    }
+//    else Row(
+//        modifier = rowModifier.padding(PaddingValues(vertical = 8.dp)),
+//        verticalAlignment = Alignment.CenterVertically,
+//        horizontalArrangement = Arrangement.spacedBy(8.dp)
+//    ) {
+//        components()
+//    }
 }
 
 @Preview(showBackground = true)
@@ -128,7 +148,8 @@ fun TagsPreview() {
                     tint = Color(0xFFFF00FF)
                 )
             ),
-            maximum = 3
+            favorite = true,
+            limit = 3
         )
     }
 }
@@ -172,7 +193,8 @@ fun WrapTagsPreview() {
                     tint = Color(0xFFFF00FF)
                 )
             ),
-            maximum = 999,
+            favorite = true,
+            limit = 999,
             wrap = true
         )
     }

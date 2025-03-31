@@ -376,12 +376,14 @@ fun BackupView() {
                     else {
                         Column {
                             val progressTargetSafe = if (progressTarget == 0L) 1L else progressTarget
-                            val progressText = "${progress * 100 / progressTargetSafe} ($progress/$progressTarget)"
+                            val progressPercentage = progress * 100 / progressTargetSafe
                             Text(
                                 when (currentStage) {
                                     ImportProgressStage.Init -> "Initializing"
-                                    ImportProgressStage.Decrypt -> "Decrypting $progressText"
-                                    ImportProgressStage.Extract -> "Extracting $progressText"
+                                    ImportProgressStage.Decrypt ->
+                                        "Decrypting $progressPercentage% (${readableSize(progress)}/${readableSize(progressTarget)})"
+                                    ImportProgressStage.Extract ->
+                                        "Extracting $progressPercentage% ($progress/$progressTarget)"
                                     ImportProgressStage.Done -> "Done"
                                     ImportProgressStage.Error -> "Backup failed"
                                 }
