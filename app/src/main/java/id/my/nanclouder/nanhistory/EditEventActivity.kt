@@ -203,6 +203,7 @@ fun EditEventView(eventId: String, path: String) {
                                     created = oldEvent.created
                                     favorite = oldEvent.favorite
                                     signature = oldEvent.signature
+                                    metadata = oldEvent.metadata
                                 }
                                 if (oldEvent is EventRange && this is EventRange) {
                                     locations = oldEvent.locations

@@ -103,6 +103,7 @@ import id.my.nanclouder.nanhistory.lib.history.getFilePathFromDate
 import id.my.nanclouder.nanhistory.lib.history.getList
 import id.my.nanclouder.nanhistory.lib.history.getListStream
 import id.my.nanclouder.nanhistory.lib.history.save
+import id.my.nanclouder.nanhistory.lib.matchOrNull
 import id.my.nanclouder.nanhistory.service.RecordService
 import id.my.nanclouder.nanhistory.ui.SearchAppBar
 import id.my.nanclouder.nanhistory.ui.SelectionAppBar
@@ -286,7 +287,9 @@ fun MainView() {
                                         description = "",
                                         time = now,
                                         end = now
-                                    )
+                                    ).apply {
+                                        metadata["recording"] = true
+                                    }
                                     event.save(context)
                                     intent.putExtra("eventId", event.id)
                                     intent.putExtra("path", getFilePathFromDate(event.time.toLocalDate()))
@@ -813,7 +816,6 @@ fun EventList(
 
         items(eventList, key = { "day${it.date}-${it.hashCode()}" }) { day ->
             val dayExpanded = expandedCurrent.contains(day.date)
-
             val headerSelected = selectedItems.containsAll(day.events.map { it })
 
             Column(
@@ -871,8 +873,22 @@ fun EventList(
                     Column {
                         day.events.forEachIndexed { index, _ ->
                             var eventData by remember { mutableStateOf(events[index]) }
+                            val recording = matchOrNull<Boolean>(eventData.metadata["recording"]) ?: false
                             val selected = selectedItems.contains(eventData)
                             val lastItem = index + 1 >= events.size
+
+                            val scope = rememberCoroutineScope()
+
+                            scope.launch {
+                                delay(2000L)
+                                if (recording && !RecordService.isRunning(context)) {
+                                    val event = eventData
+                                    event.metadata["recording"] = false
+                                    event.save(context)
+                                    eventData = event
+                                }
+                            }
+
                             val launcher =
                                 rememberLauncherForActivityResult(
                                     ActivityResultContracts.StartActivityForResult()
@@ -914,15 +930,14 @@ fun EventList(
                                                 )
                                                 launcher.launch(intent)
                                             } else {
-                                                if (selected) selectedItems.remove(
-                                                    eventData
-                                                )
+                                                if (recording) return@listItemOnClick
+                                                if (selected) selectedItems.remove(eventData)
                                                 else selectedItems.add(eventData)
                                                 onSelect(selectedItems)
                                             }
                                         },
                                         onLongClick = listItemOnLongClick@{
-//                                            if (lock) return@listItemOnLongClick
+                                            if (recording) return@listItemOnLongClick
 //                                            selectionMode = true
                                             haptic.performHapticFeedback(
                                                 HapticFeedbackType.LongPress

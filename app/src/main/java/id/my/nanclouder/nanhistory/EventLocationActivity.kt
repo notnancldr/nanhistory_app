@@ -73,6 +73,7 @@ import id.my.nanclouder.nanhistory.lib.history.get
 import id.my.nanclouder.nanhistory.lib.history.getFilePathFromDate
 import id.my.nanclouder.nanhistory.lib.history.save
 import id.my.nanclouder.nanhistory.lib.history.validateSignature
+import id.my.nanclouder.nanhistory.lib.matchOrNull
 import id.my.nanclouder.nanhistory.lib.toGeoPoint
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import org.osmdroid.events.MapListener
@@ -134,6 +135,8 @@ fun EventLocationView(eventId: String, path: String, startAsCutMode: Boolean = f
             it.id == eventId
         }
     }
+
+    val recording = matchOrNull<Boolean>(eventData?.metadata?.get("recording")) ?: false
 
     val locationAvailable = when (eventData) {
         is EventRange -> eventData.locations.isNotEmpty()
@@ -216,7 +219,7 @@ fun EventLocationView(eventId: String, path: String, startAsCutMode: Boolean = f
                             contentDescription = "Confirm",
                         )
                     }
-                    if (eventData is EventRange) IconButton({ cutMode = !cutMode }) {
+                    if (eventData is EventRange) IconButton({ cutMode = !cutMode }, enabled = !recording) {
                         if (!cutMode) Icon(
                             painterResource(R.drawable.ic_content_cut),
                             "Cut Mode"

@@ -20,6 +20,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
 import org.osmdroid.util.GeoPoint
+import java.time.Duration
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.round
@@ -148,3 +149,31 @@ fun readableSize(size: Double): String {
 fun readableSize(size: Float) = readableSize(size.toDouble())
 fun readableSize(size: Int) = readableSize(size.toDouble())
 fun readableSize(size: Long) = readableSize(size.toDouble())
+
+fun readableTime(duration: Duration): String {
+    val days = duration.toDays()
+    val hours = duration.toHoursPart()
+    val minutes = duration.toMinutesPart()
+    val seconds = duration.toSecondsPart()
+
+    var text = ""
+    if (days > 0) text += "${days}d "
+    if (hours > 0) text += "${hours}h "
+    if (minutes > 0) text += "${minutes}m "
+    if (seconds > 0) text += "${seconds}s"
+    return text
+}
+
+fun readableTimeHours(duration: Duration): String {
+    val days = duration.toDays()
+    val hours = duration.toHoursPart()
+    val minutes = duration.toMinutesPart()
+    val seconds = duration.toSecondsPart()
+
+    var text = ""
+    if (days > 0) text += "${days.toString().padStart(2, '0')}:"
+    if (hours > 0) text += "${hours.toString().padStart(2, '0')}:"
+    text += "${minutes.toString().padStart(2, '0')}:"
+    text += seconds.toString().padStart(2, '0')
+    return text
+}

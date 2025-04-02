@@ -1,5 +1,6 @@
 package id.my.nanclouder.nanhistory.ui.list
 
+import android.util.Log
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -17,6 +18,11 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -29,7 +35,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.lib.TimeFormatter
@@ -37,53 +42,89 @@ import id.my.nanclouder.nanhistory.lib.history.EventPoint
 import id.my.nanclouder.nanhistory.lib.history.EventRange
 import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
 import id.my.nanclouder.nanhistory.lib.history.validateSignature
+import id.my.nanclouder.nanhistory.lib.matchOrNull
+import id.my.nanclouder.nanhistory.lib.readableTimeHours
 import id.my.nanclouder.nanhistory.ui.tags.TagsView
+import kotlinx.coroutines.delay
+import java.time.Instant
 import java.time.ZonedDateTime
+import java.time.Duration
+import java.util.Date
 
 @Composable
 fun EventListItem(eventData: HistoryEvent, selected: Boolean = false, modifier: Modifier = Modifier) {
     val context = LocalContext.current
 
-    val timeStr = when (eventData) {
-        is EventPoint -> {
-            eventData.time.format(TimeFormatter)
-        }
-        is EventRange -> {
-            val start = eventData.time.format(TimeFormatter)
-            val end = eventData.end.format(TimeFormatter)
-            "$start - $end"
-        }
+    val recording = matchOrNull<Boolean>(eventData.metadata["recording"]) ?: false
+    val cutEvent = eventData.metadata["original_event_id"] != null
+
+    val timeStart = eventData.time.format(TimeFormatter)
+    val timeStr = if (!recording) when (eventData) {
+        is EventPoint -> timeStart
+        is EventRange -> "$timeStart - ${eventData.end.format(TimeFormatter)}"
         else -> ""
+    } else "Started: $timeStart"
+
+    val recordingColors = ListItemDefaults.colors(
+        containerColor = MaterialTheme.colorScheme.errorContainer,
+        headlineColor = MaterialTheme.colorScheme.error,
+        leadingIconColor = MaterialTheme.colorScheme.error,
+        trailingIconColor = MaterialTheme.colorScheme.error
+    )
+
+    var timeElapsed by remember { mutableStateOf(Duration.ZERO) }
+
+    if (recording) LaunchedEffect(eventData) {
+        while (true) {
+            timeElapsed = Duration.between(eventData.time.toInstant(), Instant.now())
+            Log.d("NanHistoryDebug", "TIME ELAPSED: $timeElapsed")
+            delay(1000 - timeElapsed.toMillis() % 1000)
+        }
     }
 
     ListItem(
         modifier = modifier,
         headlineContent = {
             Row (verticalAlignment = Alignment.CenterVertically) {
-
-                val iconId = "inlineIcon"
-                val annotatedString = buildAnnotatedString {
-                    append(eventData.title.trimIndent().replace("\n", " "))
+                val title = if (recording) "Recording (${readableTimeHours(timeElapsed)})" else eventData.title
+                val signValidId = "signValid"
+                val cutEventId = "cutEvent"
+                val annotatedString = buildAnnotatedString annotated@{
+                    append(title.trimIndent().replace("\n", " "))
+                    if (recording) return@annotated
                     if (eventData.validateSignature()) {
                         append("  ")
-                        appendInlineContent(iconId, "[icon]") // Placeholder for icon
+                        appendInlineContent(signValidId, "[icon]") // Placeholder for icon
+                    }
+                    if (cutEvent) {
+                        append("  ")
+                        appendInlineContent(cutEventId, "[icon]") // Placeholder for icon
                     }
                 }
 
                 val inlineContent = mapOf(
-                    iconId to InlineTextContent(
+                    signValidId to InlineTextContent(
                         Placeholder(20.sp, 20.sp, PlaceholderVerticalAlign.Center)
                     ) {
                         Icon(
                             Icons.Rounded.CheckCircle,
                             contentDescription = "Signed",
                             modifier = Modifier
-                                .padding(end = 8.dp)
-                                .size(16.dp)
-                                .requiredSize(16.dp),
+                                .size(16.dp),
                             tint = Color(0xFF008000)
                         )
-                    }
+                    },
+                    cutEventId to InlineTextContent(
+                        Placeholder(20.sp, 20.sp, PlaceholderVerticalAlign.Center)
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.ic_content_cut),
+                            contentDescription = "Cut",
+                            modifier = Modifier
+                                .size(16.dp),
+                            tint = Color.Gray
+                        )
+                    },
                 )
 
                 Text(
@@ -100,7 +141,13 @@ fun EventListItem(eventData: HistoryEvent, selected: Boolean = false, modifier: 
                 modifier = Modifier.size(24.dp),
                 contentAlignment = Alignment.Center
             ) {
-                if (selected) Icon(Icons.Rounded.Check, "Selected")
+                if (recording) Icon(
+                    painterResource(R.drawable.ic_circle_filled),
+                    contentDescription = "Recording",
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(end = 8.dp).size(16.dp)
+                )
+                else if (selected) Icon(Icons.Rounded.Check, "Selected")
                 else if (eventData is EventPoint) Icon(painterResource(R.drawable.ic_circle_filled), "Event Icon", Modifier.size(16.dp))
                 else Icon(painterResource(R.drawable.ic_arrow_range), "Event Icon", modifier = Modifier.rotate(90f))
             }
@@ -111,7 +158,8 @@ fun EventListItem(eventData: HistoryEvent, selected: Boolean = false, modifier: 
         trailingContent = {
             Text(timeStr)
         },
-        colors = if (selected) ListItemDefaults.colors(
+        colors = if (recording) recordingColors
+        else if (selected) ListItemDefaults.colors(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             headlineColor = MaterialTheme.colorScheme.primary,
         ) else ListItemDefaults.colors(

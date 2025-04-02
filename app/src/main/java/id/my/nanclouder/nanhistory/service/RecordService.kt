@@ -38,6 +38,7 @@ import id.my.nanclouder.nanhistory.lib.history.get
 import id.my.nanclouder.nanhistory.lib.history.getFilePathFromDate
 import id.my.nanclouder.nanhistory.lib.history.save
 import id.my.nanclouder.nanhistory.lib.history.validateSignature
+import id.my.nanclouder.nanhistory.lib.matchOrNull
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -200,6 +201,9 @@ class RecordService : Service() {
         )
 
         val signatureValidBeforeUpdate = event.validateSignature()
+
+        event.metadata["record_updates"] = updates
+
         event.generateSignature(true)
         Log.d(
             "NanHistoryDebug",
@@ -301,6 +305,14 @@ class RecordService : Service() {
             .setContentTitle("Service Debug")
             .setContentText("Starting...")
             .setSmallIcon(R.drawable.ic_launcher_foreground)
+
+        // Process metadata
+        val recordServiceCount = matchOrNull<Double>(event.metadata["record_service_count"]) ?: 0.0
+        val recordUpdates = matchOrNull<Double>(event.metadata["record_updates"]) ?: 0.0
+
+        event.metadata["record_service_count"] = recordServiceCount + 1
+        event.metadata["recording"] = true
+        updates = recordUpdates.toInt()
 
         event.generateSignature(true)
         event.save(applicationContext)
@@ -457,9 +469,10 @@ class RecordService : Service() {
 
         if (event is EventRange) {
             (event as EventRange).end = ZonedDateTime.now()
-            event.generateSignature(true)
-            event.save(applicationContext)
         }
+        event.metadata.remove("recording")
+        event.generateSignature(true)
+        event.save(applicationContext)
 
         if (::wakeLock.isInitialized && wakeLock.isHeld) {
             wakeLock.release()

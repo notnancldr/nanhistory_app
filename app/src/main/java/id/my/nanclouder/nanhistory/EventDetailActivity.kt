@@ -41,6 +41,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuItemColors
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -81,6 +82,7 @@ import id.my.nanclouder.nanhistory.lib.history.get
 import id.my.nanclouder.nanhistory.lib.history.getFilePathFromDate
 import id.my.nanclouder.nanhistory.lib.history.save
 import id.my.nanclouder.nanhistory.lib.history.validateSignature
+import id.my.nanclouder.nanhistory.lib.matchOrNull
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
@@ -154,6 +156,8 @@ fun DetailContent(eventId: String, path: String) {
 
     val eventData = savedEvent
 
+    val recording = matchOrNull<Boolean>(eventData?.metadata?.get("recording")) ?: false
+
     // EventRange only
     val duration = when (eventData) {
         is EventPoint -> null
@@ -218,9 +222,10 @@ fun DetailContent(eventId: String, path: String) {
                         onClick = {
                             favorite = !(favorite ?: false)
                             eventData.favorite = favorite!!
-                            eventData.modified = ZonedDateTime.now()
+//                            eventData.modified = ZonedDateTime.now()
                             eventData.save(context)
-                        }
+                        },
+                        enabled = !recording
                     ) {
                         if (favorite == true) Icon(
                             painterResource(R.drawable.ic_favorite_filled), "",
@@ -236,7 +241,8 @@ fun DetailContent(eventId: String, path: String) {
                             intent.putExtra("eventId", eventId)
                             intent.putExtra("path", currentPath)
                             launcher.launch(intent)
-                        }
+                        },
+                        enabled = !recording
                     ) {
                         Icon(Icons.Rounded.Edit, "Edit")
                     }
@@ -267,6 +273,7 @@ fun DetailContent(eventId: String, path: String) {
                                 },
                                 text = { Text("Cut Event") },
                                 onClick = {
+                                    menuExpanded = false
                                     val intent = Intent(context, EventLocationActivity::class.java)
                                         .apply {
                                             putExtra("eventId", eventId)
@@ -275,27 +282,36 @@ fun DetailContent(eventId: String, path: String) {
                                         }
                                     launcher.launch(intent)
                                     // TODO
-                                }
+                                },
+                                enabled = !recording
                             )
                             DropdownMenuItem(
                                 leadingIcon = {
                                     Icon(
-                                        painterResource(R.drawable.ic_delete),
-                                        "Delete",
-                                        tint = MaterialTheme.colorScheme.error
+                                        painterResource(R.drawable.ic_delete), "Delete"
                                     )
                                 },
                                 text = {
-                                    Text(
-                                        "Delete",
-                                        color = MaterialTheme.colorScheme.error
-                                    )
+                                    Text("Delete")
                                 },
-                                onClick = { deleteDialogState = true; menuExpanded = false }
+                                onClick = { deleteDialogState = true; menuExpanded = false },
+                                enabled = !recording,
+                                colors = MenuItemColors(
+                                    textColor = MaterialTheme.colorScheme.error,
+                                    leadingIconColor = MaterialTheme.colorScheme.error,
+                                    trailingIconColor = MaterialTheme.colorScheme.error,
+                                    disabledTextColor = Color.Gray,
+                                    disabledLeadingIconColor = Color.Gray,
+                                    disabledTrailingIconColor = Color.Gray
+                                )
                             )
                         }
                     }
-                }
+                },
+                colors = if (recording) TopAppBarDefaults.largeTopAppBarColors(
+                    scrolledContainerColor = MaterialTheme.colorScheme.errorContainer,
+                    titleContentColor = MaterialTheme.colorScheme.error
+                ) else TopAppBarDefaults.largeTopAppBarColors()
             )
         }
     ) { paddingValues ->
@@ -548,7 +564,9 @@ fun DetailContent(eventId: String, path: String) {
                                     Text(name)
                                 },
                                 headlineContent = {
-                                    Text(value.toString())
+                                    if (value !is Double) Text(value.toString())
+                                    else if (value % 1.0 == 0.0) Text(value.toInt().toString())
+                                    else Text(value.toString())
                                 }
                             )
                         }
