@@ -71,6 +71,7 @@
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.jetbrainsKotlinAndroid)
+    alias(libs.plugins.compose.compiler)
 }
 
 android {
@@ -91,9 +92,9 @@ android {
     defaultConfig {
         applicationId = "id.my.nanclouder.nanhistory"
         minSdk = 31
-        targetSdk = 33
+        targetSdk = 35
         versionCode = fileVersionCode
-        versionName = "1.1.6"
+        versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -139,7 +140,15 @@ android {
     }
 }
 
+//composeCompiler {
+//    reportsDestination = layout.buildDirectory.dir("compose_compiler")
+//    stabilityConfigurationFile = rootProject.layout.projectDirectory.file("stability_config.conf")
+//}
+
 dependencies {
+//    implementation(libs.kotlin.stdlib)
+    implementation(libs.androidx.room.runtime)
+//    implementation(libs.ffmpeg.kit.full.v602)
     implementation(libs.android.sdk.v1151)
     implementation(libs.google.accompanist.permissions)
     implementation(libs.androidx.activity)

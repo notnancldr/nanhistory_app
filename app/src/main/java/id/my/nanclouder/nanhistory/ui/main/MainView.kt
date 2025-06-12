@@ -1,9 +1,17 @@
 package id.my.nanclouder.nanhistory.ui.main
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.VibratorManager
+import android.provider.Settings
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -16,17 +24,18 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -39,7 +48,6 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -47,6 +55,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
@@ -65,6 +74,8 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -82,9 +93,14 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import androidx.compose.ui.window.Dialog
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import id.my.nanclouder.nanhistory.EditEventActivity
@@ -93,17 +109,16 @@ import id.my.nanclouder.nanhistory.ListFilters
 import id.my.nanclouder.nanhistory.NanHistoryPages
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
-import id.my.nanclouder.nanhistory.lib.history.EventRange
+import id.my.nanclouder.nanhistory.lib.RecordStatus
+import id.my.nanclouder.nanhistory.lib.ServiceBroadcast
 import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
 import id.my.nanclouder.nanhistory.lib.history.HistoryFileData
+import id.my.nanclouder.nanhistory.lib.history.MigrationState
 import id.my.nanclouder.nanhistory.lib.history.delete
-import id.my.nanclouder.nanhistory.lib.history.get
 import id.my.nanclouder.nanhistory.lib.history.getDateFromFilePath
 import id.my.nanclouder.nanhistory.lib.history.getFilePathFromDate
-import id.my.nanclouder.nanhistory.lib.history.getList
-import id.my.nanclouder.nanhistory.lib.history.getListStream
+import id.my.nanclouder.nanhistory.lib.history.migrateLocationData
 import id.my.nanclouder.nanhistory.lib.history.save
-import id.my.nanclouder.nanhistory.lib.matchOrNull
 import id.my.nanclouder.nanhistory.service.RecordService
 import id.my.nanclouder.nanhistory.ui.SearchAppBar
 import id.my.nanclouder.nanhistory.ui.SelectionAppBar
@@ -112,8 +127,12 @@ import id.my.nanclouder.nanhistory.ui.list.EventListItem
 import id.my.nanclouder.nanhistory.ui.style.DangerButtonColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Instant
@@ -121,6 +140,7 @@ import java.time.LocalDate
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import kotlin.math.round
 
 fun MutableList<HistoryFileData>.insertSorted(data: HistoryFileData) {
     val index = binarySearch(data, compareByDescending { it.date })
@@ -128,6 +148,69 @@ fun MutableList<HistoryFileData>.insertSorted(data: HistoryFileData) {
     add(insertIndex, data)
 }
 
+class ServiceViewModel(context: Context) : ViewModel() {
+    private var _context: Context? = null
+
+    private val _serviceStatus = MutableStateFlow(RecordStatus.READY)
+    val isServiceRunning: StateFlow<Int> = _serviceStatus.asStateFlow()
+
+    private var _onBusy: ((String, String, Boolean) -> Unit)? = null
+    private var _onRunning: ((String, String, Boolean) -> Unit)? = null
+    private var _onStop: ((String, String, Boolean) -> Unit)? = null
+
+    private val serviceStatusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == ServiceBroadcast.ACTION_SERVICE_STATUS) {
+                val status = intent.getIntExtra(ServiceBroadcast.EXTRA_STATUS, RecordStatus.READY)
+                val eventId = intent.getStringExtra(ServiceBroadcast.EXTRA_EVENT_ID) ?: ""
+                val eventPath = intent.getStringExtra(ServiceBroadcast.EXTRA_EVENT_PATH) ?: ""
+                val eventPoint = intent.getBooleanExtra(ServiceBroadcast.EXTRA_EVENT_POINT, false)
+                _serviceStatus.value = status
+                when (status) {
+                    RecordStatus.RUNNING -> _onRunning?.invoke(eventId, eventPath, eventPoint)
+                    RecordStatus.READY -> _onStop?.invoke(eventId, eventPath, eventPoint)
+                    RecordStatus.BUSY -> _onBusy?.invoke(eventId, eventPath, eventPoint)
+                }
+            }
+        }
+    }
+
+    private fun loadStatus() {
+        val context = _context ?: return
+        _serviceStatus.value = if (context.getSharedPreferences("recordEvent", Context.MODE_PRIVATE)
+            .getBoolean("isRunning", false)) RecordStatus.RUNNING else RecordStatus.READY
+    }
+
+    init {
+        _context = context
+        val filter = IntentFilter(ServiceBroadcast.ACTION_SERVICE_STATUS)
+        context.registerReceiver(serviceStatusReceiver, filter, Context.RECEIVER_EXPORTED)
+        loadStatus()
+    }
+
+    override fun onCleared() {
+        val context = _context ?: return
+        super.onCleared()
+        context.unregisterReceiver(serviceStatusReceiver)
+    }
+
+    fun setOnRunning(block: (String, String, Boolean) -> Unit) { _onRunning = block }
+    fun setOnStop(block: (String, String, Boolean) -> Unit) { _onStop = block }
+
+    fun reloadStatus() = ::loadStatus
+    fun clear() {
+        onCleared()
+        _context = null
+    }
+}
+
+class ServiceViewModelFactory(private val context: Context) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        return ServiceViewModel(context.applicationContext) as T
+    }
+}
+
+@SuppressLint("BatteryLife")
 @OptIn(
     ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class,
     ExperimentalFoundationApi::class
@@ -154,24 +237,46 @@ fun MainView() {
     var loader by remember { mutableStateOf({ _: Boolean -> }) }
     var searchQuery by remember { mutableStateOf("") }
 
-    val recordPermissionState = rememberMultiplePermissionsState(
-        listOf(
-            android.Manifest.permission.ACCESS_COARSE_LOCATION,
-            android.Manifest.permission.ACCESS_FINE_LOCATION,
-            android.Manifest.permission.ACCESS_BACKGROUND_LOCATION,
-            android.Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-            android.Manifest.permission.POST_NOTIFICATIONS
-        )
-    )
+    var permissionDialogState by remember { mutableStateOf(false) }
+    var permissionDialogTitle by remember { mutableStateOf("") }
+    var permissionDialogText by remember { mutableStateOf("") }
+    var permissionDialogOnConfirm by remember { mutableStateOf({ }) }
 
     val context = LocalContext.current
+
+    val recordPermissionState = rememberMultiplePermissionsState(
+        listOf(
+            Manifest.permission.POST_NOTIFICATIONS
+        ).let {
+            if (Config.experimentalAudioRecord.get(context))
+                it + Manifest.permission.RECORD_AUDIO
+            else it
+        }
+    ) { permissions ->
+        if (permissions.all { it.value }) {
+            permissionDialogTitle = "Location Permission Needed"
+            permissionDialogText = "Go to \"Permission\" > \"Location\" > \"Allow all the time\""
+            permissionDialogState = true
+            permissionDialogOnConfirm = { launchRequestBackgroundLocation(context) }
+        }
+    }
+
+    val recordViewModel = remember { ServiceViewModel(context) }
+    var recordButtonDisabled by remember { mutableStateOf(false) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            recordViewModel.clear()
+        }
+    }
 
     val haptic = LocalHapticFeedback.current
     val vibrator = (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager)
         .defaultVibrator
 
-    var isRecording by rememberSaveable { mutableStateOf(false) }
-    isRecording = RecordService.isRunning(LocalContext.current)
+//    var isRecording by rememberSaveable { mutableStateOf(false) }
+//    isRecording = RecordService.isRunning(LocalContext.current)
+    val isRecording = recordViewModel.isServiceRunning.collectAsState()
 
     var selectionMode by remember { mutableStateOf(false) }
     val selectedItems = remember { mutableStateListOf<HistoryEvent>() }
@@ -232,6 +337,79 @@ fun MainView() {
         }
     }
 
+    recordViewModel.setOnStop { _, eventPath, _ ->
+        updateData(getDateFromFilePath(eventPath) ?: LocalDate.now())
+        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        recordButtonDisabled = false
+    }
+    recordViewModel.setOnRunning { _, eventPath, eventPoint ->
+        updateData(getDateFromFilePath(eventPath) ?: LocalDate.now())
+        scope.launch {
+            delay(500L)
+            if (!eventPoint) recordButtonDisabled = false
+        }
+    }
+
+    val batteryOptimizationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (!recordPermissionState.allPermissionsGranted)
+            recordPermissionState.launchMultiplePermissionRequest()
+    }
+
+    var migrationState by remember { mutableStateOf(MigrationState(0f, true)) }
+
+    LaunchedEffect(Unit) {
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        val packageName = context.packageName
+        if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
+            permissionDialogTitle = "Ignore Battery Optimization"
+            permissionDialogText = "This app needs to be excluded from battery optimization to work properly. Click \"Allow\" to proceed."
+            permissionDialogOnConfirm = {
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                batteryOptimizationLauncher.launch(intent)
+            }
+            permissionDialogState = true
+        }
+        else if (!recordPermissionState.allPermissionsGranted)
+            recordPermissionState.launchMultiplePermissionRequest()
+
+        migrateLocationData(context) { migrationState = it }
+        viewModels.forEach { it.value?.reload(context) }
+    }
+
+    if (!migrationState.finish) AlertDialog (
+        onDismissRequest = {},
+        dismissButton = {},
+        confirmButton = {},
+        text = {
+            Column {
+                Text("Migrating Data Structures...")
+                Box(Modifier.height(8.dp))
+                LinearProgressIndicator()
+//                Row(
+//                    verticalAlignment = Alignment.CenterVertically,
+//                    horizontalArrangement = Arrangement.End
+//                ) {
+//                    Text("${round(migrationState.progress * 100)}%")
+//                }
+            }
+        }
+    )
+
+    if (permissionDialogState) AlertDialog(
+        onDismissRequest = {
+            permissionDialogState = false
+        },
+        title = { Text(permissionDialogTitle) },
+        text = { Text(permissionDialogText) },
+        confirmButton = {
+            Button({ permissionDialogOnConfirm(); permissionDialogState = false }) { Text("Continue") } // TODO
+        },
+    )
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = { DrawerContent() }
@@ -242,6 +420,9 @@ fun MainView() {
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
+                    val interactionSource = remember { MutableInteractionSource() }
+                    val viewConfiguration = LocalViewConfiguration.current
+
                     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
                         if (result.resultCode == 1) {
                             result.data?.getStringExtra("path")?.let { path ->
@@ -250,6 +431,61 @@ fun MainView() {
                             }
                         }
                     }
+
+                    val record = record@{ eventPoint: Boolean ->
+                        if (recordButtonDisabled) return@record
+                        Log.d("NanHistoryDebug", "RECORD, eventPoint: $eventPoint")
+                        val intent = Intent(context, RecordService::class.java)
+                        val now = ZonedDateTime.now()
+                        recordButtonDisabled = true
+                        if (isRecording.value == RecordStatus.RUNNING) {
+                            context.stopService(intent)
+                            scope.launch {
+                                delay(100L)
+                                sharedPreferences.edit()
+                                    .putBoolean("isRunning", false)
+                                    .remove("eventId")
+                                    .apply()
+                                delay(100L)
+                                recordViewModel.reloadStatus()
+                            }
+                        } else {
+                            if (recordPermissionState.allPermissionsGranted) {
+                                if (eventPoint)
+                                    intent.putExtra("eventPoint", true)
+
+                                if (!eventPoint) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                else vibrator.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE))
+
+                                context.startForegroundService(intent)
+                            } else {
+                                recordButtonDisabled = false
+                                recordPermissionState.launchMultiplePermissionRequest()
+                            }
+                        }
+                    }
+
+                    LaunchedEffect(interactionSource) {
+                        var isLongClick = false
+
+                        interactionSource.interactions.collectLatest { interaction ->
+                            when (interaction) {
+                                is PressInteraction.Press -> {
+                                    isLongClick = false
+                                    delay(viewConfiguration.longPressTimeoutMillis)
+                                    isLongClick = true
+                                    record(true)
+                                }
+                                is PressInteraction.Release -> {
+                                    if (!isLongClick) record(false)
+                                }
+                                is PressInteraction.Cancel -> {
+                                    isLongClick = false
+                                }
+                            }
+                        }
+                    }
+
                     SmallFloatingActionButton(
                         onClick = {
                             val intent = Intent(context, EditEventActivity::class.java)
@@ -259,69 +495,28 @@ fun MainView() {
                     ) {
                         Icon(painterResource(R.drawable.ic_add), "Add event button")
                     }
+
                     FloatingActionButton(
+                        interactionSource = interactionSource,
                         onClick = {
-                            val intent = Intent(context, RecordService::class.java)
-                            val now = ZonedDateTime.now()
-                            if (isRecording) {
-                                context.stopService(intent)
-                                scope.launch {
-                                    delay(100L)
-                                    sharedPreferences.edit().putBoolean("isRunning", false).apply()
-                                    isRecording = false
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    for (i in 2L downTo 0L)
-                                        updateData(LocalDate.now().minusDays(i))
-
-//                                    fileDataList[pageIndex]
-//                                        .find { day -> day.date == event.time.toLocalDate() }
-//                                        ?.apply {
-//                                            events += event
-//                                        }
-//                                    needUpdate = true
-                                }
-                            } else {
-                                if (recordPermissionState.allPermissionsGranted) {
-                                    val event = EventRange(
-                                        title = RecordService.titleFormatter.format(now),
-                                        description = "",
-                                        time = now,
-                                        end = now
-                                    ).apply {
-                                        metadata["recording"] = true
-                                    }
-                                    event.save(context)
-                                    intent.putExtra("eventId", event.id)
-                                    intent.putExtra("path", getFilePathFromDate(event.time.toLocalDate()))
-
-//                                    fileDataList[pageIndex]
-//                                        .find { day -> day.date == event.time.toLocalDate() }
-//                                        ?.apply {
-//                                            events += event
-//                                        }
-                                    needUpdate = true
-                                    updateData(event.time.toLocalDate())
-
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-
-                                    context.startForegroundService(intent)
-                                } else
-                                    recordPermissionState.launchMultiplePermissionRequest()
-
-                            }
-                            isRecording = !isRecording
+                            // Handled by interactionSource
                         }
                     ) {
-                        if (isRecording)
+                        val color =
+                            if (recordButtonDisabled) Color(0x80808080)
+                            else if (isRecording.value == RecordStatus.RUNNING) MaterialTheme.colorScheme.error
+                            else LocalContentColor.current
+                        if (isRecording.value == RecordStatus.RUNNING)
                             Icon(
                                 painterResource(R.drawable.ic_stop_filled),
                                 "Record event button",
-                                tint = Color(0xFFBB1A1A)
+                                tint = color
                             )
                         else
                             Icon(
                                 painterResource(R.drawable.ic_circle_filled),
-                                "Record event button"
+                                "Record event button",
+                                tint = color
                             )
                     }
                 }
@@ -401,7 +596,10 @@ fun MainView() {
                                 Icon(painterResource(R.drawable.ic_expand_all), "Expand all")
                         }
                         Box(Modifier.size(48.dp)) {
-                            if (isLoading) CircularProgressIndicator(Modifier.fillMaxSize().padding(8.dp))
+                            if (isLoading) CircularProgressIndicator(
+                                Modifier
+                                    .fillMaxSize()
+                                    .padding(8.dp))
                             else IconButton(
                                 onClick = {
                                     expanded[filterIndex].clear()
@@ -513,97 +711,97 @@ fun MainView() {
                 }
             }
 
-            loader = loadTop@{ updateExpanded ->
-                firstLoad = true
-                val previousJob = loaderJob[filterIndex]
-                val currentIndex = filterIndex
-                val streamDataListEnabled = Config.experimentalStreamList.get(context)
-                loaderJob[currentIndex] = scope.launch load@{
-                    loaderActive[currentIndex] = true
-                    val replaceIfExists = { data: HistoryFileData ->
-                        val find = fileDataList[currentIndex].indexOfFirst { it.date == data.date }
-                        if (find != -1)
-                            fileDataList[currentIndex][find] = data
-                        else
-                            fileDataList[currentIndex].add(data)
-                    }
-
-                    previousJob?.cancelAndJoin()
-                    lock = true
-                    withContext(Dispatchers.IO) {
-//                        if (streamDataListEnabled) fileDataList[currentIndex].clear()
-                        if (updateExpanded) expanded[currentIndex].clear()
-                        if (!streamDataListEnabled) when (appliedFilter) {
-                            ListFilters.Favorite -> HistoryFileData
-                                .getList(context)
-                                .filter { it.favorite || it.events.find { event -> event.favorite } != null }
-                                .sortedByDescending { it.date }
-
-                            ListFilters.All -> HistoryFileData
-                                .getList(context)
-                                .sortedByDescending { it.date }
-
-//                            ListFilters.Search -> HistoryFileData
+//            loader = loadTop@{ updateExpanded ->
+//                firstLoad = true
+//                val previousJob = loaderJob[filterIndex]
+//                val currentIndex = filterIndex
+//                val streamDataListEnabled = Config.experimentalStreamList.get(context)
+//                loaderJob[currentIndex] = scope.launch load@{
+//                    loaderActive[currentIndex] = true
+//                    val replaceIfExists = { data: HistoryFileData ->
+//                        val find = fileDataList[currentIndex].indexOfFirst { it.date == data.date }
+//                        if (find != -1)
+//                            fileDataList[currentIndex][find] = data
+//                        else
+//                            fileDataList[currentIndex].add(data)
+//                    }
+//
+//                    previousJob?.cancelAndJoin()
+//                    lock = true
+//                    withContext(Dispatchers.IO) {
+////                        if (streamDataListEnabled) fileDataList[currentIndex].clear()
+//                        if (updateExpanded) expanded[currentIndex].clear()
+//                        if (!streamDataListEnabled) when (appliedFilter) {
+//                            ListFilters.Favorite -> HistoryFileData
 //                                .getList(context)
-//                                .filter {
-//                                    it.events.find { event ->
-//                                        filterSearchEvent(event)
-//                                    } != null
-//                                }
+//                                .filter { it.favorite || it.events.find { event -> event.favorite } != null }
 //                                .sortedByDescending { it.date }
-
-                            else -> HistoryFileData
-                                .getList(context)
-                                .sortedByDescending { it.date }
-                        }.let {
-                            fileDataList[currentIndex].let { list ->
-                                list.clear()
-                                list.addAll(it)
-                            }
-                        }
-                        else when (appliedFilter) {
-                            ListFilters.Favorite -> HistoryFileData
-                                .getListStream(context, from = fromZero).apply {
-                                    sortedByDescending { getDateFromFilePath(it.absolutePath) }
-                                }.forEachAsync {
-                                    if (it.favorite || it.events.find { event -> event.favorite } != null &&
-                                        fileDataList[currentIndex].find { day -> day.date == it.date } == null) replaceIfExists(it)
-                                }
-
-                            ListFilters.All -> HistoryFileData
-                                .getListStream(context, from = fromZero).apply {
-                                    sortedByDescending { getDateFromFilePath(it.absolutePath) }
-                                }.forEachAsync {
-                                    if (fileDataList[currentIndex].find { day -> day.date == it.date } == null)
-                                        replaceIfExists(it)
-                                }
-
-//                            ListFilters.Search -> {
-//                                fileDataList[currentIndex].clear()
-//                                if (searchQuery.isNotBlank()) HistoryFileData
-//                                    .getListStream(context, from = fromZero).apply {
-//                                        sortedByDescending { getDateFromFilePath(it.absolutePath) }
-//                                    }.forEachAsync {
-//                                        if (it.events.find { event ->
-//                                            filterSearchEvent(event) && fileDataList[currentIndex].find { day -> day.date == it.date } == null
-//                                        } != null) {
-//                                            replaceIfExists(it)
-//                                        }
-//                                    }
-//                                else Unit
+//
+//                            ListFilters.All -> HistoryFileData
+//                                .getList(context)
+//                                .sortedByDescending { it.date }
+//
+////                            ListFilters.Search -> HistoryFileData
+////                                .getList(context)
+////                                .filter {
+////                                    it.events.find { event ->
+////                                        filterSearchEvent(event)
+////                                    } != null
+////                                }
+////                                .sortedByDescending { it.date }
+//
+//                            else -> HistoryFileData
+//                                .getList(context)
+//                                .sortedByDescending { it.date }
+//                        }.let {
+//                            fileDataList[currentIndex].let { list ->
+//                                list.clear()
+//                                list.addAll(it)
 //                            }
-
-                            else -> HistoryFileData
-                                .getListStream(context, from = fromRecent).apply {
-                                    sortedByDescending { getDateFromFilePath(it.absolutePath) }
-                                }.forEachAsync { replaceIfExists(it) }
-                        }
-                    }
-                    loaderActive[currentIndex] = false
-                    lock = false
-//                    isLoading[currentIndex] = false
-                }
-            }
+//                        }
+//                        else when (appliedFilter) {
+//                            ListFilters.Favorite -> HistoryFileData
+//                                .getListStream(context, from = fromZero).apply {
+//                                    sortedByDescending { getDateFromFilePath(it.absolutePath) }
+//                                }.forEachAsync {
+//                                    if (it.favorite || it.events.find { event -> event.favorite } != null &&
+//                                        fileDataList[currentIndex].find { day -> day.date == it.date } == null) replaceIfExists(it)
+//                                }
+//
+//                            ListFilters.All -> HistoryFileData
+//                                .getListStream(context, from = fromZero).apply {
+//                                    sortedByDescending { getDateFromFilePath(it.absolutePath) }
+//                                }.forEachAsync {
+//                                    if (fileDataList[currentIndex].find { day -> day.date == it.date } == null)
+//                                        replaceIfExists(it)
+//                                }
+//
+////                            ListFilters.Search -> {
+////                                fileDataList[currentIndex].clear()
+////                                if (searchQuery.isNotBlank()) HistoryFileData
+////                                    .getListStream(context, from = fromZero).apply {
+////                                        sortedByDescending { getDateFromFilePath(it.absolutePath) }
+////                                    }.forEachAsync {
+////                                        if (it.events.find { event ->
+////                                            filterSearchEvent(event) && fileDataList[currentIndex].find { day -> day.date == it.date } == null
+////                                        } != null) {
+////                                            replaceIfExists(it)
+////                                        }
+////                                    }
+////                                else Unit
+////                            }
+//
+//                            else -> HistoryFileData
+//                                .getListStream(context, from = fromRecent).apply {
+//                                    sortedByDescending { getDateFromFilePath(it.absolutePath) }
+//                                }.forEachAsync { replaceIfExists(it) }
+//                        }
+//                    }
+//                    loaderActive[currentIndex] = false
+//                    lock = false
+////                    isLoading[currentIndex] = false
+//                }
+//            }
 
             BackHandler(
                 enabled = selectionMode,
@@ -735,6 +933,19 @@ fun MainView() {
     if (needUpdate) needUpdate = false
 }
 
+fun launchRequestBackgroundLocation(context: Context) {
+    val granted = ContextCompat.checkSelfPermission(
+        context, Manifest.permission.ACCESS_BACKGROUND_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+    if (!granted) {
+        val locationPermissionIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", context.packageName, null)
+        }
+        context.startActivity(locationPermissionIntent)
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun EventList(
@@ -755,6 +966,8 @@ fun EventList(
     val eventList by viewModel.list.collectAsState()
 
     val haptic = LocalHapticFeedback.current
+
+//    Log.d("NanHistoryDebug", "RECORDING: $isRecording, EVENT ID: $recordEventId")
 
     if (!selectionMode) selectedItems.clear()
 
@@ -823,6 +1036,10 @@ fun EventList(
                     .padding(bottom = 16.dp)
                     .animateItem()
             ) {
+                val sharedPreferences = LocalContext.current.applicationContext
+                    .getSharedPreferences("recordEvent", Context.MODE_PRIVATE)
+                val recordEventId = sharedPreferences.getString("eventId", "")
+
                 EventListHeader(
                     historyDay = day.historyDay,
                     selected = headerSelected,
@@ -873,20 +1090,12 @@ fun EventList(
                     Column {
                         day.events.forEachIndexed { index, _ ->
                             var eventData by remember { mutableStateOf(events[index]) }
-                            val recording = matchOrNull<Boolean>(eventData.metadata["recording"]) ?: false
+                            val recording = recordEventId == eventData.id
                             val selected = selectedItems.contains(eventData)
                             val lastItem = index + 1 >= events.size
 
-                            val scope = rememberCoroutineScope()
-
-                            scope.launch {
-                                delay(2000L)
-                                if (recording && !RecordService.isRunning(context)) {
-                                    val event = eventData
-                                    event.metadata["recording"] = false
-                                    event.save(context)
-                                    eventData = event
-                                }
+                            if (eventData.metadata["recording"] == true) {
+                                eventData.metadata.remove("recording")
                             }
 
                             val launcher =
@@ -907,6 +1116,7 @@ fun EventList(
                             EventListItem(
                                 eventData,
                                 selected = selected,
+                                recording = recording,
                                 modifier = Modifier
                                     .clip(
                                         if (lastItem) RoundedCornerShape(

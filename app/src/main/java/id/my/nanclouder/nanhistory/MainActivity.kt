@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.tooling.preview.Preview
+import id.my.nanclouder.nanhistory.lib.history.migrateLocationData
 import id.my.nanclouder.nanhistory.ui.main.MainView
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import org.osmdroid.config.Configuration

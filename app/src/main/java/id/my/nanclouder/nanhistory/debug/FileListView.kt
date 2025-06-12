@@ -125,7 +125,15 @@ fun FileListView(
                     ListItem(
                         modifier = Modifier
                             .clickable {
-                                if (item.isFile) {
+                                val audioExtensions = listOf(
+                                    "m4a", "mp3", "aac", "3gp"
+                                )
+                                if (item.isFile && item.extension in audioExtensions) {
+                                    val intent = Intent(context, FilePlayerActivity::class.java)
+                                    intent.putExtra("path", item.absolutePath)
+                                    context.startActivity(intent)
+                                }
+                                else if (item.isFile) {
                                     val intent = Intent(context, FilePreviewActivity::class.java)
                                     intent.putExtra("path", item.absolutePath)
                                     context.startActivity(intent)

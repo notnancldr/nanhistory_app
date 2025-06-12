@@ -129,7 +129,9 @@ fun BackupView() {
                                 val includedDirs = listOf(
                                     "history",
                                     "logs",
-                                    "config"
+                                    "config",
+                                    "audio",
+                                    "locations"
                                 )
                                 val inputFiles = (inputDirectory.listFiles() ?: arrayOf<File>())
                                     .filter { includedDirs.contains(it.name) }
@@ -165,17 +167,22 @@ fun BackupView() {
                                 .getInstance("SHA-512")
                                 .digest(wAt2J7GmpkeWSRad.toByteArray())
 
-                            val fileBytes = mutableListOf<Byte>()
+                            val buffer = mutableListOf<Byte>()
 
                             backupStage = BackupProgressStage.Encrypt
                             progress = 0
                             progressTarget = tempFile.length()
 
                             for (indexed in tempFile.readBytes().withIndex()) {
-                                fileBytes.add((indexed.value + PVqpACR05YRZx9ni[indexed.index % PVqpACR05YRZx9ni.size] % 256).toByte())
+                                val byte = (indexed.value + PVqpACR05YRZx9ni[indexed.index % PVqpACR05YRZx9ni.size] % 256).toByte()
+                                buffer.add(byte)
+                                if (buffer.size > 1_000_000) {
+                                    outputStream?.write(buffer.toByteArray())
+                                    buffer.clear()
+                                }
                                 if (indexed.index % 1000 == 0) progress += 1000
                             }
-                            outputStream?.write(fileBytes.toByteArray())
+                            outputStream?.write(buffer.toByteArray())
                             progress = progressTarget
 
                         }
@@ -230,18 +237,23 @@ fun BackupView() {
                             progressTarget = tempFile.length()
 
                             val decryptedFile = File.createTempFile("import", ".zip")
+                            decryptedFile.outputStream().use { outputStream ->
+                                val buffer = mutableListOf<Byte>()
 
-                            for (indexed in encryptedBytes.withIndex()) {
-                                decryptedBytes.add((indexed.value - PVqpACR05YRZx9ni[indexed.index % PVqpACR05YRZx9ni.size] + 256).toByte())
-                                if (indexed.index % 1000 == 0) progress += 1000
+                                for (indexed in encryptedBytes.withIndex()) {
+                                    val byte =
+                                        (indexed.value - PVqpACR05YRZx9ni[indexed.index % PVqpACR05YRZx9ni.size] + 256).toByte()
+                                    buffer.add(byte)
+                                    if (buffer.size > 1_000_000) {
+                                        outputStream.write(buffer.toByteArray())
+                                        buffer.clear()
+                                    }
+                                    if (indexed.index % 1000 == 0) progress += 1000
+                                }
+                                outputStream.write(buffer.toByteArray())
+//                                decryptedFile.writeBytes(decryptedBytes.toByteArray())
                             }
-
-                            decryptedFile.writeBytes(decryptedBytes.toByteArray())
                             progress = progressTarget
-
-                            ZipFile(decryptedFile).use {
-
-                            }
 
                             ZipFile(decryptedFile).use { zf ->
                                 val entries = zf.entries().toList()
@@ -259,15 +271,15 @@ fun BackupView() {
 
                                 entries.forEach {
                                     val outputFile = File(outputDirectory, it.name)
-                                    Log.d("NanHistoryDebug", "Zip entry: ${it.name} [${
-                                        if (it.isDirectory) "D" else "F"
-                                    }], ${readableSize(it.size)}")
+//                                    Log.d("NanHistoryDebug", "Zip entry: ${it.name} [${
+//                                        if (it.isDirectory) "D" else "F"
+//                                    }], ${readableSize(it.size)}")
                                     if (it.isDirectory) {
                                         outputFile.mkdirs()
                                     } else {
-                                        Log.d("NanHistoryDebug", "OPEN: ${outputFile.absolutePath}")
+//                                        Log.d("NanHistoryDebug", "OPEN: ${outputFile.absolutePath}")
                                         outputFile.outputStream().use { fos ->
-                                            Log.d("NanHistoryDebug", "WRITE: ${outputFile.absolutePath}")
+//                                            Log.d("NanHistoryDebug", "WRITE: ${outputFile.absolutePath}")
                                             zf.getInputStream(it).copyTo(fos)
                                         }
                                     }

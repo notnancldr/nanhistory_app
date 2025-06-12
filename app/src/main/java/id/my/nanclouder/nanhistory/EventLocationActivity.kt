@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -63,16 +64,17 @@ import androidx.compose.ui.viewinterop.AndroidView
 import id.my.nanclouder.nanhistory.lib.Coordinate
 import id.my.nanclouder.nanhistory.lib.TimeFormatterWithSecond
 import id.my.nanclouder.nanhistory.lib.getLocationData
-import id.my.nanclouder.nanhistory.lib.history.EventPoint
 import id.my.nanclouder.nanhistory.lib.history.EventRange
 import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
 import id.my.nanclouder.nanhistory.lib.history.HistoryFileData
+import id.my.nanclouder.nanhistory.lib.history.createLocationFile
 import id.my.nanclouder.nanhistory.lib.history.generateEventId
 import id.my.nanclouder.nanhistory.lib.history.generateSignature
 import id.my.nanclouder.nanhistory.lib.history.get
 import id.my.nanclouder.nanhistory.lib.history.getFilePathFromDate
 import id.my.nanclouder.nanhistory.lib.history.save
 import id.my.nanclouder.nanhistory.lib.history.validateSignature
+import id.my.nanclouder.nanhistory.lib.history.writeToLocationFile
 import id.my.nanclouder.nanhistory.lib.matchOrNull
 import id.my.nanclouder.nanhistory.lib.toGeoPoint
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
@@ -85,6 +87,7 @@ import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
+import java.io.File
 import java.time.ZonedDateTime
 import kotlin.math.absoluteValue
 import kotlin.math.max
@@ -138,11 +141,8 @@ fun EventLocationView(eventId: String, path: String, startAsCutMode: Boolean = f
 
     val recording = matchOrNull<Boolean>(eventData?.metadata?.get("recording")) ?: false
 
-    val locationAvailable = when (eventData) {
-        is EventRange -> eventData.locations.isNotEmpty()
-        is EventPoint -> eventData.location != null
-        else -> false
-    }
+    val eventLocations = eventData?.getLocations(context) ?: mapOf()
+    val locationAvailable = eventLocations.isNotEmpty()
 
     var cutMode by rememberSaveable { mutableStateOf(startAsCutMode) }
     var cutStart by rememberSaveable { mutableStateOf<ZonedDateTime?>(null) }
@@ -180,15 +180,11 @@ fun EventLocationView(eventId: String, path: String, startAsCutMode: Boolean = f
                                 favorite = eventData.favorite,
                                 tags = eventData.tags,
                                 end = cutEnd!!,
-                                locations = eventData.locations.filter {
-                                    it.key >= cutStart!! && it.key <= cutEnd!!
-                                }.toMutableMap(),
                                 locationDescriptions = eventData.locationDescriptions.filter {
                                     it.key >= cutStart!! && it.key <= cutEnd!!
                                 }.toMutableMap(),
-                                metadata = eventData.metadata
+                                metadata = eventData.metadata,
                             ).apply {
-                                if (eventData.validateSignature()) generateSignature(true)
                                 metadata["original_event_id"] = eventData.id
                                 metadata["original_event_time"] = eventData.time.toOffsetDateTime().toString()
                                 metadata["original_event_end"] = eventData.end.toOffsetDateTime().toString()
@@ -199,6 +195,27 @@ fun EventLocationView(eventId: String, path: String, startAsCutMode: Boolean = f
                                 if (metadata["root_event_end"] == null)
                                     metadata["root_event_end"] = eventData.end.toOffsetDateTime().toString()
                             }
+                            val locationFile = createLocationFile(context, event.time)
+                            val locationsData = eventLocations.filter {
+                                it.key >= cutStart!! && it.key <= cutEnd!!
+                            }
+                            locationsData.writeToLocationFile(locationFile)
+                            event.locationPath = locationFile.absolutePath.removePrefix(File(context.filesDir, "locations").absolutePath + "/")
+
+                            if (eventData.audio != null) {
+                                val audioFile = File(context.filesDir, "audio/${eventData.audio}")
+                                audioFile.parentFile?.let {
+                                    val id = generateEventId()
+                                    val targetPath = "${it.name}/$id.m4a"
+                                    val targetFile = File(it, "/$id.m4a")
+                                    Log.d("NanHistoryDebug", "AUDIO COPY | FROM: ${audioFile.absolutePath} | TO: ${targetFile.absolutePath}")
+                                    audioFile.copyTo(targetFile)
+
+                                    event.audio = targetPath
+                                }
+                            }
+                            if (eventData.validateSignature(context = context)) event.generateSignature(true, context)
+
                             event.save(context)
                             cutMode = false
                             Toast.makeText(context, "${event.title} has been saved", Toast.LENGTH_SHORT).show()
@@ -238,21 +255,13 @@ fun EventLocationView(eventId: String, path: String, startAsCutMode: Boolean = f
                 .padding(paddingValues)
         ) {
             if (locationAvailable) {
-                val locations = when (eventData) {
-                    is EventRange -> eventData.locations
-                    is EventPoint -> if (eventData.location != null)
-                        mapOf(eventData.time to eventData.location!!) else mapOf()
-
-                    else -> mapOf()
-                }
                 MapHistoryView(
-                    locations = locations,
+                    locations = eventLocations,
                     onPointsSelected = { time1, time2 ->
                         if (time1 != null && time2 != null) {
                             cutStart = if (time1 < time2) time1 else time2
                             cutEnd = if (time1 > time2) time1 else time2
-                        }
-                        else {
+                        } else {
                             cutStart = time1
                             cutEnd = null
                         }
@@ -309,13 +318,6 @@ fun calculateDistance(startPoint: GeoPoint, endPoint: GeoPoint): Float =
 fun calculateSpeed(startPoint: GeoPoint, endPoint: GeoPoint, timeHours: Float): Float =
     calculateDistance(startPoint, endPoint) / 1000 / timeHours
 
-//fun calculateSpeed(startPoint: Coordinate, endPoint: Coordinate, timeHours: Float): Float =
-//    calculateSpeed(
-//        startPoint = GeoPoint(startPoint.latitude, startPoint.longitude),
-//        endPoint = GeoPoint(endPoint.latitude, endPoint.longitude),
-//        timeHours = timeHours
-//    )
-
 fun calculateColor(speed: Int): Color {
     val lightness = max(min(speed / 20f, .5f), 0.3f)
     val hue = max(min(speed * 2.5f, 270f), 0f)
@@ -357,7 +359,7 @@ fun MapHistoryView(
 
     if (geoPoints.isEmpty()) return
 
-    Log.d("NanHistoryDebug", "GeoPoints: $geoPoints, Locations: $locations")
+    Log.d("NanHistoryDebug", "RECOMPOSE!")
 
     var zoomLevel by remember { mutableDoubleStateOf(0.0) }
     var prevZoomLevel by remember { mutableDoubleStateOf(zoomLevel) }
@@ -393,6 +395,11 @@ fun MapHistoryView(
             coordinates.toList()
         }
         else mapKeys
+
+    var inMaxDetail by remember { mutableStateOf(false) }
+    val maxDetail = shownCoordinates.size == geoPoints.size
+
+    val screenDpi = LocalDensity.current.run { 1.dp.toPx() }
 
     var updateMap = { }
 
@@ -437,13 +444,13 @@ fun MapHistoryView(
             outlinePaint.color =
                 if (!cutMode) android.graphics.Color.BLUE
                 else android.graphics.Color.GRAY
-            outlinePaint.strokeWidth = 8f
+            outlinePaint.strokeWidth = 3f * screenDpi
             outlinePaint.strokeCap = Paint.Cap.ROUND
         }
         val polylineBorder = Polyline(mapViewObj).apply {
             setPoints(shownCoordinates)
             outlinePaint.color = android.graphics.Color.rgb(0, 0, 20)
-            outlinePaint.strokeWidth = 10f
+            outlinePaint.strokeWidth = 4f * screenDpi
             outlinePaint.strokeCap = Paint.Cap.ROUND
         }
         val markerStart = Marker(mapViewObj).apply {
@@ -475,7 +482,7 @@ fun MapHistoryView(
                     val coloredPolyline = Polyline(mapViewObj).apply {
                         setPoints(it.points.map { it.toGeoPoint() } )
                         outlinePaint.color = calculateColor(it.speed.roundToInt()).toArgb()
-                        outlinePaint.strokeWidth = 8f
+                        outlinePaint.strokeWidth = 3f * screenDpi
                         outlinePaint.strokeCap = Paint.Cap.ROUND
 
                         setOnClickListener { _, _, _ -> // polyline, mapView, eventPos
@@ -486,8 +493,6 @@ fun MapHistoryView(
                             isSelected = true
                             updateRemaining = 1000000
                             updateMap()
-//                            mapViewObj?.setZoomLevel(zoomLevel)
-//                            needUpdate = true
 
                             true
                         }
@@ -497,48 +502,7 @@ fun MapHistoryView(
                         coloredPolyline
                     )
                 }
-//            for (key in shownKeys) {
-//                if (prevKey != null) {
-//                    val currentPrevKey = prevKey
-//                    val points = listOf(
-//                        locations[prevKey]!!,
-//                        locations[key]!!
-//                    ).map { GeoPoint( it.latitude, it.longitude ) }
-//
-//                    val time = (key.toInstant().toEpochMilli() - prevKey.toInstant().toEpochMilli())
-//                    val timeHours = time / 3600000f
-//
-//                    val speed = calculateSpeed(points.first(), points.last(), timeHours)
-//
-//                    Log.d("NanHistoryDebug", "Speed: $speed, Time: $time | $timeHours ($prevKey :: $key)")
-//
-//                    val coloredPolyline = Polyline(mapViewObj).apply {
-//                        setPoints(points)
-//                        outlinePaint.color = calculateColor(speed.roundToInt()).toArgb()
-//                        outlinePaint.strokeWidth = 8f
-//                        outlinePaint.strokeCap = Paint.Cap.ROUND
-//
-//                        setOnClickListener { _, _, _ -> // polyline, mapView, eventPos
-//                            selectedTime = "${TimeFormatterWithSecond.format(currentPrevKey)} - ${TimeFormatterWithSecond.format(key)}"
-//                            selectedSpeed = speed.roundToInt()
-//                            selectedFirstKey = currentPrevKey
-//                            selectedSecondKey = key
-//                            isSelected = true
-//                            updateRemaining = 1000000
-//                            updateMap()
-////                            mapViewObj?.setZoomLevel(zoomLevel)
-////                            needUpdate = true
-//
-//                            true
-//                        }
-//                    }
-//
-//                    mapViewObj?.overlays?.add(
-//                        coloredPolyline
-//                    )
-//                }
-//                prevKey = key
-//            }
+
             if (isSelected && mapViewObj != null) {
                 val firstKey = selectedFirstKey
                 val secondKey = selectedSecondKey
@@ -552,7 +516,7 @@ fun MapHistoryView(
                     Polyline(mapViewObj).apply {
                         setPoints(polylinePoints)
                         outlinePaint.color = Color.DarkGray.toArgb()
-                        outlinePaint.strokeWidth = 17f
+                        outlinePaint.strokeWidth = 7f * screenDpi
                         outlinePaint.strokeCap = Paint.Cap.ROUND
                         id = firstKey.toString()
                     }
@@ -561,7 +525,7 @@ fun MapHistoryView(
                     Polyline(mapViewObj).apply {
                         setPoints(polylinePoints)
                         outlinePaint.color = calculateColor(selectedSpeed).toArgb()
-                        outlinePaint.strokeWidth = 9f
+                        outlinePaint.strokeWidth = 3.5f * screenDpi
                         outlinePaint.strokeCap = Paint.Cap.ROUND
                         id = firstKey.toString()
                     }
@@ -592,7 +556,7 @@ fun MapHistoryView(
             val selectedPolyline = Polyline(mapViewObj).apply {
                 setPoints(selectedArea.map { locations[it]!!.toGeoPoint() })
                 outlinePaint.color = android.graphics.Color.BLUE
-                outlinePaint.strokeWidth = 8f
+                outlinePaint.strokeWidth = 3f * screenDpi
                 outlinePaint.strokeCap = Paint.Cap.ROUND
             }
             mapViewObj?.overlays?.add(selectedPolyline)
@@ -626,78 +590,81 @@ fun MapHistoryView(
 
         if (shownCoordinates.size > 1) mapViewObj?.overlays?.add(markerStart)
         mapViewObj?.overlays?.add(markerEnd)
+
+        mapViewObj?.invalidate()
     }
 
+    if (maxDetail != inMaxDetail) {
+        inMaxDetail = maxDetail
+        updateMap()
+    }
 
-    if (!needUpdate) {
-        AndroidView(
-            modifier = modifier
-                .fillMaxWidth()
-                .fillMaxHeight(),
-            factory = { ctx ->
-                MapView(ctx).apply {
-                    // Configure the MapView
-                    setMultiTouchControls(true)
+    AndroidView(
+        modifier = modifier
+            .fillMaxWidth()
+            .fillMaxHeight(),
+        factory = { ctx ->
+            MapView(ctx).apply {
+                // Configure the MapView
+                setMultiTouchControls(true)
 
-                    addMapListener(object : MapListener {
-                        override fun onScroll(event: ScrollEvent?): Boolean {
-                            Log.d("MapListener", "Map scrolled")
-                            center = GeoPoint(mapCenter.latitude, mapCenter.longitude)
-                            return true // Return true if the event was handled
-                        }
-
-                        override fun onZoom(event: ZoomEvent?): Boolean {
-                            zoomLevel = event?.zoomLevel ?: zoomLevel
-                            return true
-                        }
-                    })
-                    zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
-
-                    val currentFirstLoad = firstLoad
-
-                    if (currentFirstLoad) {
-                        setTileSource(TileSourceFactory.DEFAULT_TILE_SOURCE)
-
-                        post {
-                            zoomToBoundingBox(shownCoordinates.toBoundingBox(), false)
-                        }
-                        firstLoad = false
-                    }
-                    else {
-                        val currentZoom = zoomLevel
-                        val currentCenter = center
-                        post {
-                            setZoomLevel(currentZoom)
-                            controller.setCenter(currentCenter)
-                        }
+                addMapListener(object : MapListener {
+                    override fun onScroll(event: ScrollEvent?): Boolean {
+                        Log.d("MapListener", "Map scrolled")
+                        center = GeoPoint(mapCenter.latitude, mapCenter.longitude)
+                        return true // Return true if the event was handled
                     }
 
-                    minZoomLevel = 4.0
-                    maxZoomLevel = 20.0
+                    override fun onZoom(event: ZoomEvent?): Boolean {
+                        zoomLevel = event?.zoomLevel ?: zoomLevel
+                        return true
+                    }
+                })
+                zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
+
+                val currentFirstLoad = firstLoad
+
+                if (currentFirstLoad) {
+                    setTileSource(TileSourceFactory.DEFAULT_TILE_SOURCE)
+
                     post {
-                        updateMap()
-                        mapViewObj = this
+                        zoomToBoundingBox(shownCoordinates.toBoundingBox(), false)
+                    }
+                    firstLoad = false
+                }
+                else {
+                    val currentZoom = zoomLevel
+                    val currentCenter = center
+                    post {
+                        setZoomLevel(currentZoom)
+                        controller.setCenter(currentCenter)
                     }
                 }
-            },
-            update = { mapView ->
-                mapViewObj = mapView
-                if ((prevZoomLevel - zoomLevel).absoluteValue >= 1.0 || needUpdate) {
-                    updateMap()
-                    prevZoomLevel = zoomLevel
-                }
-                // Update MapView if needed
-            }
-        ).also { view ->
-            DisposableEffect(Unit) {
-                onDispose {
-                }
-            }
 
+                minZoomLevel = 4.0
+                maxZoomLevel = 20.0
+                post {
+                    updateMap()
+                    mapViewObj = this
+                }
+            }
+        },
+        update = { mapView ->
+            mapViewObj = mapView
+            Log.d("NanHistoryDebug", "MAP UPDATE! (needUpdate: $needUpdate)")
+            if ((prevZoomLevel - zoomLevel).absoluteValue >= 1.0 || needUpdate) {
+                prevZoomLevel = zoomLevel
+                updateMap()
+                needUpdate = false // TODO
+            }
+            // Update MapView if needed
         }
-    }
-    else {
-        needUpdate = false
+    ).also { view ->
+        DisposableEffect(Unit) {
+            onDispose {
+            }
+        }
+
     }
 
     if (isSelected) Box(
@@ -824,7 +791,7 @@ fun MapHistoryView(
                 Icon(painterResource(R.drawable.ic_zoom), "Zoom level")
                 Text(
                     text = "${round(zoomLevel * 10) / 10.0}",
-                    color = if (shownCoordinates.size == geoPoints.size) Color(0xFF00A000) else Color.Unspecified
+                    color = if (maxDetail) Color(0xFF00A000) else Color.Unspecified
                 )
             }
             Box(modifier = Modifier.width(8.dp))

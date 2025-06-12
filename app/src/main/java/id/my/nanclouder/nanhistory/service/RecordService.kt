@@ -2,6 +2,7 @@ package id.my.nanclouder.nanhistory.service
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -10,12 +11,17 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.location.Location
+import android.media.MediaRecorder
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import android.view.View
 import android.widget.RemoteViews
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
@@ -23,28 +29,40 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import id.my.nanclouder.nanhistory.MainActivity
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.lib.Coordinate
 import id.my.nanclouder.nanhistory.lib.LogData
+import id.my.nanclouder.nanhistory.lib.RecordStatus
+import id.my.nanclouder.nanhistory.lib.ServiceBroadcast
 import id.my.nanclouder.nanhistory.lib.TimeFormatterWithSecond
 import id.my.nanclouder.nanhistory.lib.history.EventPoint
 import id.my.nanclouder.nanhistory.lib.history.EventRange
 import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
 import id.my.nanclouder.nanhistory.lib.history.HistoryFileData
+import id.my.nanclouder.nanhistory.lib.history.createLocationFile
 import id.my.nanclouder.nanhistory.lib.history.generateEventId
 import id.my.nanclouder.nanhistory.lib.history.generateSignature
 import id.my.nanclouder.nanhistory.lib.history.get
 import id.my.nanclouder.nanhistory.lib.history.getFilePathFromDate
 import id.my.nanclouder.nanhistory.lib.history.save
+import id.my.nanclouder.nanhistory.lib.history.updateModifiedTime
 import id.my.nanclouder.nanhistory.lib.history.validateSignature
+import id.my.nanclouder.nanhistory.lib.history.writeToLocationFile
 import id.my.nanclouder.nanhistory.lib.matchOrNull
+import id.my.nanclouder.nanhistory.lib.readableTimeHours
+import java.io.File
+import java.io.IOException
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Calendar
 import kotlin.math.roundToInt
+import androidx.core.content.edit
+import id.my.nanclouder.nanhistory.lib.history.getLocationFile
 
 class RecordService : Service() {
     companion object {
@@ -60,7 +78,6 @@ class RecordService : Service() {
     private lateinit var wakeLock: PowerManager.WakeLock
 
     private lateinit var notificationManager: NotificationManager
-    private lateinit var notificationBuilder: NotificationCompat.Builder
 
     private lateinit var debugNotificationManager: NotificationManager
     private lateinit var debugNotificationBuilder: NotificationCompat.Builder
@@ -77,10 +94,39 @@ class RecordService : Service() {
     private val logData = LogData()
 
     private var continueService = false
+    private var eventPoint = false
+    private var maxDuration = 0
+
+    // Audio recording
+    private var includeAudio = false
+    private var mediaRecorder: MediaRecorder? = null
+    private var outputAudio: String = ""
+    private var audioFolder: String = ""
 
     private var startTime: Long = 0L
     private var validUpdates: Int = 0
     private var updates: Int = 0
+
+    private lateinit var actionIntent: Intent
+    private lateinit var actionPendingIntent: PendingIntent
+    private lateinit var notificationPendingIntent: PendingIntent
+
+    private lateinit var handler: Handler
+    private lateinit var runnable: Runnable
+
+    private lateinit var locationPath: String
+    private lateinit var locationFile: File
+    private val eventLocations: MutableMap<ZonedDateTime, Coordinate> = mutableMapOf()
+
+    private fun sendStatusBroadcast(status: Int) {
+        val intent = Intent(ServiceBroadcast.ACTION_SERVICE_STATUS).apply {
+            putExtra(ServiceBroadcast.EXTRA_STATUS, status)
+            putExtra(ServiceBroadcast.EXTRA_EVENT_ID, event.id)
+            putExtra(ServiceBroadcast.EXTRA_EVENT_PATH, getFilePathFromDate(event.time.toLocalDate()))
+            putExtra(ServiceBroadcast.EXTRA_EVENT_POINT, eventPoint)
+        }
+        sendBroadcast(intent)
+    }
 
     @SuppressLint("WakelockTimeout")
     override fun onCreate() {
@@ -93,6 +139,16 @@ class RecordService : Service() {
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyApp::WakeLock")
         wakeLock.acquire()
 
+        includeAudio = Config.experimentalAudioRecord.get(applicationContext) && Config.includeAudioRecord.get(applicationContext)
+        if (includeAudio) {
+            val path = now.format(DateTimeFormatter.ofPattern("yyyy-MM"))
+            val folder = File(filesDir, "audio/$path")
+            folder.mkdirs()
+            val id = generateEventId()
+            audioFolder = folder.parent!!
+            outputAudio = "$path/$id.m4a"
+        }
+
         startTime = Instant.now().toEpochMilli()
 
         event = EventRange(
@@ -104,19 +160,37 @@ class RecordService : Service() {
             end = now,
         )
 
+        locationFile = createLocationFile(applicationContext)
+        locationPath = locationFile.absolutePath.removePrefix(File(filesDir, "locations").absolutePath + "/")
+        event.locationPath = locationPath
+
         // Initialize FusedLocationProviderClient
         fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this)
 
         // Setup Location Callback
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
-//                for (location: Location in locationResult.locations) {
-//                    // Handle location updates
-//                    Log.d("NanHistoryDebug", "Location: ${location.latitude}, ${location.longitude}")
-//                }
                 onLocationUpdate(locationResult.locations)
             }
         }
+
+        actionIntent = Intent(this, RecordService::class.java).apply {
+            action = "STOP_RECORD" // Custom action
+        }
+        actionPendingIntent = PendingIntent.getService(
+            this,
+            0,
+            actionIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        notificationPendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 
     private fun onLocationUpdate(locations: List<Location>) {
@@ -129,6 +203,8 @@ class RecordService : Service() {
         val eventData = event
         val now = ZonedDateTime.now()
 
+        var locationSize = 0
+
         val locationMap = if (locations.size > 1) {
             val zoneId = Calendar.getInstance().timeZone.toZoneId()
             locations.associate {
@@ -137,51 +213,85 @@ class RecordService : Service() {
             }
         } else null
 
-        when (eventData) {
-            is EventPoint -> {
-                if (eventData.location == null && locations.size == 1 && locations.first().accuracy <= accuracyThreshold) {
-                    eventData.location = Coordinate(
-                        locations.first().latitude, locations.first().longitude
-                    )
-                    event = eventData
-                } else {
-                    event = EventRange(
-                        id = eventData.id,
-                        title = eventData.title,
-                        description = eventData.description,
-                        time = event.time,
-                        end = now,
-                        favorite = event.favorite,
-                        tags = event.tags,
-                        created = event.created,
-                        modified = event.modified,
-                        locations = locationMap?.toMutableMap() ?: mutableMapOf()
-                    )
-                }
+//        when (eventData) {
+//            is EventPoint -> {
+//                if (eventData.location == null && locations.size == 1 && locations.first().accuracy <= accuracyThreshold) {
+//                    eventData.location = Coordinate(
+//                        locations.first().latitude, locations.first().longitude
+//                    )
+//                    event = eventData
+//                    locationSize = 1
+//                } else {
+//                    event = EventRange(
+//                        id = eventData.id,
+//                        title = eventData.title,
+//                        description = eventData.description,
+//                        time = event.time,
+//                        end = now,
+//                        favorite = event.favorite,
+//                        tags = event.tags,
+//                        created = event.created,
+//                        modified = event.modified,
+//                        locations = locationMap?.toMutableMap() ?: mutableMapOf()
+//                    )
+//                    locationSize = locations.size
+//                }
+//            }
+//
+//            is EventRange -> {
+//                val zoneId = Calendar.getInstance().timeZone.toZoneId()
+//                for (location in locations) {
+//                    if (location.latitude != 0.0 && location.longitude != 0.0) {
+//                        Log.d(
+//                            "NanHistoryDebug",
+//                            "Location received: ${location.latitude}, ${location.longitude}"
+//                        )
+//                    } else {
+//                        Log.d("NanHistoryDebug", "Invalid location data received")
+//                        continue
+//                    }
+//
+//                    if (location.accuracy > accuracyThreshold) continue
+//
+//                    val time = ZonedDateTime.ofInstant(Instant.ofEpochMilli(location.time), zoneId)
+//                    (event as EventRange).locations[time] = Coordinate(
+//                        location.latitude, location.longitude
+//                    )
+//
+//                    if ((event as EventRange).locations.isNotEmpty() && eventPoint) {
+//                        stopSelf()
+//                    }
+//
+//                    // TODO
+//                }
+//                (event as EventRange).end = now
+//            }
+//        }
+
+        val zoneId = Calendar.getInstance().timeZone.toZoneId()
+        for (location in locations) {
+            if (location.latitude != 0.0 && location.longitude != 0.0) {
+                Log.d(
+                    "NanHistoryDebug",
+                    "Location received: ${location.latitude}, ${location.longitude}"
+                )
+            } else {
+                Log.d("NanHistoryDebug", "Invalid location data received")
+                continue
             }
 
-            is EventRange -> {
-                val zoneId = Calendar.getInstance().timeZone.toZoneId()
-                for (location in locations) {
-                    if (location.latitude != 0.0 && location.longitude != 0.0) {
-                        Log.d(
-                            "NanHistoryDebug",
-                            "Location received: ${location.latitude}, ${location.longitude}"
-                        )
-                    } else {
-                        Log.d("NanHistoryDebug", "Invalid location data received")
-                        continue
-                    }
+            if (location.accuracy > accuracyThreshold) continue
 
-                    if (location.accuracy > accuracyThreshold) continue
+            val time = ZonedDateTime.ofInstant(Instant.ofEpochMilli(location.time), zoneId)
+            eventLocations[time] = Coordinate(
+                location.latitude, location.longitude
+            )
 
-                    val time = ZonedDateTime.ofInstant(Instant.ofEpochMilli(location.time), zoneId)
-                    (event as EventRange).locations[time] = Coordinate(
-                        location.latitude, location.longitude
-                    )
-                }
-                (event as EventRange).end = now
+            if (eventLocations.isNotEmpty() && eventPoint) {
+                stopSelf()
             }
+
+            // TODO
         }
 
         updates++
@@ -197,21 +307,25 @@ class RecordService : Service() {
                             Instant.ofEpochMilli(startTime),
                             ZoneId.of("Asia/Jakarta")
                         )
-                    }"
+                    }",
         )
 
-        val signatureValidBeforeUpdate = event.validateSignature()
+        updateNotification()
+
+        val signatureValidBeforeUpdate = event.validateSignature(applicationContext)
 
         event.metadata["record_updates"] = updates
 
-        event.generateSignature(true)
+        eventLocations.writeToLocationFile(locationFile)
         Log.d(
             "NanHistoryDebug",
-            "Event signature valid: B: $signatureValidBeforeUpdate, A: ${event.validateSignature()}"
+            "Event signature valid: B: $signatureValidBeforeUpdate, A: ${event.validateSignature(applicationContext)}"
         )
+        event.generateSignature(true, applicationContext)
+        event.updateModifiedTime()
         event.save(applicationContext)
 
-        if (Instant.now().toEpochMilli() - startTime > 900000L) {
+        if (Instant.now().toEpochMilli() - startTime > (1000L * maxDuration)) {
             continueService = true
             stopSelf()
         }
@@ -229,19 +343,7 @@ class RecordService : Service() {
                     "$validUpdates".padEnd(7) +
                     "$updates".padEnd(9) +
                     "${locations.size}".padEnd(5) +
-                    (
-                            when (event) {
-                                is EventPoint -> {
-                                    1
-                                }
-
-                                is EventRange -> {
-                                    (event as EventRange).locations.size
-                                }
-
-                                else -> 0
-                            }
-                            ).toString().padEnd(9) +
+                    eventLocations.size.toString().padEnd(9) +
                     ((Instant.now().toEpochMilli() - startTime) / 1000).toInt().toString()
                         .padEnd(9) +
                     locations.map { it.accuracy.roundToInt() }.joinToString(",")
@@ -256,6 +358,22 @@ class RecordService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val now = ZonedDateTime.now()
+
+        handler = Handler(mainLooper)
+        runnable = object : Runnable {
+            override fun run() {
+                if (!isRunning(applicationContext))
+                    return
+
+                val timeElapsed = Duration.between(event.time.toInstant(), Instant.now())
+                updateNotification(readableTimeHours(timeElapsed))
+
+                handler.postDelayed(this, 250) // Update every a quarter second
+            }
+        }
+        handler.post(runnable)
+
+        maxDuration = Config.serviceMaxDuration.get(applicationContext)
 
         if (intent == null) Log.d("NanHistoryDebug", "Received null intent")
         Log.d("NanHistoryDebug", "Starting foreground service...")
@@ -274,7 +392,19 @@ class RecordService : Service() {
             val path = intent.getStringExtra("path")
             val fileData = HistoryFileData.get(applicationContext, path ?: "")
             event = fileData?.events?.first { it.id == (eventId ?: "") } ?: event
+            event.locationPath?.let {
+                locationPath = it
+                locationFile = File(filesDir, "locations/$locationPath")
+                eventLocations.putAll(
+                    getLocationFile(locationPath, applicationContext).locations
+                )
+            }
+
+            eventPoint = intent.getBooleanExtra("eventPoint", false)
         }
+
+        if (event.audio != null)
+            includeAudio = false
 
         val channelId = "nanhistory_record"
         val channelName = "Record Event"
@@ -284,42 +414,56 @@ class RecordService : Service() {
         val debugChannelName = "Service Debug"
         val debugImportance = NotificationManager.IMPORTANCE_HIGH
 
-        val channel = NotificationChannel(channelId, channelName, importance)
+        val channel = NotificationChannel(channelId, channelName, importance).apply {
+            description = "Record service notifications"
+            enableLights(true)
+            enableVibration(true)
+        }
         val debugChannel = NotificationChannel(debugChannelId, debugChannelName, debugImportance)
-
         notificationManager = getSystemService(NotificationManager::class.java)
         notificationManager.createNotificationChannel(channel)
 
         debugNotificationManager = getSystemService(NotificationManager::class.java)
         debugNotificationManager.createNotificationChannel(debugChannel)
 
-        notificationBuilder = NotificationCompat.Builder(this, "nanhistory_record")
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setColor(resources.getColor(R.color.record_notification_bg, theme))
-            .setColorized(true)
-            .setOngoing(true)
-            .setSilent(true)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
+
+//        notificationBuilder.addAction(R.drawable.ic_stop_filled, "Stop", PendingIntent.getService(
+//            this,
+//            0,
+//            Intent(this, RecordService::class.java).apply {
+//                action = "STOP_RECORD" // Custom action
+//            },
+//            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+//        ))
 
         debugNotificationBuilder = NotificationCompat.Builder(this, "nanhistory_record_debug")
             .setContentTitle("Service Debug")
             .setContentText("Starting...")
+            .setSilent(true)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentIntent(notificationPendingIntent)
 
         // Process metadata
-        val recordServiceCount = matchOrNull<Double>(event.metadata["record_service_count"]) ?: 0.0
+        val recordServiceCount =
+            matchOrNull<Double>(event.metadata["record_service_count"]) ?: 0.0
         val recordUpdates = matchOrNull<Double>(event.metadata["record_updates"]) ?: 0.0
 
         event.metadata["record_service_count"] = recordServiceCount + 1
-        event.metadata["recording"] = true
         updates = recordUpdates.toInt()
 
-        event.generateSignature(true)
-        event.save(applicationContext)
-        updateNotification("Recording Event", event.title)
-        debugNotification()
+        event.locationPath = locationPath
 
-        startForeground(1, notificationBuilder.build())
+        event.generateSignature(true, applicationContext)
+        event.save(applicationContext)
+
+        notificationTitle = "00:00"
+        notificationText = "Recording Event"
+
+        if (includeAudio)
+            startForeground(1, getNotification(notificationTitle, notificationText))
+        else
+            startForeground(1, getNotification(notificationTitle, notificationText), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+
         startLocationUpdates()
 
         logData.append("Title: ${event.title}\n")
@@ -337,21 +481,93 @@ class RecordService : Service() {
 
         logData.save(applicationContext)
 
-        sharedPreferences.edit().putBoolean("isRunning", true).apply()
+        sharedPreferences.edit {
+            putBoolean("isRunning", true)
+                .putString("eventId", event.id)
+        }
+
+        sendStatusBroadcast(RecordStatus.RUNNING)
+
+        if (includeAudio) startAudioRecording()
+
         return START_STICKY
+    }
+
+    fun isMicAvailable(): Boolean {
+        return try {
+            MediaRecorder(applicationContext).apply {
+                setAudioSource(MediaRecorder.AudioSource.MIC)
+                setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP)
+                setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB)
+                setOutputFile("/dev/null") // dummy file
+                prepare()
+                start()
+                stop()
+                release()
+            }
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun startAudioRecording() {
+        mediaRecorder = MediaRecorder(applicationContext).apply {
+            val path = "$audioFolder/$outputAudio"
+            val stereoChannel = Config.audioStereoChannel.get(applicationContext)
+            val encodingBitrate = Config.audioEncodingBitrate.get(applicationContext) * 1000
+            val samplingRate = Config.audioSamplingRate.get(applicationContext) * 1000
+
+            setAudioSource(MediaRecorder.AudioSource.MIC)
+            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            setOutputFile(path)
+            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            setAudioChannels(if (stereoChannel) 2 else 1)
+            setAudioEncodingBitRate(encodingBitrate)
+            setAudioSamplingRate(samplingRate)
+
+            val maxDuration = Config.audioRecordMaxDuration.get(applicationContext)
+            if (maxDuration > 0) setMaxDuration(maxDuration * 1000) // Based on user settings
+
+            setOnInfoListener { _, what, extra ->
+                Log.d("Recorder", "$what, $extra")
+                if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED) {
+                    stopAudioRecording()
+                    Log.d("Recorder", "Max duration reached. Recording stopped.")
+                }
+            }
+
+            try {
+                prepare()
+                start()
+            } catch (e: IOException) {
+                e.printStackTrace()
+                Log.e("NanHistoryError", "$e")
+            }
+        }
+
+    }
+
+    private fun stopAudioRecording() {
+        mediaRecorder?.stop()
+        mediaRecorder?.release()
+        mediaRecorder = null
+        event.audio = outputAudio
+        event.generateSignature(true, applicationContext)
+        event.save(applicationContext)
     }
 
     private fun iterateLocations() {
         val minimumDistance = Config.locationMinimumDistance.get(applicationContext)
 
         if (event is EventRange) {
-            val eventRange: EventRange = event as EventRange
+//            val eventRange: EventRange = event as EventRange
             val coordinateMap: MutableMap<ZonedDateTime, Coordinate> = mutableMapOf()
             var prevLocation: Location? = null
 
-            eventRange.locations = eventRange.locations
+//            eventRange.locations = eventRange.locations
 
-            val eventLocations = eventRange.locations
+//            val eventLocations = eventRange.locations
 
             for (key in eventLocations.keys.sorted()) {
                 val currentLocation = Location("current").apply {
@@ -362,68 +578,93 @@ class RecordService : Service() {
                 ZonedDateTime.now().toInstant()
                 if (prevLocation != null) {
                     if (currentLocation.distanceTo(prevLocation) < minimumDistance &&
-                        currentLocation.time.compareTo(prevLocation.time) < 900000L
+                        currentLocation.time.compareTo(prevLocation.time) < 900_000L
                     ) continue
                 }
                 prevLocation = currentLocation
                 coordinateMap[key] = eventLocations[key]!!
             }
 
-            (event as EventRange).locations = coordinateMap
+            eventLocations.clear()
+            for (key in coordinateMap.keys) {
+                eventLocations[key] = coordinateMap[key]!!
+            }
+
+            eventLocations.writeToLocationFile(locationFile)
         }
+    }
+
+    private fun getNotification(title: String, text: String, locations: String = ""): Notification {
+        val notificationBuilder = NotificationCompat.Builder(this, "nanhistory_record")
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setOngoing(true)
+            .setSilent(true)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
+
+        val customView = RemoteViews(packageName, R.layout.record_notification).apply {
+            setTextViewText(R.id.notification_title, title)
+            setTextViewText(R.id.notification_message, text)
+            if (locations.isNotBlank()) {
+                setTextViewText(R.id.notification_locations, locations)
+                setViewVisibility(R.id.notification_locations, View.VISIBLE)
+            }
+            else {
+                setViewVisibility(R.id.notification_locations, View.INVISIBLE)
+            }
+            setOnClickPendingIntent(R.id.notification_button, actionPendingIntent)
+            setOnClickPendingIntent(R.id.notification_linear_layout, notificationPendingIntent)
+            if (eventPoint) setViewVisibility(R.id.notification_button, View.INVISIBLE)
+        }
+
+//        val customViewBig = RemoteViews(packageName, R.layout.record_notification_big).apply {
+//            setTextViewText(R.id.notification_title, title)
+//            setTextViewText(R.id.notification_message, text)
+//            if (description.isNotBlank()) {
+//                setTextViewText(R.id.notification_description, description)
+//                setViewVisibility(R.id.notification_description, View.VISIBLE)
+//            }
+//            else {
+//                setViewVisibility(R.id.notification_description, View.INVISIBLE)
+//            }
+//            setOnClickPendingIntent(R.id.notification_button, actionPendingIntent)
+//            setOnClickPendingIntent(R.id.notification_linear_layout, notificationPendingIntent)
+//            if (eventPoint) setViewVisibility(R.id.notification_button, View.INVISIBLE)
+//        }
+
+        notificationBuilder.setCustomContentView(customView)
+//        notificationBuilder.setCustomBigContentView(customViewBig)
+        notificationBuilder.setCustomBigContentView(customView)
+
+        return notificationBuilder.build()
     }
 
     private fun updateNotification(
         title: String? = null,
         text: String? = null,
-        description: String? = null
+        description: String? = null,
+        notify: Boolean = true
     ) {
-        val actionIntent = Intent(this, RecordService::class.java).apply {
-            action = "STOP_RECORD" // Custom action
-        }
-        val actionPendingIntent = PendingIntent.getService(
-            this,
-            0,
-            actionIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
         if (title != null) notificationTitle = title
         if (text != null) notificationText = text
         if (description != null) notificationDescription = description
 
-        val customView = RemoteViews(packageName, R.layout.record_notification).apply {
-            setTextViewText(R.id.notification_title, notificationTitle)
-            setTextViewText(R.id.notification_message, notificationText)
-            setOnClickPendingIntent(R.id.notification_button, actionPendingIntent)
-        }
+        val locationSize = eventLocations.size
 
-        val customViewBig = RemoteViews(packageName, R.layout.record_notification_big).apply {
-            setTextViewText(R.id.notification_title, notificationTitle)
-            setTextViewText(R.id.notification_message, notificationText)
-            if (notificationDescription.isNotBlank()) {
-                setTextViewText(R.id.notification_description, notificationDescription)
-                setViewVisibility(R.id.notification_description, View.VISIBLE)
-            }
-            else {
-                setViewVisibility(R.id.notification_description, View.INVISIBLE)
-            }
-            setOnClickPendingIntent(R.id.notification_button, actionPendingIntent)
-        }
-
-        notificationBuilder.setCustomContentView(customView)
-        notificationBuilder.setCustomBigContentView(customViewBig)
-        notificationBuilder.setOngoing(true)
-        notificationManager.notify(1, notificationBuilder.build())
+        if (notify) notificationManager.notify(
+            1, getNotification(notificationTitle, notificationText, "($locationSize)")
+        )
     }
 
     private fun debugNotification(title: String? = null, text: String? = null, separate: Boolean = false) {
         if (title != null) debugNotificationBuilder.setContentTitle(title)
         if (text != null) debugNotificationBuilder.setContentText(text)
-        if (!separate)
-            updateNotification(description = text)
-        else
-            debugNotificationManager.notify(2, debugNotificationBuilder.build())
+//        if (!separate)
+//            updateNotification(description = text)
+//        else
+        debugNotificationManager.notify(2, debugNotificationBuilder.build())
     }
 
     private fun startLocationUpdates() {
@@ -438,9 +679,12 @@ class RecordService : Service() {
 
         Log.d("NanHistoryDebug", "Requesting location updates")
 
+        val secondsInterval = if (!eventPoint) Config.locationUpdateInterval.get(applicationContext)
+            else 1
+
         val locationRequest = LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
-            Config.locationUpdateInterval.get(applicationContext) * 1000L
+            secondsInterval * 1000L
         ).build()
 
         val task = fusedLocationProviderClient.requestLocationUpdates(
@@ -460,32 +704,82 @@ class RecordService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        handler.removeCallbacks(runnable)
+
         Log.d("NanHistoryDebug", "Service [onDestroy]")
         // Stop location updates when the service is destroyed
         fusedLocationProviderClient.removeLocationUpdates(locationCallback)
-        sharedPreferences.edit().putBoolean("isRunning", false).apply()
+        sharedPreferences.edit {
+            putBoolean("isRunning", false)
+                .remove("eventId")
+        }
 
         iterateLocations()
+        if (includeAudio && mediaRecorder != null) stopAudioRecording()
+
+        if (
+            event is EventRange && (
+                Duration.between(event.time.toInstant(), Instant.now()) < Duration.ofSeconds(30)
+                || eventPoint)
+            ) {
+            val eventData = event as EventRange
+            event = EventPoint(
+                id = eventData.id,
+                title = eventData.title,
+                description = eventData.description,
+                time = eventData.time,
+                favorite = eventData.favorite,
+                tags = eventData.tags,
+                created = eventData.created,
+                modified = eventData.modified,
+                metadata = eventData.metadata,
+                audio = eventData.audio,
+                locationPath = locationPath
+            )
+        }
+
+        // Include audio path if audio recording is enabled
 
         if (event is EventRange) {
             (event as EventRange).end = ZonedDateTime.now()
         }
-        event.metadata.remove("recording")
-        event.generateSignature(true)
+
+        if (eventLocations.isEmpty()) {
+            event.locationPath = null
+            locationFile.delete()
+        }
+        else {
+            event.locationPath = locationPath
+        }
+
+        Log.d("NanHistoryDebug", "Applied: " + event.generateSignature(true, applicationContext))
         event.save(applicationContext)
 
         if (::wakeLock.isInitialized && wakeLock.isHeld) {
             wakeLock.release()
         }
 
-        debugNotification(separate = true)
+
+        debugNotification()
         notificationManager.cancel(1)
 
         if (continueService) {
-            val intent = Intent(this, this::class.java)
-            intent.putExtra("eventId", event.id)
-            intent.putExtra("path", getFilePathFromDate(event.time.toLocalDate()))
-            startForegroundService(intent)
+            val restartIntent = Intent(this, this::class.java)
+            restartIntent.putExtra("eventId", event.id)
+            restartIntent.putExtra("path", getFilePathFromDate(event.time.toLocalDate()))
+
+            val stopRunnable = object : Runnable {
+                override fun run() {
+                    startForegroundService(restartIntent)
+                    handler.removeCallbacks(this)
+                }
+            }
+            handler.postDelayed(stopRunnable, 500)
         }
+        else {
+            Toast.makeText(this, "Event recording stopped", Toast.LENGTH_SHORT).show()
+            sendStatusBroadcast(RecordStatus.READY)
+        }
+
     }
 }

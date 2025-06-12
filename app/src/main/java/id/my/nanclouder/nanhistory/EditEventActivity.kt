@@ -60,6 +60,7 @@ import id.my.nanclouder.nanhistory.lib.history.generateSignature
 import id.my.nanclouder.nanhistory.lib.history.get
 import id.my.nanclouder.nanhistory.lib.history.getFilePathFromDate
 import id.my.nanclouder.nanhistory.lib.history.save
+import id.my.nanclouder.nanhistory.lib.history.validateSignature
 import id.my.nanclouder.nanhistory.lib.withHaptic
 import id.my.nanclouder.nanhistory.ui.style.DangerButtonColors
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
@@ -147,7 +148,7 @@ fun EditEventView(eventId: String, path: String) {
         }
 
     val saveEvent = {
-        oldEvent?.delete(context)
+        oldEvent?.delete(context, false)
         if (newEvent != null) {
             newEvent!!.save(context)
             val result = Intent().apply {
@@ -184,6 +185,7 @@ fun EditEventView(eventId: String, path: String) {
                 ) {
                     Button(
                         onClick = {
+                            Log.d("NanHistoryDebug", "SAVE BUTTON")
                             newEvent = (
                                 if (rangeEvent) EventRange(
                                     title = eventTitle,
@@ -195,7 +197,6 @@ fun EditEventView(eventId: String, path: String) {
                                     title = eventTitle,
                                     description = eventDescription,
                                     time = time,
-
                                 )
                             ).apply {
                                 if (oldEvent != null) {
@@ -204,22 +205,26 @@ fun EditEventView(eventId: String, path: String) {
                                     favorite = oldEvent.favorite
                                     signature = oldEvent.signature
                                     metadata = oldEvent.metadata
+                                    audio = oldEvent.audio
+                                    unknownProperties = oldEvent.unknownProperties
+                                    locationPath = oldEvent.locationPath
                                 }
-                                if (oldEvent is EventRange && this is EventRange) {
-                                    locations = oldEvent.locations
-                                }
-                                else if (oldEvent is EventPoint && this is EventPoint) {
-                                    location = oldEvent.location
-                                }
-                                else if (oldEvent is EventRange && this is EventPoint && oldEvent.locations.isNotEmpty()) {
-                                    location = oldEvent.locations[oldEvent.locations.keys.first()]!!
-                                }
-                                else if (oldEvent is EventPoint && this is EventRange && oldEvent.location != null) {
-                                    locations = mutableMapOf(oldEvent.time to oldEvent.location!!)
-                                }
+//                                if (oldEvent is EventRange && this is EventRange) {
+//                                    locations = oldEvent.locations
+//                                }
+//                                else if (oldEvent is EventPoint && this is EventPoint) {
+//                                    location = oldEvent.location
+//                                }
+//                                else if (oldEvent is EventRange && this is EventPoint && oldEvent.locations.isNotEmpty()) {
+//                                    location = oldEvent.locations[oldEvent.locations.keys.first()]!!
+//                                }
+//                                else if (oldEvent is EventPoint && this is EventRange && oldEvent.location != null) {
+//                                    locations = mutableMapOf(oldEvent.time to oldEvent.location!!)
+//                                }
                             }
 
-                            if (oldEvent != null && oldEvent.generateSignature() != newEvent!!.generateSignature())
+                            if (oldEvent != null && oldEvent.validateSignature(context = context)
+                                && oldEvent.signature != newEvent!!.generateSignature(context = context))
                                 invalidSignatureWarning = true
                             else
                                 saveEvent()

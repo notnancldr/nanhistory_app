@@ -8,9 +8,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderState
 import androidx.compose.material3.Switch
@@ -32,7 +35,12 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.config.Config
@@ -98,7 +106,89 @@ fun SettingsSlider(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsNumInput(
+    modifier: Modifier = Modifier,
+    configValue: Config.IntValue,
+    title: String,
+    description: String,
+    valueUnit: String,
+    valueRange: IntRange = 0..1,
+    icon: Painter? = null,
+) {
+    val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+
+    var textFieldValue by remember {
+        mutableStateOf(TextFieldValue("${configValue.get(context)}"))
+    }
+
+    fun saveData(value: TextFieldValue = textFieldValue, changeValue: Boolean = false) {
+        val intValue = value.text.toIntOrNull()?.coerceIn(valueRange) ?: valueRange.first
+        if (changeValue) textFieldValue = TextFieldValue(
+            "$intValue",
+            textFieldValue.selection,
+            textFieldValue.composition
+        )
+        configValue.set(context, intValue)
+    }
+
+    ListItem(
+        leadingContent = {
+            if (icon != null) Icon(icon, "Icon")
+        },
+//        overlineContent = {
+//            Row(
+//                modifier = Modifier.fillMaxWidth(),
+//                horizontalArrangement = Arrangement.SpaceBetween
+//            ) {
+//                Text(title)
+//                Text(
+//                    "${sliderState.value.toInt()} $valueUnit",
+//                    modifier = Modifier
+//                        .width(56.dp),
+//                    textAlign = TextAlign.End
+//                )
+//            }
+//        },
+        headlineContent = {
+            Text(title)
+        },
+        supportingContent = {
+            Text(description)
+        },
+        trailingContent = {
+            OutlinedTextField(
+                textFieldValue,
+                onValueChange = {
+                    textFieldValue = it
+                    saveData(it)
+                },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Decimal,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        saveData(changeValue = true)
+                        keyboard?.hide()
+                        focusManager.clearFocus()
+                    }
+                ),
+                suffix = {
+                    Text(valueUnit)
+                },
+                modifier = Modifier.width(96.dp),
+                singleLine = true
+            )
+        },
+        modifier = modifier
+    )
+}
+
 @Composable
 fun SettingsSwitch(
     modifier: Modifier = Modifier,

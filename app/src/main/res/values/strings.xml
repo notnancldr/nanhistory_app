@@ -14,4 +14,5 @@
     <string name="title_activity_settings_record">RecordSettingsActivity</string>
     <string name="title_activity_settings_storage">StorageSettingsActivity</string>
     <string name="title_activity_settings_experimental">ExperimentalSettingsActivity</string>
+    <string name="title_activity_fileplayer">FilePlayerActivity</string>
 </resources>

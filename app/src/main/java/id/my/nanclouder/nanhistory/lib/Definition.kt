@@ -1,6 +1,8 @@
 package id.my.nanclouder.nanhistory.lib
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import androidx.compose.material3.AlertDialog
@@ -19,18 +21,34 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
+import androidx.core.content.FileProvider
 import org.osmdroid.util.GeoPoint
+import java.io.File
 import java.time.Duration
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.round
 
 // The numbers before 5 is reserved for Flutter application
-const val FILE_VERSION = 5
+const val FILE_VERSION = 6
 
 val DateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE, d MMM yyyy")
 val TimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 val TimeFormatterWithSecond: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
+
+object ServiceBroadcast {
+    const val ACTION_SERVICE_STATUS = "id.my.nanclouder.nanhistory.ACTION_SERVICE_STATUS"
+    const val EXTRA_STATUS = "EXTRA_IS_RUNNING"
+    const val EXTRA_EVENT_ID = "EXTRA_EVENT_ID"
+    const val EXTRA_EVENT_PATH = "EXTRA_EVENT_PATH"
+    const val EXTRA_EVENT_POINT = "EXTRA_EVENT_POINT"
+}
+
+object RecordStatus {
+    const val BUSY = -1
+    const val READY = 0
+    const val RUNNING = 1
+}
 
 data class Coordinate(val latitude: Double, val longitude: Double) {
     override fun toString(): String = "$latitude,$longitude"
@@ -176,4 +194,21 @@ fun readableTimeHours(duration: Duration): String {
     text += "${minutes.toString().padStart(2, '0')}:"
     text += seconds.toString().padStart(2, '0')
     return text
+}
+
+fun getAudioFile(context: Context, path: String): File {
+    return File(context.filesDir, "audio/$path")
+}
+
+fun shareFile(context: Context, fileName: String) {
+    val file = File(context.filesDir, fileName)
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "*/*"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+
+    context.startActivity(Intent.createChooser(intent, "Share file via"))
 }

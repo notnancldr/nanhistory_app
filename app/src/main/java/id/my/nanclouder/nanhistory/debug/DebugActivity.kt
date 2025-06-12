@@ -100,6 +100,18 @@ fun DebugView() {
             )
             ListItem(
                 leadingContent = {
+                    Icon(painterResource(R.drawable.ic_play_arrow_filled), "Audio")
+                },
+                headlineContent = {
+                    Text("Audio Records")
+                },
+                modifier = Modifier.clickable {
+                    val intent = Intent(context, AudioListActivity::class.java)
+                    context.startActivity(intent)
+                }
+            )
+            ListItem(
+                leadingContent = {
                     Icon(painterResource(R.drawable.ic_description_filled), "Logs")
                 },
                 headlineContent = {

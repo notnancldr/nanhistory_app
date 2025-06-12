@@ -10,11 +10,18 @@ object Config {
     private const val PATH = "config/config.json"
 
     object Default {
+        const val SERVICE_MAX_DURATION = 900
         const val LOCATION_ACCURACY_THRESHOLD = 20
         const val LOCATION_MINIMUM_DISTANCE = 30
         const val LOCATION_UPDATE_INTERVAL = 5
-        const val RECORD_EVENT_RANGE_MINIMUM_DURATION = 10
-        const val EXPERIMENTAL_STREAM_LIST = false
+
+        const val AUDIO_RECORD_MAX_DURATION = 10
+        const val EXPERIMENTAL_AUDIO_RECORD = false
+        const val INCLUDE_AUDIO_RECORD = false
+
+        const val AUDIO_STEREO_CHANNEL = false
+        const val AUDIO_ENCODING_BITRATE = 128
+        const val AUDIO_SAMPLING_RATE = 44
     }
 
     private fun readOrCreateNew(context: Context): String {
@@ -57,6 +64,10 @@ object Config {
             setConfig(context, name, value)
     }
 
+    val serviceMaxDuration = IntValue(
+        "serviceMaxDuration", Default.SERVICE_MAX_DURATION
+    )
+
     val locationAccuracyThreshold = IntValue(
         "locationAccuracyThreshold", Default.LOCATION_ACCURACY_THRESHOLD
     )
@@ -66,10 +77,22 @@ object Config {
     val locationUpdateInterval = IntValue(
         "locationUpdateInterval", Default.LOCATION_UPDATE_INTERVAL
     )
-    val recordEventRangeMinimumDuration = IntValue(
-        "recordEventRangeMinimumDuration", Default.RECORD_EVENT_RANGE_MINIMUM_DURATION
+    val audioRecordMaxDuration = IntValue(
+        "audioRecordMaxDuration", Default.AUDIO_RECORD_MAX_DURATION
     )
-    val experimentalStreamList = BooleanValue(
-        "experimentalStreamList", Default.EXPERIMENTAL_STREAM_LIST
+    val experimentalAudioRecord = BooleanValue(
+        "experimentalAudioRecord", Default.EXPERIMENTAL_AUDIO_RECORD
+    )
+    val includeAudioRecord = BooleanValue(
+        "includeAudioRecord", Default.INCLUDE_AUDIO_RECORD
+    )
+    val audioStereoChannel = BooleanValue(
+        "audioStereoChannel", Default.AUDIO_STEREO_CHANNEL
+    )
+    val audioEncodingBitrate = IntValue(
+        "audioEncodingBitrate", Default.AUDIO_ENCODING_BITRATE
+    )
+    val audioSamplingRate = IntValue(
+        "audioSamplingRate", Default.AUDIO_SAMPLING_RATE
     )
 }

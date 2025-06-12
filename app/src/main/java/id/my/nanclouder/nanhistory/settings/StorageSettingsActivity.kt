@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -64,13 +65,15 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
         val eventsColor = Color(0xFF7FB86A)
         val logsColor = Color(0xFF24AD98)
         val cacheColor = Color(0xFF558EAD)
-        val otherColor = Color(0xFF5960A2)
+        val audioColor = Color(0xFF5960A2)
+        val otherColor = Color(0xFF906DB3)
 
         val restColor = Color.Gray
 
         var eventsSize by rememberSaveable { mutableLongStateOf(0L) }
         var logsSize by rememberSaveable { mutableLongStateOf(0L) }
         var cacheSize by rememberSaveable { mutableLongStateOf(0L) }
+        var audioSize by rememberSaveable { mutableLongStateOf(0L) }
         var otherSize by rememberSaveable { mutableLongStateOf(0L) }
         var dataSize by rememberSaveable { mutableLongStateOf(0L) }
 
@@ -93,8 +96,9 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
                 eventsSize = getSize(File(filesDir, "history"))
                 logsSize = getSize(File(filesDir, "logs"))
                 cacheSize = getSize(cacheDir)
+                audioSize = getSize(File(filesDir, "audio"))
                 dataSize = getSize(dataDir)
-                otherSize = dataSize - (eventsSize + logsSize + cacheSize)
+                otherSize = dataSize - (eventsSize + logsSize + cacheSize + audioSize)
 
                 cacheDirs.clear()
                 dataDirs.clear()
@@ -194,6 +198,7 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
                                     eventsSize.toFloat() to eventsColor,
                                     logsSize.toFloat() to logsColor,
                                     cacheSize.toFloat() to cacheColor,
+                                    audioSize.toFloat() to audioColor,
                                     otherSize.toFloat() to otherColor
                                 )
                             )
@@ -214,6 +219,7 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
                             rowLabel(eventsColor, "Events", eventsSize.toFloat())
                             rowLabel(logsColor, "Logs data", logsSize.toFloat())
                             rowLabel(cacheColor, "Cache", cacheSize.toFloat())
+                            rowLabel(audioColor, "Audio", audioSize.toFloat())
                             rowLabel(otherColor, "Other", otherSize.toFloat())
                         }
                     }

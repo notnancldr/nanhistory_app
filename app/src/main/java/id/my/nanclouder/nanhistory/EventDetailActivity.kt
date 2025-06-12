@@ -10,10 +10,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Warning
@@ -46,6 +51,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -57,6 +63,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
@@ -71,6 +78,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import id.my.nanclouder.nanhistory.lib.DateFormatter
 import id.my.nanclouder.nanhistory.lib.TimeFormatter
+import id.my.nanclouder.nanhistory.lib.getAudioFile
 import id.my.nanclouder.nanhistory.lib.getLocationData
 import id.my.nanclouder.nanhistory.lib.history.EventPoint
 import id.my.nanclouder.nanhistory.lib.history.EventRange
@@ -82,7 +90,8 @@ import id.my.nanclouder.nanhistory.lib.history.get
 import id.my.nanclouder.nanhistory.lib.history.getFilePathFromDate
 import id.my.nanclouder.nanhistory.lib.history.save
 import id.my.nanclouder.nanhistory.lib.history.validateSignature
-import id.my.nanclouder.nanhistory.lib.matchOrNull
+import id.my.nanclouder.nanhistory.lib.shareFile
+import id.my.nanclouder.nanhistory.ui.AudioPlayer
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
@@ -143,10 +152,26 @@ fun DetailContent(eventId: String, path: String) {
 
     var showInfo by remember { mutableStateOf(false) }
 
+    var audioAvailable by remember { mutableStateOf(true) }
+    var audioPath by remember { mutableStateOf<String?>(null) }
+
+    fun setUpdateResult() {
+        val intent = Intent().apply {
+            putExtra("path", currentPath)
+        }
+        context.getActivity()?.setResult(1, intent)
+    }
+
     val getEvent = {
         val fileData = HistoryFileData.get(context, currentPath)
         fileData?.events?.firstOrNull {
             it.id == eventId
+        }?.apply {
+            val audioFile = audio?.let { getAudioFile(context, audio!!) }
+            if (audioFile?.exists() == true) {
+                audioAvailable = true
+                audioPath = audioFile.absolutePath
+            }
         }
     }
 
@@ -156,7 +181,9 @@ fun DetailContent(eventId: String, path: String) {
 
     val eventData = savedEvent
 
-    val recording = matchOrNull<Boolean>(eventData?.metadata?.get("recording")) ?: false
+    val sharedPreferences = LocalContext.current.applicationContext
+        .getSharedPreferences("recordEvent", Context.MODE_PRIVATE)
+    val recording = sharedPreferences.getString("eventId", "") == eventData?.id
 
     // EventRange only
     val duration = when (eventData) {
@@ -166,11 +193,9 @@ fun DetailContent(eventId: String, path: String) {
     } ?: 0
 
     var favorite by rememberSaveable { mutableStateOf(eventData?.favorite) }
-    val locationAvailable = when (eventData) {
-        is EventRange -> eventData.locations.isNotEmpty()
-        is EventPoint -> eventData.location != null
-        else -> false
-    }
+
+    val eventLocations = eventData?.getLocations(context) ?: mapOf()
+    val locationAvailable = eventLocations.isNotEmpty()
 
     val launcher =
         rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -178,10 +203,7 @@ fun DetailContent(eventId: String, path: String) {
                 result.data?.getStringExtra("path")?.let {
                     currentPath = it
                     savedEvent = getEvent()
-                    val intent = Intent().apply {
-                        putExtra("path", it)
-                    }
-                    context.getActivity()?.setResult(1, intent)
+                    setUpdateResult()
                 }
             }
             else if (result.resultCode == 2) {
@@ -223,6 +245,7 @@ fun DetailContent(eventId: String, path: String) {
                             favorite = !(favorite ?: false)
                             eventData.favorite = favorite!!
 //                            eventData.modified = ZonedDateTime.now()
+                            setUpdateResult()
                             eventData.save(context)
                         },
                         enabled = !recording
@@ -263,7 +286,17 @@ fun DetailContent(eventId: String, path: String) {
                                 text = { Text("Info") },
                                 onClick = { showInfo = true; menuExpanded = false }
                             )
-                            DropdownMenuItem(
+                            if (audioAvailable) DropdownMenuItem(
+                                leadingIcon = {
+                                    Icon(Icons.Outlined.Share, "Share audio", tint = Color.Gray)
+                                },
+                                text = { Text("Share Audio") },
+                                onClick = {
+                                    shareFile(context, audioPath!!.removePrefix(context.filesDir.absolutePath))
+                                    menuExpanded = false
+                                }
+                            )
+                            if (eventData is EventRange) DropdownMenuItem(
                                 leadingIcon = {
                                     Icon(
                                         painterResource(R.drawable.ic_content_cut),
@@ -344,73 +377,93 @@ fun DetailContent(eventId: String, path: String) {
                 }
             }
 
-            if (eventData is EventRange && eventData.locations.size > 1) {
-                val data = eventData.locations.getLocationData()
-                val maxSpeed = round(data.maxOf { it.speed } * 10) / 10
-                val distance = data.sumOf { item -> item.distance.toDouble() }
-                // In Km/h
-                val avgSpeed = (distance / 100f / (duration / 3600f)).roundToInt() / 10f
 
-                ListItem(
-                    headlineContent = {
-                        Text("Location details")
-                    },
-                    supportingContent = {
-                        Column {
-                            Text("Average speed: $avgSpeed Km/h")
-                            Text("Max speed: $maxSpeed Km/h")
-                            Text(
-                                "Total distance: " +
-                                        if (distance < 1000) "${round(distance).toInt()} m"
-                                        else "${round(distance / 100) / 10} Km"
-                            )
+            Column(
+                Modifier.background(MaterialTheme.colorScheme.surface)
+            ) {
+                if (eventData is EventRange && eventLocations.size > 1) {
+                    val data = eventLocations.getLocationData()
+                    val maxSpeed = round(data.maxOf { it.speed } * 10) / 10
+                    val distance = data.sumOf { item -> item.distance.toDouble() }
+                    // In Km/h
+                    val avgSpeed = (distance / 100f / (duration / 3600f)).roundToInt() / 10f
+
+                    ListItem(
+                        headlineContent = {
+                            Text("Location details")
+                        },
+                        supportingContent = {
+                            Column {
+                                Text("Average speed: $avgSpeed Km/h")
+                                Text("Max speed: $maxSpeed Km/h")
+                                Text(
+                                    "Total distance: " +
+                                            if (distance < 1000) "${round(distance).toInt()} m"
+                                            else "${round(distance / 100) / 10} Km"
+                                )
+                            }
+                        }
+                    )
+                }
+
+                if (eventData.signature.isNotBlank()) {
+                    val valid = remember { eventData.validateSignature(context = context) }
+                    Surface(
+                        Modifier.clickable {
+                            showSignatureInfo = !showSignatureInfo
+                        }
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .padding(16.dp)
+                                .fillMaxWidth()
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (valid) Icon(
+                                    Icons.Rounded.CheckCircle,
+                                    contentDescription = "Signed",
+                                    modifier = Modifier
+                                        .padding(start = 8.dp)
+                                        .size(16.dp),
+                                    tint = Color(0xFF008000)
+                                ) else Icon(
+                                    Icons.Rounded.Warning,
+                                    contentDescription = "Invalid signature",
+                                    modifier = Modifier
+                                        .padding(start = 8.dp)
+                                        .size(16.dp),
+                                    tint = Color(0xFF808000)
+                                )
+                                Text(
+                                    text =
+                                    if (valid) "This event is signed"
+                                    else "The signature of this event is invalid",
+                                    fontStyle = FontStyle.Italic
+                                )
+                            }
+                            AnimatedVisibility(visible = showSignatureInfo) {
+                                Text(
+                                    """Signature info:
+                                 |Signature: ${eventData.signature}
+                                 |Valid: $valid
+                                 """.trimMargin(),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier
+                                        .padding(start = 32.dp)
+                                        .padding(8.dp)
+                                )
+                            }
                         }
                     }
-                )
+                }
+
+                if (eventData.audio != null)
+                    AudioPlayer("${context.filesDir.absolutePath}/audio/${eventData.audio}")
             }
 
-            if (eventData.signature.isNotBlank()) {
-                val valid = eventData.validateSignature()
-                ListItem(
-                    modifier = Modifier.clickable {
-                        showSignatureInfo = !showSignatureInfo
-                    },
-                    leadingContent = {
-                        if (valid) Icon(
-                            Icons.Rounded.CheckCircle,
-                            contentDescription = "Signed",
-                            modifier = Modifier
-                                .padding(start = 8.dp)
-                                .size(16.dp),
-                            tint = Color(0xFF008000)
-                        ) else Icon(
-                            Icons.Rounded.Warning,
-                            contentDescription = "Invalid signature",
-                            modifier = Modifier
-                                .padding(start = 8.dp)
-                                .size(16.dp),
-                            tint = Color(0xFF808000)
-                        )
-                    },
-                    headlineContent = {
-                        Text(
-                            text =
-                            if (valid) "This event is signed"
-                            else "The signature of this event is invalid",
-                            fontStyle = FontStyle.Italic
-                        )
-                    },
-                    supportingContent = {
-                        if (showSignatureInfo)
-                            Text(
-                                """Signature info:
-                         |Signature: ${eventData.signature}
-                         |Valid: $valid
-                         """.trimMargin()
-                            )
-                    }
-                )
-            }
             ListItem(
                 leadingContent = {
                     Icon(painterResource(R.drawable.ic_title), "Title")
@@ -549,7 +602,7 @@ fun DetailContent(eventId: String, path: String) {
                             Text("Location points")
                         },
                         headlineContent = {
-                            Text(eventData.locations.size.toString())
+                            Text(eventLocations.size.toString())
                         }
                     )
                     if (eventData.metadata.isNotEmpty()) {
@@ -602,7 +655,7 @@ fun DetailContent(eventId: String, path: String) {
                             onClick = {
                                 eventData.delete(context)
                                 context.getActivity()?.run {
-                                    setResult(1)
+                                    setUpdateResult()
                                     finish()
                                 }
                             },
@@ -655,9 +708,7 @@ fun DetailContent(eventId: String, path: String) {
 fun MapHistoryPreview(eventData: HistoryEvent, modifier: Modifier = Modifier) {
     val context = LocalContext.current
 
-    val locations = if (eventData is EventPoint)
-        mapOf(eventData.time to eventData.location).filter { it.value != null }
-    else (eventData as EventRange).locations
+    val locations = eventData.getLocations(context)
 
     val geoPoints = locations.keys.sorted().map {
         GeoPoint(locations[it]!!.latitude, locations[it]!!.longitude)

@@ -6,6 +6,7 @@
     android:orientation="horizontal">
 
     <LinearLayout
+        android:id="@+id/notification_linear_layout"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
@@ -16,16 +17,15 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text=""
-            android:textColor="@color/white"
-            android:textSize="16sp"
-            android:textStyle="bold" />
+            android:textColor="@color/black"
+            android:textSize="24sp" />
 
         <TextView
             android:id="@+id/notification_message"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text=""
-            android:textColor="@color/white"
+            android:textColor="@color/black"
             android:textSize="14sp" />
 
         <TextView
@@ -34,7 +34,7 @@
             android:layout_height="wrap_content"
             android:text=""
             android:paddingTop="4dp"
-            android:textColor="@color/white"
+            android:textColor="@color/black"
             android:textSize="12sp" />
     </LinearLayout>
 
@@ -44,6 +44,5 @@
         android:layout_height="wrap_content"
         android:background="@null"
         android:contentDescription="@string/record_notification_action"
-        android:src="@drawable/ic_stop_filled"
-        android:tint="@color/white" />
+        android:src="@drawable/ic_stop_filled" />
 </LinearLayout>

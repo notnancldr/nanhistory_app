@@ -5,13 +5,16 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <queries>
         <intent>
@@ -81,6 +84,11 @@
             android:label="@string/title_activity_filepreview"
             android:theme="@style/Theme.NanHistory" />
         <activity
+            android:name=".debug.FilePlayerActivity"
+            android:exported="false"
+            android:label="@string/title_activity_fileplayer"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
             android:name=".debug.ConfigViewActivity"
             android:exported="false"
             android:label="@string/title_activity_config_view"
@@ -90,12 +98,17 @@
             android:exported="false"
             android:label="DataDirActivity"
             android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".debug.AudioListActivity"
+            android:exported="false"
+            android:label="AudioListActivity"
+            android:theme="@style/Theme.NanHistory" />
 
         <service
             android:name=".service.RecordService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="location" />
+            android:foregroundServiceType="location|microphone" />
 
         <activity
             android:name=".EditEventActivity"
@@ -115,6 +128,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.NanHistory">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -122,6 +136,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>
