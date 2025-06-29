@@ -18,18 +18,18 @@ import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SelectionAppBar(
-    selectedItems: List<HistoryEvent>,
+    selectedItems: Int,
     onCancel: (() -> Unit),
     modifier: Modifier = Modifier,
     actions: (@Composable RowScope.() -> Unit) = {}
 ) {
-    val hasSelection = selectedItems.isNotEmpty()
+    val hasSelection = selectedItems > 0
 //    val topBarText = if (hasSelection) {
 //        "${selectedItems.size} items"
 //    } else {
 //        "List of items"
 //    }
-    val topBarText = selectedItems.size.toString()
+    val topBarText = selectedItems.toString()
 
     TopAppBar(
         title = {

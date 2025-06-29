@@ -42,6 +42,8 @@ object ServiceBroadcast {
     const val EXTRA_EVENT_ID = "EXTRA_EVENT_ID"
     const val EXTRA_EVENT_PATH = "EXTRA_EVENT_PATH"
     const val EXTRA_EVENT_POINT = "EXTRA_EVENT_POINT"
+
+    const val ACTION_UPDATE_DATA = "id.my.nanclouder.nanhistory.ACTION_UPDATE_DATA"
 }
 
 object RecordStatus {

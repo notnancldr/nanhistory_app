@@ -4,6 +4,9 @@ import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import id.my.nanclouder.nanhistory.db.AppDatabase
+import id.my.nanclouder.nanhistory.db.toDayEntity
+import id.my.nanclouder.nanhistory.db.toEventEntity
 import id.my.nanclouder.nanhistory.lib.Coordinate
 import id.my.nanclouder.nanhistory.lib.FILE_VERSION
 import id.my.nanclouder.nanhistory.lib.matchOrNull
@@ -23,6 +26,11 @@ import kotlin.random.Random
 
 enum class EventTypes {
     Point, Range
+}
+
+enum class TransportationType {
+    Unspecified, Walk, Bicycle, Motorcycle, Car, Train,
+    Airplane, Ferry
 }
 
 object HistoryFileDataProperty {
@@ -55,6 +63,7 @@ object HistoryEventProperty {
     const val LOCATION_DESCRIPTIONS = "locationDescriptions"
     const val LOCATION_PATH = "locationPath"
     const val AUDIO = "audio"
+    const val TRANSPORTATION_TYPE = "transportationType"
 }
 
 val EventPointProperties = listOf(
@@ -90,7 +99,8 @@ val EventRangeProperties = listOf(
     HistoryEventProperty.LOCATIONS,
     HistoryEventProperty.LOCATION_DESCRIPTIONS,
     HistoryEventProperty.LOCATION_PATH,
-    HistoryEventProperty.AUDIO
+    HistoryEventProperty.AUDIO,
+    HistoryEventProperty.TRANSPORTATION_TYPE
 )
 
 val HistoryEventSignatureExcluded = listOf(
@@ -100,7 +110,8 @@ val HistoryEventSignatureExcluded = listOf(
     HistoryEventProperty.MODIFIED,
     HistoryEventProperty.FAVORITE,
     HistoryEventProperty.SIGNATURE,
-    HistoryEventProperty.METADATA
+    HistoryEventProperty.METADATA,
+    HistoryEventProperty.TRANSPORTATION_TYPE
 )
 
 fun getFilePathFromDate(date: LocalDate): String =
@@ -127,7 +138,8 @@ data class HistoryDay(
     var date: LocalDate,
     var description: String?,
     var favorite: Boolean = false,
-    var tags: List<String> = listOf()
+    var tags: List<HistoryTag> = listOf(),
+    var metadata: MutableMap<String, Any> = mutableMapOf(),
 )
 
 abstract class HistoryEvent (
@@ -150,13 +162,11 @@ abstract class HistoryEvent (
     private var locationsData: Map<ZonedDateTime, Coordinate>? = null
 
     fun getLocations(context: Context): Map<ZonedDateTime, Coordinate> {
-        Log.d("NanHistoryDebug", Log.getStackTraceString(java.lang.Exception()))
         return (locationPath?.let {
             val locationFile = getLocationFile(it, context)
             locationsData = locationFile.locations.ifEmpty {
                 File(it).delete()
                 locationPath = null
-                this.save(context)
                 null
             } ?: mapOf()
             locationsData
@@ -199,8 +209,9 @@ data class EventRange(
     override var locationPath: String? = null,
     override var audio: String? = null,
     var end: ZonedDateTime,
-//    var locations: MutableMap<ZonedDateTime, Coordinate> = mutableMapOf(),
+    var transportationType: TransportationType = TransportationType.Unspecified,
     var locationDescriptions: MutableMap<ZonedDateTime, String> = mutableMapOf()
+    // var locations: MutableMap<ZonedDateTime, Coordinate> = mutableMapOf(),
 ) : HistoryEvent(id, title, description, time, favorite,
     created = created,
     modified = modified,
@@ -236,7 +247,7 @@ data class HistoryFileData(
         date = date,
         description = description,
         favorite = favorite,
-        tags = tags
+        // tags = tags
     )
 }
 
@@ -389,6 +400,44 @@ class MigrationState(
     val progress: Float,
     val finish: Boolean
 )
+
+suspend fun migrateData(context: Context, onUpdate: ((MigrationState, String) -> Unit)) {
+    migrateLocationData(context) { onUpdate(it, "locationData") }
+    migrateToDatabase(context) { onUpdate(it, "toDatabase") }
+}
+
+suspend fun migrateToDatabase(context: Context, onUpdate: ((MigrationState) -> Unit)) {
+    withContext(Dispatchers.IO) {
+        val db = AppDatabase.getInstance(context)
+        val dao = db.appDao()
+
+        val fileData = HistoryFileData.getFileListStream(context)
+
+        val totalData = fileData.size
+        var progress = 0
+
+        if (fileData.size > 0) {
+            dao.deleteAllEvents()
+            dao.deleteAllDays()
+            dao.deleteAllTags()
+        }
+
+        fileData.forEachAsync { data ->
+            dao.insertDay(data.historyDay.toDayEntity())
+            data.events.forEach {
+                dao.insertEvent(it.toEventEntity())
+            }
+
+            Log.d("NanHistoryDebug", "Migrated: ${data.date}")
+
+            progress++
+            onUpdate(MigrationState(progress / totalData.toFloat(), false))
+            data.delete(context)
+        }
+
+        onUpdate(MigrationState(1f, true))
+    }
+}
 
 suspend fun migrateLocationData(context: Context, onUpdate: ((MigrationState) -> Unit)) {
     val historyDir = File(context.filesDir, "history")
@@ -637,6 +686,13 @@ fun Map<String, Any>.toHistoryEvent(context: Context): HistoryEvent {
 //                brokenEvent = true
 //                locations = mapOf()
 //            }
+
+            val transportationType = (this[HistoryEventProperty.TRANSPORTATION_TYPE] as? String)
+                ?.let {
+                    try { TransportationType.valueOf(it) }
+                    catch (_: Exception) { null }
+                } ?: TransportationType.Unspecified
+
             EventRange(
                 id = id ?: generateEventId(Instant.now()),
                 title = title ?: "",
@@ -653,7 +709,8 @@ fun Map<String, Any>.toHistoryEvent(context: Context): HistoryEvent {
                 locationPath = locationPath,
                 unknownProperties = this.filterNot {
                     it.key in EventRangeProperties
-                }.toMutableMap()
+                }.toMutableMap(),
+                transportationType = transportationType
             )
         }
         else -> null
@@ -766,7 +823,7 @@ fun HistoryFileData.Companion.get(context: Context, path: String): HistoryFileDa
 fun HistoryFileData.Companion.get(context: Context, date: LocalDate): HistoryFileData? =
     HistoryFileData.get(context, getFilePathFromDate(date))
 
-fun HistoryFileData.Companion.getListStream(
+fun HistoryFileData.Companion.getFileListStream(
     context: Context,
     from: LocalDate = LocalDate.MIN,
     until: LocalDate = LocalDate.MAX,
@@ -813,48 +870,69 @@ fun HistoryFileData.Companion.getList(
     }.toList()
 }
 
-fun HistoryEvent.save(context: Context, ignoreOldData: Boolean = true) {
-    val date = this.time.toLocalDate()
-    val fileData = HistoryFileData.get(context, date)
-        ?: HistoryFileData(
-            date = date,
-            description = null,
-            events = mutableListOf()
-        )
+//fun HistoryEvent.save(context: Context, ignoreOldData: Boolean = true) {
+//    val date = this.time.toLocalDate()
+//    val fileData = HistoryFileData.get(context, date)
+//        ?: HistoryFileData(
+//            date = date,
+//            description = null,
+//            events = mutableListOf()
+//        )
+//
+//    // Cancel saving data if the newer one with the same ID is found
+//    if (fileData.events.find { it.modified > this.modified && it.id == this.id } != null
+//        && ignoreOldData) return
+//    fileData.events.removeAll { it.id == this.id }
+//    fileData.events.add(this)
+//    fileData.save(context)
+//}
 
-    // Cancel saving data if the newer one with the same ID is found
-    if (fileData.events.find { it.modified > this.modified && it.id == this.id } != null
-        && ignoreOldData) return
-    fileData.events.removeAll { it.id == this.id }
-    fileData.events.add(this)
-    fileData.save(context)
-}
+//fun HistoryEvent.delete(context: Context, deleteAttachments: Boolean = true) {
+//    val fileData = HistoryFileData.get(context, this.time.toLocalDate())
+//
+//    fileData?.events?.removeAll {
+////        Log.d("NanHistoryDebug", "DELETING: ${it.title}, ID: ${it.id}")
+//        if (it.id == this.id) {
+//            if (it.audio != null && deleteAttachments) {
+//                val audioFile = File(context.applicationContext.filesDir, "audio/${it.audio}")
+////                Log.d("NanHistoryDebug", "Audio file: ${audioFile.absolutePath}")
+//                if (audioFile.exists()) Log.d("NanHistoryDebug", "Audio file exists")
+////                else Log.d("NanHistoryDebug", "Audio file doesn't exist")
+//                audioFile.delete()
+//            }
+//            if (it.locationPath != null && deleteAttachments) {
+//                val locationFile = File(context.filesDir, "locations/${it.locationPath}")
+//                Log.d("NanHistoryDebug", "Location file: ${locationFile.absolutePath}")
+//                if (locationFile.exists()) Log.d("NanHistoryDebug", "Location file exists")
+//                else Log.d("NanHistoryDebug", "Location file doesn't exist")
+//                if (locationFile.exists()) locationFile.delete()
+//            }
+//            true
+//        }
+//        else false
+//    }
+//    fileData?.save(context)
+//}
 
-fun HistoryEvent.delete(context: Context, deleteAttachments: Boolean = true) {
-    val fileData = HistoryFileData.get(context, this.time.toLocalDate())
-
-    fileData?.events?.removeAll {
-//        Log.d("NanHistoryDebug", "DELETING: ${it.title}, ID: ${it.id}")
-        if (it.id == this.id) {
-            if (it.audio != null && deleteAttachments) {
-                val audioFile = File(context.applicationContext.filesDir, "audio/${it.audio}")
+suspend fun HistoryEvent.safeDelete(context: Context, deleteAttachments: Boolean = true) {
+    val db = AppDatabase.getInstance(context)
+    val dao = db.appDao()
+    if (audio != null && deleteAttachments) {
+        val audioFile = File(context.applicationContext.filesDir, "audio/$audio")
 //                Log.d("NanHistoryDebug", "Audio file: ${audioFile.absolutePath}")
-                if (audioFile.exists()) Log.d("NanHistoryDebug", "Audio file exists")
+        if (audioFile.exists()) Log.d("NanHistoryDebug", "Audio file exists")
 //                else Log.d("NanHistoryDebug", "Audio file doesn't exist")
-                audioFile.delete()
-            }
-            if (it.locationPath != null && deleteAttachments) {
-                val locationFile = File(context.filesDir, "locations/${it.locationPath}")
-                Log.d("NanHistoryDebug", "Location file: ${locationFile.absolutePath}")
-                if (locationFile.exists()) Log.d("NanHistoryDebug", "Location file exists")
-                else Log.d("NanHistoryDebug", "Location file doesn't exist")
-                if (locationFile.exists()) locationFile.delete()
-            }
-            true
-        }
-        else false
+        audioFile.delete()
     }
-    fileData?.save(context)
+    if (locationPath != null && deleteAttachments) {
+        val locationFile = File(context.filesDir, "locations/$locationPath")
+        Log.d("NanHistoryDebug", "Location file: ${locationFile.absolutePath}")
+        if (locationFile.exists()) Log.d("NanHistoryDebug", "Location file exists")
+        else Log.d("NanHistoryDebug", "Location file doesn't exist")
+        if (locationFile.exists()) locationFile.delete()
+    }
+
+    dao.deleteEvent(toEventEntity())
 }
 
 fun HistoryFileData.save(context: Context) {
@@ -870,6 +948,6 @@ fun HistoryFileData.save(context: Context) {
 }
 
 fun HistoryFileData.delete(context: Context) {
-    val file = File(getFilePathFromDate(this.date))
+    val file = File(context.filesDir, getFilePathFromDate(this.date))
     if (file.exists()) file.delete()
 }

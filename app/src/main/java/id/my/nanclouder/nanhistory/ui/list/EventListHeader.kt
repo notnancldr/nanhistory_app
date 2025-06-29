@@ -3,6 +3,7 @@ package id.my.nanclouder.nanhistory.ui.list
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -24,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.layout.VerticalAlignmentLine
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -48,12 +50,14 @@ fun EventListHeader(
     onFavoriteChanged: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
-    val tagData = historyDay.tags.mapNotNull { HistoryTag.get(context, it) }
+    val tagData = historyDay.tags
     val headlineFontSize = 4.em
     val headlineFontWeight = FontWeight.W500
     var favorite by remember { mutableStateOf(historyDay.favorite) }
 //    HorizontalDivider(modifier = dividerModifier)
     ListItem(
+        modifier = modifier,
+        /*
         modifier = modifier
             .clip(
                 when (expanded) {
@@ -71,36 +75,43 @@ fun EventListHeader(
                 else Icon(Icons.Rounded.KeyboardArrowDown, "Expand")
             }
         }) else null,
+        */
         headlineContent = {
             val format = DateFormatter
             val dateStr = historyDay.date.format(format)
-            Text(
-                dateStr,
-//                fontSize = headlineFontSize,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = headlineFontWeight,
-                textAlign = TextAlign.Center,
-                color = if (isSystemInDarkTheme()) Color.LightGray else Color.DarkGray
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    dateStr,
+    //                fontSize = headlineFontSize,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = headlineFontWeight,
+                    textAlign = TextAlign.Center,
+                    color = if (isSystemInDarkTheme()) Color.LightGray else Color.DarkGray
+                )
+                Box(Modifier.width(8.dp))
+                Text(
+                    text = "($eventCount)",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color.Gray
+                )
+            }
         },
         trailingContent = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("($eventCount)", style = MaterialTheme.typography.labelLarge)
-                Box(Modifier.width(8.dp))
-                IconButton(
-                    onClick = {
-                        onFavoriteChanged(!favorite)
-                        favorite = !favorite
-                    }
-                ) {
-                    if (favorite) Icon(
-                        painterResource(R.drawable.ic_favorite_filled), "",
-                        tint = Color(0xFFFF7070)
-                    )
-                    else Icon(
-                        painterResource(R.drawable.ic_favorite), ""
-                    )
+            IconButton(
+                onClick = {
+                    onFavoriteChanged(!favorite)
+                    favorite = !favorite
                 }
+            ) {
+                if (favorite) Icon(
+                    painterResource(R.drawable.ic_favorite_filled), "",
+                    tint = Color(0xFFFF7070)
+                )
+                else Icon(
+                    painterResource(R.drawable.ic_favorite), ""
+                )
             }
         },
         supportingContent = {
@@ -110,8 +121,7 @@ fun EventListHeader(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             headlineColor = MaterialTheme.colorScheme.primary,
         ) else ListItemDefaults.colors(
-            containerColor = if (isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceContainer
-                else MaterialTheme.colorScheme.surface
+            containerColor = MaterialTheme.colorScheme.surface
         ),
         shadowElevation = if (expanded == true) 4.dp else ListItemDefaults.Elevation,
 //        else ListItemDefaults.colors(

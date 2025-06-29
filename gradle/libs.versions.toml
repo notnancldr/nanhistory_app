@@ -25,6 +25,7 @@ roomRuntime = "2.7.1"
 android-sdk-v1151 = { module = "org.maplibre.gl:android-sdk", version.ref = "androidSdkVersion" }
 androidx-activity = { module = "androidx.activity:activity", version.ref = "activity" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "roomRuntime" }
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "roomRuntime" }
 arthenica-ffmpeg-kit-full = { module = "com.arthenica:ffmpeg-kit-full", version.ref = "ffmpegKitFullVersion" }
 ffmpeg-kit-full-v602 = { module = "com.arthenica:ffmpeg-kit-full", version.ref = "arthenicaFfmpegKitFull" }

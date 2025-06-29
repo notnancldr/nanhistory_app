@@ -2,47 +2,100 @@ package id.my.nanclouder.nanhistory.ui
 
 import android.media.MediaPlayer
 import android.util.Log
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.R
+import id.my.nanclouder.nanhistory.db.AppDatabase
+import id.my.nanclouder.nanhistory.db.DayTagCrossRef
+import id.my.nanclouder.nanhistory.db.EventTagCrossRef
+import id.my.nanclouder.nanhistory.db.TagEntity
+import id.my.nanclouder.nanhistory.db.toHistoryTag
+import id.my.nanclouder.nanhistory.lib.backgroundTagColor
+import id.my.nanclouder.nanhistory.lib.history.HistoryTag
+import id.my.nanclouder.nanhistory.lib.history.generateTagId
 import id.my.nanclouder.nanhistory.lib.readableTimeHours
+import id.my.nanclouder.nanhistory.lib.textTagColor
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.last
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
 import java.time.Duration
+import java.time.LocalDate
+import java.time.ZonedDateTime
 
 @Composable
 fun ToggleButton(
@@ -181,7 +234,7 @@ fun AudioPlayer(path: String) {
         modifier = Modifier
             .padding(8.dp)
             .height(64.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(16.dp))
     )
     else ListItem(
         headlineContent = {
@@ -199,4 +252,377 @@ fun AudioPlayer(path: String) {
             .height(64.dp)
             .clip(RoundedCornerShape(8.dp))
     )
+}
+
+@Composable
+fun ComponentPlaceholder(modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "rotation")
+
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "placeholderAlpha"
+    )
+
+    Box(
+        modifier
+            .alpha(alpha)
+            .background(Color.Gray, RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(16.dp))
+    )
+}
+
+@Composable
+fun ColorIcon(color: Color, modifier: Modifier = Modifier) {
+    Canvas(
+        modifier = modifier.size(24.dp)
+    ) {
+        // outer circle for stroke
+        drawCircle(
+            color = Color.Gray,
+            style = Stroke(
+                width = 3.0f * density
+            ),
+            radius = size.minDimension / 3.0f
+        )
+        // inner circle for fill
+        drawCircle(
+            color = color,
+            style = androidx.compose.ui.graphics.drawscope.Fill,
+            radius = size.minDimension / 3.0f
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TagPickerDialog(
+    state: Boolean,
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    eventIds: List<String> = emptyList(),
+    dayDates: List<LocalDate> = emptyList(),
+) {
+    if (state) BasicAlertDialog(
+        onDismissRequest = {},
+        modifier = modifier,
+    ) {
+        val context = LocalContext.current
+        val haptic = LocalHapticFeedback.current
+        val scope = rememberCoroutineScope()
+
+        val listState = rememberLazyListState()
+
+        val db = AppDatabase.getInstance(context)
+        val dao = db.appDao()
+
+        val tagList by dao.getAllTags().map {
+            it.map { tag -> tag.toHistoryTag() }
+        }.collectAsState(emptyList())
+
+        // val selectedItems by dao.getTagIdsMatchingAllEventIds(eventIds)
+        //     .collectAsState(emptyList())
+
+        var oldSelected by remember { mutableStateOf<List<String>?>(null) }
+        val selectedItems = remember { mutableStateListOf<HistoryTag>() }
+
+        var newTagDialogState by remember { mutableStateOf(false) }
+
+        BackHandler {
+            onDismissRequest()
+        }
+
+        LaunchedEffect(Unit) {
+            oldSelected = dao.getTagIdsMatchingAllEventIds(eventIds)
+                .first()
+            selectedItems.addAll(tagList.filter { it.id in oldSelected!! })
+        }
+
+        val itemOnClick = { tag: HistoryTag ->
+             if (selectedItems.contains(tag))
+                 selectedItems.remove(tag)
+             else selectedItems.add(tag)
+        }
+
+        val darkTheme = isSystemInDarkTheme()
+
+        var isProcessing by rememberSaveable { mutableStateOf(false) }
+
+        Surface(
+            Modifier.clip(RoundedCornerShape(32.dp)),
+            color = MaterialTheme.colorScheme.surfaceContainer
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(8.dp)
+                    .fillMaxHeight(0.8f)
+                    .fillMaxWidth()
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .padding(vertical = 8.dp)
+                    ) {
+                        IconButton(onClick = onDismissRequest) {
+                            Icon(Icons.Rounded.Close, "Close")
+                        }
+                        Text("Select Tag", style = MaterialTheme.typography.titleLarge)
+                    }
+                    IconButton(onClick = { newTagDialogState = true }) {
+                        Icon(Icons.Rounded.Add, "New Tag")
+                    }
+                }
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .weight(1f)
+                        .clip(RoundedCornerShape(32.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                ) {
+                    if (oldSelected != null) items(tagList.size) { index ->
+                        val tagData = tagList[index]
+                        val isSelected = selectedItems.contains(tagData)
+                        ListItem(
+                            leadingContent = {
+                                ColorIcon(tagData.tint)
+                            },
+                            headlineContent = {
+                                Text(text = tagData.name)
+                            },
+                            trailingContent = {
+                                if (isSelected) Icon(
+                                    Icons.Rounded.Check,
+                                    "Selected"
+                                )
+                            },
+                            modifier = Modifier
+                                .clickable {
+                                    itemOnClick(tagData)
+                                },
+                            colors = ListItemDefaults.colors(
+                                containerColor =
+                                    if (!isSelected)
+                                        Color.Transparent
+                                    else
+                                        MaterialTheme.colorScheme.secondaryContainer,
+                                headlineColor =
+                                    if (!isSelected)
+                                        tagData.tint.textTagColor(darkTheme)
+                                    else
+                                        MaterialTheme.colorScheme.primary,
+                                trailingIconColor = MaterialTheme.colorScheme.primary
+                            )
+                        )
+                    }
+                    else {
+                        items(3) {
+                            ListItem(
+                                leadingContent = {
+                                    ComponentPlaceholder(Modifier.size(24.dp))
+                                },
+                                headlineContent = {
+                                    ComponentPlaceholder(Modifier.size(72.dp, 16.dp))
+                                }
+                            )
+                        }
+                    }
+                }
+                Row(
+                    horizontalArrangement = Arrangement.End,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            isProcessing = true
+                            scope.launch(Dispatchers.IO) {
+                                val selectedItemsIds = selectedItems.map { it.id }
+                                for (eventId in eventIds) {
+                                    for (tag in selectedItems) {
+                                        val eventTagCrossRef = EventTagCrossRef(
+                                            eventId = eventId,
+                                            tagId = tag.id
+                                        )
+                                        if (tag.id !in oldSelected!!)
+                                            dao.insertEventTagCrossRef(eventTagCrossRef)
+                                    }
+                                    for (tagId in oldSelected!!) {
+                                        val eventTagCrossRef = EventTagCrossRef(
+                                            eventId = eventId,
+                                            tagId = tagId
+                                        )
+                                        if (tagId !in selectedItemsIds)
+                                            dao.deleteEventTagCrossRef(eventTagCrossRef)
+                                    }
+                                }
+                                for (date in dayDates) {
+                                    for (tag in selectedItems) {
+                                        val dayTagCrossRef = DayTagCrossRef(
+                                            date = date,
+                                            tagId = tag.id
+                                        )
+                                        if (tag.id !in oldSelected!!)
+                                            dao.insertDayTagCrossRef(dayTagCrossRef)
+                                    }
+                                    for (tagId in oldSelected!!) {
+                                        val dayTagCrossRef = DayTagCrossRef(
+                                            date = date,
+                                            tagId = tagId
+                                        )
+                                        if (tagId !in selectedItemsIds)
+                                            dao.deleteDayTagCrossRef(dayTagCrossRef)
+                                    }
+                                }
+                                onDismissRequest()
+                            }
+                        },
+                        enabled = !isProcessing
+                    ) {
+                        if (!isProcessing) Text("Confirm")
+                        else Icon(Icons.Rounded.MoreVert, "Loading", Modifier.rotate(90f))
+                    }
+                }
+            }
+            NewTagDialog(
+                state = newTagDialogState,
+                onDismissRequest = { newTagDialogState = false }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NewTagDialog(
+    state: Boolean,
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (state) BasicAlertDialog(
+        onDismissRequest = {},
+        modifier = modifier
+    ) {
+        val context = LocalContext.current
+        val haptic = LocalHapticFeedback.current
+        val scope = rememberCoroutineScope()
+
+        val db = AppDatabase.getInstance(context)
+        val dao = db.appDao()
+
+        var name by remember { mutableStateOf("") }
+        var description by remember { mutableStateOf("") }
+        var tint by remember { mutableStateOf("#FF00FF00") }
+
+        val strToColor = {
+            tint.removePrefix("#").toLongOrNull(16)?.let {
+                Color(it)
+            }
+        }
+
+        val isColorValid = strToColor() != null
+
+        var isProcessing by rememberSaveable { mutableStateOf(false) }
+
+        BackHandler {
+            onDismissRequest()
+        }
+
+        Surface(Modifier.clip(RoundedCornerShape(32.dp))) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp)
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.Start,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                ) {
+                    IconButton(onClick = onDismissRequest) {
+                        Icon(Icons.Rounded.Close, "Close")
+                    }
+                    Text("Add New Tag", style = MaterialTheme.typography.titleLarge)
+                }
+                Column(
+                    modifier = Modifier.padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Name") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    TextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("Description") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    TextField(
+                        value = tint,
+                        onValueChange = { tint = it },
+                        leadingIcon = {
+                            if (isColorValid) ColorIcon(
+                                color = strToColor()!!,
+                            ) else Icon(
+                                Icons.Rounded.Close,
+                                "Invalid Color",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        },
+                        label = { Text("Color") },
+                        supportingText = if (!isColorValid) ({
+                            Text("Invalid hex color!")
+                        }) else null,
+                        isError = !isColorValid,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Box(Modifier.height(8.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.End,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                    ) {
+                        Button(
+                            enabled = (
+                                    name.isNotBlank() &&
+                                            description.isNotBlank() &&
+                                            isColorValid
+                                    ),
+                            onClick = {
+                                isProcessing = true
+                                scope.launch(Dispatchers.IO) {
+                                    val newTag = TagEntity(
+                                        id = generateTagId(),
+                                        name = name.trim(),
+                                        description = description.trim(),
+                                        created = ZonedDateTime.now(),
+                                        tint = strToColor()!!
+                                    )
+                                    dao.insertTag(newTag)
+                                    onDismissRequest()
+                                }
+                            }
+                        ) {
+                            Text("Add")
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

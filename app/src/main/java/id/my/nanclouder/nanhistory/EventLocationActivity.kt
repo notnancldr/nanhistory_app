@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeight
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -42,12 +43,14 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -61,6 +64,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import id.my.nanclouder.nanhistory.db.AppDatabase
+import id.my.nanclouder.nanhistory.db.toEventEntity
+import id.my.nanclouder.nanhistory.db.toHistoryEvent
 import id.my.nanclouder.nanhistory.lib.Coordinate
 import id.my.nanclouder.nanhistory.lib.TimeFormatterWithSecond
 import id.my.nanclouder.nanhistory.lib.getLocationData
@@ -77,7 +83,9 @@ import id.my.nanclouder.nanhistory.lib.history.validateSignature
 import id.my.nanclouder.nanhistory.lib.history.writeToLocationFile
 import id.my.nanclouder.nanhistory.lib.matchOrNull
 import id.my.nanclouder.nanhistory.lib.toGeoPoint
+import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
+import kotlinx.coroutines.launch
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
 import org.osmdroid.events.ZoomEvent
@@ -110,7 +118,7 @@ class EventLocationActivity : ComponentActivity() {
             NanHistoryTheme {
 //                Log.d("NanHistoryDebug", "data (eventId) : $eventId")
 //                Log.d("NanHistoryDebug", "data (path)    : $path")
-                key(setUpdate) { EventLocationView(eventId, path, startAsCutMode) }
+                key(setUpdate) { EventLocationView(eventId, startAsCutMode) }
             }
         }
     }
@@ -123,21 +131,19 @@ class EventLocationActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EventLocationView(eventId: String, path: String, startAsCutMode: Boolean = false) {
+fun EventLocationView(eventId: String, startAsCutMode: Boolean = false) {
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
 //    val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-    val eventData: HistoryEvent? = remember {
-        val fileData = HistoryFileData.get(context, path)
-//        Log.d("NanHistoryDebug", "File data: $fileData")
-        fileData?.events?.firstOrNull {
-//            Log.d("NanHistoryDebug", "Event check: ${it.id} == $eventId -> ${it.id == eventId}")
-            it.id == eventId
-        }
-    }
+    val db = AppDatabase.getInstance(context)
+    val dao = db.appDao()
+
+    val eventState by dao.getEventFlowById(eventId).collectAsState(null)
+    val eventData = eventState?.toHistoryEvent()
 
     val recording = matchOrNull<Boolean>(eventData?.metadata?.get("recording")) ?: false
 
@@ -150,13 +156,16 @@ fun EventLocationView(eventId: String, path: String, startAsCutMode: Boolean = f
 
     Log.d("NanHistoryDebug", "eventData: $eventData")
 
-    if (eventData != null) Scaffold(
+    Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         modifier = Modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
                 title = {
-                    Text(if (cutMode) "Cut Event" else "Event Map")
+                    if (eventData != null)
+                        Text(if (cutMode) "Cut Event" else "Event Map")
+                    else
+                        ComponentPlaceholder(Modifier.size(128.dp, 16.dp))
                 },
                 navigationIcon = {
                     IconButton(
@@ -168,6 +177,7 @@ fun EventLocationView(eventId: String, path: String, startAsCutMode: Boolean = f
                     }
                 },
                 actions = {
+                    if (eventData == null) ComponentPlaceholder(Modifier.size(24.dp).padding(8.dp))
                     if (cutMode && eventData is EventRange) IconButton(
                         onClick = {
                             // TODO
@@ -216,7 +226,11 @@ fun EventLocationView(eventId: String, path: String, startAsCutMode: Boolean = f
                             }
                             if (eventData.validateSignature(context = context)) event.generateSignature(true, context)
 
-                            event.save(context)
+                            val db = AppDatabase.getInstance(context)
+                            val dao = db.appDao()
+
+                            scope.launch { dao.insertEvent(event.toEventEntity()) }
+
                             cutMode = false
                             Toast.makeText(context, "${event.title} has been saved", Toast.LENGTH_SHORT).show()
 
@@ -253,6 +267,7 @@ fun EventLocationView(eventId: String, path: String, startAsCutMode: Boolean = f
         Column(
             modifier = Modifier
                 .padding(paddingValues)
+                .fillMaxSize()
         ) {
             if (locationAvailable) {
                 MapHistoryView(
@@ -269,37 +284,11 @@ fun EventLocationView(eventId: String, path: String, startAsCutMode: Boolean = f
                     cutMode = cutMode
                 )
             }
-        }
-    }
-    else Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        modifier = Modifier.fillMaxSize(),
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text("Event not found")
-                },
-                navigationIcon = {
-                    IconButton(
-                        onClick = {
-                            context.getActivity()?.finish()
-                        }
-                    ) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
-                    }
-                }
+            else ComponentPlaceholder(
+                Modifier
+                    .weight(1f)
+                    .padding(8.dp)
             )
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .padding(paddingValues)
-                .fillMaxSize(),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text("Event not found")
         }
     }
 }
@@ -328,8 +317,8 @@ fun calculateColor(speed: Int): Color {
 fun MapHistoryView(
     locations: Map<ZonedDateTime, Coordinate>,
     onPointsSelected: (ZonedDateTime?, ZonedDateTime?) -> Unit,
+    modifier: Modifier = Modifier,
     cutMode: Boolean = false,
-    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
 
@@ -854,6 +843,6 @@ fun MapHistoryView(
 @Composable
 fun EventLocationPreview() {
     NanHistoryTheme {
-        EventLocationView("", "")
+        EventLocationView("")
     }
 }

@@ -72,6 +72,7 @@ plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.jetbrainsKotlinAndroid)
     alias(libs.plugins.compose.compiler)
+    id("com.google.devtools.ksp")
 }
 
 android {
@@ -147,6 +148,7 @@ android {
 
 dependencies {
 //    implementation(libs.kotlin.stdlib)
+    ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.room.runtime)
 //    implementation(libs.ffmpeg.kit.full.v602)
     implementation(libs.android.sdk.v1151)

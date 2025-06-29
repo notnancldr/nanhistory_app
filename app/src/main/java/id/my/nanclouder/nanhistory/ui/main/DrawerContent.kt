@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import id.my.nanclouder.nanhistory.BackupActivity
+import id.my.nanclouder.nanhistory.DeletedEventActivity
 import id.my.nanclouder.nanhistory.debug.DebugActivity
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.settings.SettingsActivity
@@ -51,6 +52,16 @@ fun DrawerContent() {
                         .padding(16.dp),
                     painter = painterResource(id = R.drawable.nanhistory_logo_1),
                     contentDescription = "NanHistory",
+                )
+                NavigationDrawerItem(
+                    modifier = itemModifier,
+                    icon = { Icon(painterResource(R.drawable.ic_delete_filled), "Deleted") },
+                    label = { drawerItemText("Deleted Events") },
+                    selected = false,
+                    onClick = {
+                        val intent = Intent(context, DeletedEventActivity::class.java)
+                        context.startActivity(intent)
+                    }
                 )
                 NavigationDrawerItem(
                     modifier = itemModifier,

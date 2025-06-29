@@ -7,7 +7,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import id.my.nanclouder.nanhistory.lib.Coordinate
 import id.my.nanclouder.nanhistory.lib.history.EventTypes
-import id.my.nanclouder.nanhistory.lib.toCoordinateOrNull
+import id.my.nanclouder.nanhistory.lib.history.TransportationType
 import java.time.LocalDate
 import java.time.ZonedDateTime
 
@@ -18,7 +18,13 @@ class Converters {
     fun fromEventType(value: EventTypes): String = value.name
 
     @TypeConverter
-    fun toStatus(value: String): EventTypes = EventTypes.valueOf(value)
+    fun toEventType(value: String): EventTypes = EventTypes.valueOf(value)
+
+    @TypeConverter
+    fun fromTransportationType(value: TransportationType): String = value.name
+
+    @TypeConverter
+    fun toTransportationType(value: String): TransportationType = TransportationType.valueOf(value)
 
     @TypeConverter
     fun fromZonedDateTime(value: ZonedDateTime): String = value.toOffsetDateTime().toString()

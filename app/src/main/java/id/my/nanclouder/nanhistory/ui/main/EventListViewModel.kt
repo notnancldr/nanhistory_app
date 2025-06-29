@@ -2,126 +2,124 @@ package id.my.nanclouder.nanhistory.ui.main
 
 import android.content.Context
 import android.util.Log
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import id.my.nanclouder.nanhistory.lib.history.HistoryFileData
-import id.my.nanclouder.nanhistory.lib.history.get
-import id.my.nanclouder.nanhistory.lib.history.getDateFromFilePath
-import id.my.nanclouder.nanhistory.lib.history.getListStream
+import id.my.nanclouder.nanhistory.db.AppDao
+import id.my.nanclouder.nanhistory.db.AppDatabase
+import id.my.nanclouder.nanhistory.db.toHistoryEvent
+import id.my.nanclouder.nanhistory.lib.history.HistoryDay
+import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
+
+enum class EventSelectMode {
+    Default, Favorite, Search, Deleted, Tagged
+}
 
 class EventListViewModel(
     context: Context,
     private val from: LocalDate = LocalDate.MIN,
-    private val until: LocalDate = LocalDate.MAX,
-    private val favorite: Boolean = false,
-    private val searchMode: Boolean = false
+    private val until: LocalDate = LocalDate.parse("9999-12-31"),
+    private val mode: EventSelectMode = EventSelectMode.Default,
+    private val tagId: String? = null
 ) : ViewModel() {
-    private val _list = MutableStateFlow<List<HistoryFileData>>(emptyList()) // Holds loaded data
-    val list: StateFlow<List<HistoryFileData>> = _list // Expose sorted list
+    private val _events = MutableStateFlow<List<HistoryEvent>>(emptyList()) // Holds loaded data
+    val events: StateFlow<List<HistoryEvent>> = _events // Expose sorted list
+
+    private val _days = MutableStateFlow<List<HistoryDay>>(emptyList()) // Holds loaded data
+    val days: StateFlow<List<HistoryDay>> = _days // Expose sorted list
+
     private val _isLoading = MutableStateFlow(false) // Loading state
     val isLoading: StateFlow<Boolean> = _isLoading // Expose as immutable
 
-    private var _searchQuery = MutableStateFlow("")
-    private var _expandSetter by mutableStateOf({ _: Boolean -> })
-    private var _selector by mutableStateOf({ })
+    private val db: AppDatabase = AppDatabase.getInstance(context)
+    private val dao: AppDao = db.appDao()
 
     init {
-        if (!searchMode) load(context) // Start loading files when ViewModel initializes
+        // Start loading files when ViewModel initializes
+        load()
     }
 
-    fun search(context: Context, query: String) {
-        _searchQuery.value = query
-        reload(context)
+    override fun onCleared() {
+        super.onCleared()
+        viewModelScope.cancel()
     }
 
-    fun expandStateChange(setter: (Boolean) -> Unit) { _expandSetter = setter }
-    fun selector(selector: () -> Unit) { _selector = selector }
-
-    private fun MutableList<HistoryFileData>.filterItem(day: HistoryFileData) {
-        if (day.events.isNotEmpty()) {
-            if (searchMode) {
-                Log.d("NanHistoryDebug", "SEARCH MODE")
-                val query = _searchQuery.value
-                if (_searchQuery.value.isNotBlank()) day.let {
-                    it.events.removeAll { event ->
-                        !(
-                            event.title.contains(query, ignoreCase = true) ||
-                            event.description.contains(
-                                query,
-                                ignoreCase = true
-                            ) ||
-                            event.time.format(
-                                DateTimeFormatter.ofLocalizedDateTime(
-                                    FormatStyle.FULL
-                                )
-                            )
-                            .contains(query, ignoreCase = true)
-                        )
-                    }
-                    if (it.events.isNotEmpty()) add(it)
-                    //            }.filter { it.events.isNotEmpty() }
-                }
+    fun search(query: String) {
+        viewModelScope.launch {
+            if (query.isNotBlank()) AppDatabase.search(dao, query).collect {
+                if (query.isNotBlank())
+                    _events.value = it
             }
-            else if (!favorite) { add(day); Log.d("NanHistoryDebug", "NOT FAVORITE") }
-            else if (day.favorite) { add(day); Log.d("NanHistoryDebug", "IS FAVORITE") }
-            else if (day.events.find { event -> event.favorite } != null)
-                add(day.apply {
-                    events.removeAll { event -> !event.favorite }
-                })
+            else _events.value = emptyList()
         }
     }
 
-    private fun load(context: Context) {
+    private fun load() {
         if (_isLoading.value) return
         _isLoading.value = true
-        viewModelScope.launch(Dispatchers.IO) {
-            HistoryFileData
-                .getListStream(context, from = from, until = until).apply {
-                    sortedByDescending { getDateFromFilePath(it.absolutePath) }
-                }.forEachAsync {
-                    _list.value = _list.value.toMutableList().apply {
-                        filterItem(it)
-                    }
-//                    _list.sortBy { data -> data.date }
-                }
+        if (mode == EventSelectMode.Tagged) viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = false
+            dao.getEventsByTagIds(listOf(tagId!!)).map{
+                it.map { event -> event.toHistoryEvent() }
+            }.collect { events ->
+                _events.value = events
+                Log.d("NanHistoryDebug", "Loaded ${events.size} events")
+            }
+        }
+        else if (mode != EventSelectMode.Search) viewModelScope.launch(Dispatchers.IO) {
+            _isLoading.value = false
+            AppDatabase.getEventsInRange(dao, from, until, mode).collect { events ->
+                _events.value = events
+                Log.d("NanHistoryDebug", "Loaded ${events.size} events")
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoading.value = false
+            AppDatabase.getDaysInRange(dao, from, until, mode == EventSelectMode.Favorite).collect { days ->
+                _days.value = days
+                Log.d("NanHistoryDebug", "Loaded ${days.size} days")
+            }
+//            _isLoading.value = false
         }
     }
-
-    fun collapseAll() = _expandSetter.invoke(false)
-    fun expandAll() = _expandSetter.invoke(true)
-    fun selectAll() = _selector.invoke()
 
     fun cancelLoading() {
         viewModelScope.cancel()
         _isLoading.value = false
     }
 
-    fun reload(context: Context) {
+    fun clear() {
+        _events.value = emptyList()
+        _days.value = emptyList()
+        _isLoading.value = false
+    }
+
+    fun reload() {
         if (_isLoading.value) return
-        _list.value = emptyList()
-        load(context)
+        _events.value = emptyList()
+        _days.value = emptyList()
+        load()
     }
+}
 
-    fun update(context: Context, date: LocalDate) {
-        val fileData = HistoryFileData.get(context, date)
-        val tempList = _list.value.toMutableList()
-
-        tempList.removeIf { date == it.date }
-//        if (fileData != null && fileData.events.isNotEmpty())
-//            tempList.add(fileData)
-        if (fileData != null) tempList.filterItem(fileData)
-        _list.value = tempList.toList().sortedByDescending { it.date }
-    }
+@Composable
+fun rememberEventListViewModel(
+    from: LocalDate = LocalDate.MIN,
+    until: LocalDate = LocalDate.parse("9999-12-31"),
+    mode: EventSelectMode = EventSelectMode.Default
+): EventListViewModel {
+    val context = LocalContext.current
+    return remember { EventListViewModel(context, from, until, mode) }
 }

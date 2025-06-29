@@ -20,7 +20,7 @@ import org.osmdroid.library.BuildConfig
 import java.time.Instant
 
 enum class NanHistoryPages {
-    Events, Search
+    Events, Tags, Search
 }
 
 enum class ListFilters {

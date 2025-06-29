@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -25,8 +26,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.R
+import id.my.nanclouder.nanhistory.lib.backgroundTagColor
 import id.my.nanclouder.nanhistory.lib.history.HistoryTag
-import id.my.nanclouder.nanhistory.lib.copyWith
+import id.my.nanclouder.nanhistory.lib.textTagColor
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -36,10 +38,7 @@ fun TagsView(tags: List<HistoryTag>, limit: Int = 3, wrap: Boolean = false, favo
 
     var tagLimit = limit
 
-    val backgroundValue = if (isSystemInDarkTheme()) .2f else .95f
-    val backgroundSaturation = if (isSystemInDarkTheme()) .2f else .2f
-    val onBackgroundValue = if (isSystemInDarkTheme()) .9f else .2f
-    val onBackgroundSaturation = if (isSystemInDarkTheme()) .2f else .98f
+    val darkTheme = isSystemInDarkTheme()
 
     val scrollState = rememberScrollState()
     val rowModifier = Modifier.horizontalScroll(state = scrollState)
@@ -63,19 +62,17 @@ fun TagsView(tags: List<HistoryTag>, limit: Int = 3, wrap: Boolean = false, favo
         shownTags.take(tagLimit).forEach { tag ->
             Text(
                 tag.name,
-                color = tag.tint.copyWith(saturation = onBackgroundSaturation, value = onBackgroundValue),
+                color = tag.tint.textTagColor(darkTheme),
                 modifier = Modifier
                     .background(
-                        color = tag.tint.copyWith(
-                            saturation = backgroundSaturation,
-                            value = backgroundValue
-                        ),
+                        color = tag.tint.backgroundTagColor(darkTheme),
                         shape = RoundedCornerShape(100.dp)
                     )
-                    .padding(PaddingValues(horizontal = 8.dp, vertical = 2.dp))
+                    .padding(PaddingValues(horizontal = 8.dp, vertical = 4.dp))
                     .sizeIn(),
                 overflow = TextOverflow.Ellipsis,
-                softWrap = false
+                softWrap = false,
+                style = MaterialTheme.typography.labelMedium
             )
         }
         if (tags.size > tagLimit) {
@@ -87,7 +84,8 @@ fun TagsView(tags: List<HistoryTag>, limit: Int = 3, wrap: Boolean = false, favo
                         color = Color(0xFF606060),
                         shape = RoundedCornerShape(100.dp)
                     )
-                    .padding(PaddingValues(horizontal = 8.dp, vertical = 2.dp)),
+                    .padding(PaddingValues(horizontal = 8.dp, vertical = 4.dp)),
+                style = MaterialTheme.typography.labelMedium
             )
         }
     }

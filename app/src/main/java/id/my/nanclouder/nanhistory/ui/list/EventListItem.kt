@@ -205,7 +205,7 @@ fun EventListItem(
             }
         },
         supportingContent = {
-            TagsView(listOf(), favorite = eventData.favorite) // TODO
+            TagsView(eventData.tags, favorite = eventData.favorite) // TODO
         },
         trailingContent = {
             Text(timeStr)
@@ -215,8 +215,7 @@ fun EventListItem(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             headlineColor = MaterialTheme.colorScheme.primary,
         ) else ListItemDefaults.colors(
-            containerColor = if (isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceContainer
-                else MaterialTheme.colorScheme.surface
+            containerColor = MaterialTheme.colorScheme.surface
         ),
     )
 }

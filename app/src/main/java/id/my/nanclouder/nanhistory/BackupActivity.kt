@@ -10,19 +10,23 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -30,6 +34,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -39,11 +44,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.lib.LogData
 import id.my.nanclouder.nanhistory.lib.readableSize
+import id.my.nanclouder.nanhistory.service.BackupService
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -81,11 +90,11 @@ class BackupActivity : ComponentActivity() {
 }
 
 enum class BackupProgressStage {
-    Init, Compress, Encrypt, Done, Error
+    Init, Compress, Encrypt, Done, Error, Cancelled
 }
 
 enum class ImportProgressStage {
-    Init, Decrypt, Extract, Done, Error
+    Init, Decrypt, Extract, Done, Migrate, Error, Cancelled
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -96,10 +105,29 @@ fun BackupView() {
     val lazyListState = rememberLazyListState()
     val context = LocalContext.current
 
-    var progress by rememberSaveable { mutableLongStateOf(0L) }
-    var progressTarget by rememberSaveable { mutableLongStateOf(0L) }
-    var backupStage by rememberSaveable { mutableStateOf<BackupProgressStage?>(null) }
-    var importStage by rememberSaveable { mutableStateOf<ImportProgressStage?>(null) }
+//    var progress by rememberSaveable { mutableLongStateOf(0L) }
+//    var progressTarget by rememberSaveable { mutableLongStateOf(0L) }
+//    var backupStage by rememberSaveable { mutableStateOf<BackupProgressStage?>(null) }
+
+    val progress by BackupService.ServiceState.progress.collectAsState()
+    val progressTarget by BackupService.ServiceState.progressMax.collectAsState()
+    val backupStage by BackupService.BackupState.stage.collectAsState()
+    val importStage by BackupService.ImportState.stage.collectAsState()
+    val currentOperation by BackupService.ServiceState.operationType.collectAsState()
+
+    val serviceIsRunning by BackupService.ServiceState.isRunning.collectAsState()
+
+//    if (importStage == ImportProgressStage.Done) {
+//        val intent = Intent(context, MainActivity::class.java)
+//        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK + Intent.FLAG_ACTIVITY_CLEAR_TASK)
+//        val stageNull = {
+//            BackupService.ImportState.stage.value = null
+//        }
+//
+//        stageNull()
+//        context.startActivity(intent)
+//        context.getActivity()?.finish()
+//    }
 
     // Create the launcher
     val launcherBackup = rememberLauncherForActivityResult(
@@ -109,99 +137,17 @@ fun BackupView() {
             if (result.resultCode == Activity.RESULT_OK) {
                 // There are no request codes
                 val data: Intent? = result.data
-                var outputStream: OutputStream? = null
-                backupStage = BackupProgressStage.Init
-                try {
-                    data?.data?.let { uri ->
-                        withContext(Dispatchers.IO) {
-                            val inputDirectory = context.filesDir
-                            outputStream = context.contentResolver.openOutputStream(uri)
+                data?.data?.let { uri ->
+                    val intent = Intent(context, BackupService::class.java)
+                    intent.putExtra(BackupService.FILE_URI_EXTRA, uri.toString())
+                    intent.putExtra(BackupService.OPERATION_TYPE_EXTRA, BackupService.OPERATION_BACKUP)
+                    context.startForegroundService(intent)
 
-                            val tempFile = File.createTempFile("backup", ".zip")
+//                    snackbarHostState.showSnackbar("Backup success")
+                } ?: snackbarHostState.showSnackbar("No file selected")
 
-                            ZipOutputStream(
-                                BufferedOutputStream(
-                                    FileOutputStream(
-                                        tempFile
-                                    )
-                                )
-                            ).use { zos ->
-                                val includedDirs = listOf(
-                                    "history",
-                                    "logs",
-                                    "config",
-                                    "audio",
-                                    "locations"
-                                )
-                                val inputFiles = (inputDirectory.listFiles() ?: arrayOf<File>())
-                                    .filter { includedDirs.contains(it.name) }
-                                    .map {
-                                        it.walkTopDown()
-                                    }
-
-                                backupStage = BackupProgressStage.Compress
-                                progress = 0
-                                progressTarget = inputFiles.sumOf {
-                                    it.toList().size
-                                }.toLong()
-
-                                inputFiles.forEach {
-                                    it.forEach { file ->
-                                        val zipFileName =
-                                            file.absolutePath.removePrefix(inputDirectory.absolutePath)
-                                                .removePrefix("/")
-                                        val entry =
-                                            ZipEntry("$zipFileName${(if (file.isDirectory) "/" else "")}")
-                                        zos.putNextEntry(entry)
-                                        progress++
-                                        if (file.isFile) {
-                                            file.inputStream()
-                                                .use { fis -> fis.copyTo(zos) }
-                                        }
-                                    }
-                                }
-                                zos.flush()
-                            }
-
-                            val PVqpACR05YRZx9ni = MessageDigest
-                                .getInstance("SHA-512")
-                                .digest(wAt2J7GmpkeWSRad.toByteArray())
-
-                            val buffer = mutableListOf<Byte>()
-
-                            backupStage = BackupProgressStage.Encrypt
-                            progress = 0
-                            progressTarget = tempFile.length()
-
-                            for (indexed in tempFile.readBytes().withIndex()) {
-                                val byte = (indexed.value + PVqpACR05YRZx9ni[indexed.index % PVqpACR05YRZx9ni.size] % 256).toByte()
-                                buffer.add(byte)
-                                if (buffer.size > 1_000_000) {
-                                    outputStream?.write(buffer.toByteArray())
-                                    buffer.clear()
-                                }
-                                if (indexed.index % 1000 == 0) progress += 1000
-                            }
-                            outputStream?.write(buffer.toByteArray())
-                            progress = progressTarget
-
-                        }
-                        backupStage = BackupProgressStage.Done
-                        snackbarHostState.showSnackbar("Backup success")
-                    } ?: snackbarHostState.showSnackbar("Backup success")
-                } catch (e: Exception) {
-                    backupStage = BackupProgressStage.Error
-                    snackbarHostState.showSnackbar("An error occurred during backup process")
-                    LogData(
-                        path = "error/Error ${Instant.now()}.log"
-                    ).apply {
-                        append("$e\n${e.stackTrace}")
-                        save(context)
-                    }
-                }
-                outputStream?.close()
             } else {
-                snackbarHostState.showSnackbar("Failed to create file")
+                snackbarHostState.showSnackbar("Backup canceled")
             }
         }
     }
@@ -212,97 +158,16 @@ fun BackupView() {
         scope.launch {
             if (result.resultCode == Activity.RESULT_OK) {
                 val data: Intent? = result.data
-                var inputStream: InputStream? = null
 
-                importStage = ImportProgressStage.Init
+                data?.data?.let { uri ->
+                    val intent = Intent(context, BackupService::class.java)
+                    intent.putExtra(BackupService.FILE_URI_EXTRA, uri.toString())
+                    intent.putExtra(BackupService.OPERATION_TYPE_EXTRA, BackupService.OPERATION_IMPORT)
+                    context.startForegroundService(intent)
+                } ?: snackbarHostState.showSnackbar("No file selected")
 
-                try {
-                    data?.data?.let { uri ->
-                        withContext(Dispatchers.IO) {
-                            inputStream = context.contentResolver.openInputStream(uri)
-
-                            val tempFile = File.createTempFile("import", ".zip.enc")
-                            inputStream?.use { it.copyTo(FileOutputStream(tempFile)) }
-
-                            // ACTIVATE THIS IF DECRYPTION SYSTEM IS READY
-                            val PVqpACR05YRZx9ni = MessageDigest
-                                .getInstance("SHA-512")
-                                .digest(wAt2J7GmpkeWSRad.toByteArray())
-
-                            val encryptedBytes = tempFile.readBytes()
-                            val decryptedBytes = mutableListOf<Byte>()
-
-                            importStage = ImportProgressStage.Decrypt
-                            progress = 0
-                            progressTarget = tempFile.length()
-
-                            val decryptedFile = File.createTempFile("import", ".zip")
-                            decryptedFile.outputStream().use { outputStream ->
-                                val buffer = mutableListOf<Byte>()
-
-                                for (indexed in encryptedBytes.withIndex()) {
-                                    val byte =
-                                        (indexed.value - PVqpACR05YRZx9ni[indexed.index % PVqpACR05YRZx9ni.size] + 256).toByte()
-                                    buffer.add(byte)
-                                    if (buffer.size > 1_000_000) {
-                                        outputStream.write(buffer.toByteArray())
-                                        buffer.clear()
-                                    }
-                                    if (indexed.index % 1000 == 0) progress += 1000
-                                }
-                                outputStream.write(buffer.toByteArray())
-//                                decryptedFile.writeBytes(decryptedBytes.toByteArray())
-                            }
-                            progress = progressTarget
-
-                            ZipFile(decryptedFile).use { zf ->
-                                val entries = zf.entries().toList()
-                                val outputDirectory = context.filesDir
-                                if (outputDirectory.exists() && outputDirectory.isDirectory)
-                                    outputDirectory.listFiles()?.forEach {
-                                        if (it.isDirectory) it.deleteRecursively()
-                                        else if (it.isFile) it.delete()
-                                    }
-                                outputDirectory.mkdirs()
-
-                                importStage = ImportProgressStage.Extract
-                                progress = 0
-                                progressTarget = entries.size.toLong()
-
-                                entries.forEach {
-                                    val outputFile = File(outputDirectory, it.name)
-//                                    Log.d("NanHistoryDebug", "Zip entry: ${it.name} [${
-//                                        if (it.isDirectory) "D" else "F"
-//                                    }], ${readableSize(it.size)}")
-                                    if (it.isDirectory) {
-                                        outputFile.mkdirs()
-                                    } else {
-//                                        Log.d("NanHistoryDebug", "OPEN: ${outputFile.absolutePath}")
-                                        outputFile.outputStream().use { fos ->
-//                                            Log.d("NanHistoryDebug", "WRITE: ${outputFile.absolutePath}")
-                                            zf.getInputStream(it).copyTo(fos)
-                                        }
-                                    }
-                                    progress++
-                                }
-                            }
-                        }
-                        importStage = ImportProgressStage.Done
-                        snackbarHostState.showSnackbar("Import success")
-                    } ?: snackbarHostState.showSnackbar("No file selected")
-                } catch (e: Exception) {
-                    importStage = ImportProgressStage.Error
-                    snackbarHostState.showSnackbar("An error occurred during import process")
-                    LogData(
-                        path = "error/Error ${Instant.now()}.log"
-                    ).apply {
-                        append("$e\n${e.stackTrace}")
-                        save(context)
-                    }
-                }
-                inputStream?.close()
             } else {
-                snackbarHostState.showSnackbar("Failed to import file")
+                snackbarHostState.showSnackbar("Import canceled")
             }
         }
     }
@@ -346,32 +211,73 @@ fun BackupView() {
                     else {
                         Column {
                             val progressTargetSafe = if (progressTarget == 0L) 1L else progressTarget
-                            val progressPercentage = progress * 100 / progressTargetSafe
+                            val progressPercentage = progress * 100f / progressTargetSafe
+                            val progressPercentageInt = progressPercentage.toInt()
                             Text(
                                 when (currentStage) {
                                     BackupProgressStage.Init -> "Initializing"
-                                    BackupProgressStage.Compress -> "Compressing $progressPercentage% ($progress/$progressTarget)"
+                                    BackupProgressStage.Compress -> "Compressing ${progressPercentageInt}% ($progress/$progressTarget)"
                                     BackupProgressStage.Encrypt ->
-                                        "Encrypting $progressPercentage% (${readableSize(progress)}/${readableSize(progressTarget)})"
+                                        "Encrypting $progressPercentageInt% (${readableSize(progress)}/${readableSize(progressTarget)})"
                                     BackupProgressStage.Done -> "Done"
                                     BackupProgressStage.Error -> "Backup failed"
+                                    BackupProgressStage.Cancelled -> "Backup cancelled"
                                 }
                             )
                             if (currentStage == BackupProgressStage.Init) LinearProgressIndicator(Modifier.fillMaxWidth())
-                            else if (currentStage == BackupProgressStage.Compress || currentStage == BackupProgressStage.Encrypt)
-                                LinearProgressIndicator(
-                                    progress = { (progress / progressTargetSafe).toFloat() },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
+                            else if (currentStage == BackupProgressStage.Compress || currentStage == BackupProgressStage.Encrypt) {
+                                val primaryColor = MaterialTheme.colorScheme.primary
+                                val primaryContainerColor = MaterialTheme.colorScheme.primaryContainer
+                                Canvas(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(12.dp)
+                                        .padding(vertical = 4.dp)
+                                ) {
+                                    drawLine(
+                                        color = primaryContainerColor,
+                                        start = Offset(0f, 0f),
+                                        end = Offset(size.width, 0f),
+                                        strokeWidth = size.height,
+                                        cap = StrokeCap.Round
+                                    )
+                                    drawLine(
+                                        color = primaryColor,
+                                        start = Offset(0f, 0f),
+                                        end = Offset(size.width * progressPercentage / 100, 0f),
+                                        strokeWidth = size.height,
+                                        cap = StrokeCap.Round
+                                    )
+                                }
+                            }
                         }
                     }
                 },
                 trailingContent = {
                     Button(
-                        enabled = operationEnabled,
-                        onClick = { handleBackup(launcherBackup) }
+                        enabled = !(serviceIsRunning && currentOperation == BackupService.OPERATION_IMPORT),
+                        onClick = {
+                            if (!serviceIsRunning) {
+                                handleBackup(launcherBackup)
+                            }
+                            else {
+                                val cancelIntent = Intent(context, BackupService::class.java).apply {
+                                    action = BackupService.ACTION_CANCEL_SERVICE
+                                }
+                                context.startService(cancelIntent)
+                            }
+                        },
+                        colors =
+                            if (serviceIsRunning) {
+                                ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error
+                                )
+                            }
+                            else {
+                                ButtonDefaults.buttonColors()
+                            }
                     ) {
-                        Text("Backup Now")
+                        Text(if (serviceIsRunning) "Cancel" else "Backup Now")
                     }
                 }
             )
@@ -388,33 +294,75 @@ fun BackupView() {
                     else {
                         Column {
                             val progressTargetSafe = if (progressTarget == 0L) 1L else progressTarget
-                            val progressPercentage = progress * 100 / progressTargetSafe
+                            val progressPercentage = progress * 100f / progressTargetSafe
+                            val progressPercentageInt = progressPercentage.toInt()
                             Text(
                                 when (currentStage) {
                                     ImportProgressStage.Init -> "Initializing"
                                     ImportProgressStage.Decrypt ->
-                                        "Decrypting $progressPercentage% (${readableSize(progress)}/${readableSize(progressTarget)})"
+                                        "Decrypting $progressPercentageInt% (${readableSize(progress)}/${readableSize(progressTarget)})"
                                     ImportProgressStage.Extract ->
-                                        "Extracting $progressPercentage% ($progress/$progressTarget)"
+                                        "Extracting $progressPercentageInt% ($progress/$progressTarget)"
+                                    ImportProgressStage.Migrate -> "Migrating data structure"
                                     ImportProgressStage.Done -> "Done"
                                     ImportProgressStage.Error -> "Backup failed"
+                                    ImportProgressStage.Cancelled -> "Backup cancelled"
                                 }
                             )
                             if (currentStage == ImportProgressStage.Init) LinearProgressIndicator(Modifier.fillMaxWidth())
-                            else if (currentStage == ImportProgressStage.Decrypt || currentStage == ImportProgressStage.Extract)
-                                LinearProgressIndicator(
-                                    progress = { (progress / progressTargetSafe).toFloat() },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
+                            else if (currentStage == ImportProgressStage.Decrypt || currentStage == ImportProgressStage.Extract) {
+                                val primaryColor = MaterialTheme.colorScheme.primary
+                                val primaryContainerColor =
+                                    MaterialTheme.colorScheme.primaryContainer
+                                Canvas(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(12.dp)
+                                        .padding(vertical = 4.dp)
+                                ) {
+                                    drawLine(
+                                        color = primaryContainerColor,
+                                        start = Offset(0f, 0f),
+                                        end = Offset(size.width, 0f),
+                                        strokeWidth = size.height,
+                                        cap = StrokeCap.Round
+                                    )
+                                    drawLine(
+                                        color = primaryColor,
+                                        start = Offset(0f, 0f),
+                                        end = Offset(size.width * progressPercentage / 100, 0f),
+                                        strokeWidth = size.height,
+                                        cap = StrokeCap.Round
+                                    )
+                                }
+                            }
                         }
                     }
                 },
                 trailingContent = {
                     Button(
-                        enabled = operationEnabled,
-                        onClick = { handleImport(launcherImport) }
+                        enabled = !(serviceIsRunning && currentOperation == BackupService.OPERATION_BACKUP),
+                        onClick = {
+                            if (!serviceIsRunning) {
+                                handleImport(launcherImport)
+                            }
+                            else {
+                                val cancelIntent = Intent(context, BackupService::class.java).apply {
+                                    action = BackupService.ACTION_CANCEL_SERVICE
+                                }
+                                context.startService(cancelIntent)
+                            }
+                        },
+                        colors =
+                            if (serviceIsRunning) {
+                                ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error
+                                )
+                            } else {
+                                ButtonDefaults.buttonColors()
+                            }
                     ) {
-                        Text("Import Backup")
+                        Text(if (serviceIsRunning) "Cancel" else "Import Now")
                     }
                 }
             )

@@ -33,7 +33,12 @@ import id.my.nanclouder.nanhistory.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SearchAppBar(isLoading: Boolean = false, onSearch: ((String) -> Unit), onCancel: () -> Unit) {
+fun SearchAppBar(
+    isLoading: Boolean = false,
+    onSearch: ((String) -> Unit),
+    onCancel: () -> Unit,
+    onChange: ((String) -> Unit)? = null
+) {
     var searchQuery by remember { mutableStateOf("") }
     TopAppBar(
         title = {
@@ -45,6 +50,7 @@ fun SearchAppBar(isLoading: Boolean = false, onSearch: ((String) -> Unit), onCan
                 },
                 onValueChange = {
                     searchQuery = it
+                    onChange?.invoke(it)
                 },
                 textStyle = MaterialTheme.typography.bodyLarge,
                 shape = RectangleShape,
