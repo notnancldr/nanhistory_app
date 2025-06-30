@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -70,7 +69,7 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
 
         val restColor = Color.Gray
 
-        var eventsSize by rememberSaveable { mutableLongStateOf(0L) }
+        var dbSize by rememberSaveable { mutableLongStateOf(0L) }
         var logsSize by rememberSaveable { mutableLongStateOf(0L) }
         var cacheSize by rememberSaveable { mutableLongStateOf(0L) }
         var audioSize by rememberSaveable { mutableLongStateOf(0L) }
@@ -93,12 +92,12 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
 
         val loader = suspend {
             withContext(Dispatchers.IO) {
-                eventsSize = getSize(File(filesDir, "history"))
+                dbSize = getSize(File(dataDir, "databases"))
                 logsSize = getSize(File(filesDir, "logs"))
                 cacheSize = getSize(cacheDir)
                 audioSize = getSize(File(filesDir, "audio"))
                 dataSize = getSize(dataDir)
-                otherSize = dataSize - (eventsSize + logsSize + cacheSize + audioSize)
+                otherSize = dataSize - (dbSize + logsSize + cacheSize + audioSize)
 
                 cacheDirs.clear()
                 dataDirs.clear()
@@ -195,7 +194,7 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
                                     .height(56.dp)
                                     .padding(16.dp),
                                 segments = listOf(
-                                    eventsSize.toFloat() to eventsColor,
+                                    dbSize.toFloat() to eventsColor,
                                     logsSize.toFloat() to logsColor,
                                     cacheSize.toFloat() to cacheColor,
                                     audioSize.toFloat() to audioColor,
@@ -216,7 +215,7 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
                             }
                         }
                         Column(Modifier.padding(16.dp).clip(RoundedCornerShape(16.dp))) {
-                            rowLabel(eventsColor, "Events", eventsSize.toFloat())
+                            rowLabel(eventsColor, "Database", dbSize.toFloat())
                             rowLabel(logsColor, "Logs data", logsSize.toFloat())
                             rowLabel(cacheColor, "Cache", cacheSize.toFloat())
                             rowLabel(audioColor, "Audio", audioSize.toFloat())
@@ -289,7 +288,7 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
                             Text(readableSize(size.toFloat()))
                         },
                         trailingContent = {
-                            if (!listOf("history", "logs", "config").contains(item.name)) {
+                            if (!listOf("history", "logs", "config", "audio", "locations").contains(item.name)) {
                                 IconButton(
                                     onClick = {
                                         fileToDelete = item

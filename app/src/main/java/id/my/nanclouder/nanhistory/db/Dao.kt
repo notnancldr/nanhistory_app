@@ -156,8 +156,14 @@ interface AppDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertEventTagCrossRef(crossRef: EventTagCrossRef)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertEventTagCrossRefs(crossRefs: List<EventTagCrossRef>)
+
     @Delete
     suspend fun deleteEventTagCrossRef(crossRef: EventTagCrossRef)
+
+    @Delete
+    suspend fun deleteEventTagCrossRefs(crossRefs: List<EventTagCrossRef>)
 
     @Query(
         "SELECT tagId FROM event_tag_cross_refs " +
@@ -182,8 +188,14 @@ interface AppDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDayTagCrossRef(crossRef: DayTagCrossRef)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDayTagCrossRefs(crossRefs: List<DayTagCrossRef>)
+
     @Delete
     suspend fun deleteDayTagCrossRef(crossRef: DayTagCrossRef)
+
+    @Delete
+    suspend fun deleteDayTagCrossRefs(crossRefs: List<DayTagCrossRef>)
 
     /* Delete permanently all deleted events that are older than 1 month */
     @Query("DELETE FROM events WHERE deletePermanently IS NOT NULL AND deletePermanently < :currentTime")

@@ -147,10 +147,11 @@ android {
 //}
 
 dependencies {
-//    implementation(libs.kotlin.stdlib)
+    // implementation(libs.kotlin.stdlib)
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.room.runtime)
-//    implementation(libs.ffmpeg.kit.full.v602)
+    // implementation(libs.ffmpeg.kit.full.v602)
+    implementation(libs.compose.colorpicker)
     implementation(libs.android.sdk.v1151)
     implementation(libs.google.accompanist.permissions)
     implementation(libs.androidx.activity)

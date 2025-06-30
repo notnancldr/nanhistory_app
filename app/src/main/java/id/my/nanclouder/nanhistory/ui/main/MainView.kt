@@ -20,6 +20,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -54,6 +55,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
@@ -159,7 +161,7 @@ import id.my.nanclouder.nanhistory.state.SelectionState
 import id.my.nanclouder.nanhistory.state.rememberSelectionState
 import id.my.nanclouder.nanhistory.ui.ColorIcon
 import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
-import id.my.nanclouder.nanhistory.ui.NewTagDialog
+import id.my.nanclouder.nanhistory.ui.TagEditorDialog
 import id.my.nanclouder.nanhistory.ui.TagPickerDialog
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.stream.consumeAsFlow
@@ -329,6 +331,13 @@ fun MainView() {
     val eventsViewModel = rememberEventListViewModel()
     val searchViewModel = rememberEventListViewModel(mode = EventSelectMode.Search)
 
+    searchViewModel.onGotoDay {
+        scope.launch {
+            pagerState.scrollToPage(NanHistoryPages.Events.ordinal)
+            eventsViewModel.gotoDay(it)
+        }
+    }
+
     val eventsSelectionState = rememberSelectionState<HistoryEvent>()
     val searchSelectionState = rememberSelectionState<HistoryEvent>()
     val tagListSelectionState = rememberSelectionState<HistoryTag>()
@@ -342,8 +351,8 @@ fun MainView() {
     var deleteDialogText by remember { mutableStateOf("") }
     var deleteButtonState by remember { mutableStateOf(false) }
 
-    var newTagDialogState by remember { mutableStateOf(false) }
-    var eventAddTagDialogState by remember { mutableStateOf(false) }
+    var tagEditorDialogState by remember { mutableStateOf(false) }
+    var tagPickerDialogState by remember { mutableStateOf(false) }
 
     var lock by remember { mutableStateOf(false) }
 
@@ -377,6 +386,8 @@ fun MainView() {
         NanHistoryPages.Search -> searchSelectionState.selectedItems
         else -> listOf(emptyList<HistoryEvent>()).stream().consumeAsFlow()
     }.collectAsState(emptyList())
+
+    val selectedTags by tagListSelectionState.selectedItems.collectAsState(emptyList())
 
     val selectedItemsSize by when (selectedPage) {
         NanHistoryPages.Events -> eventsSelectionState.selectedItems
@@ -623,6 +634,11 @@ fun MainView() {
                 if (selectionMode) SelectionAppBar(
                     selectedItemsSize, { resetSelectionMode() }
                 ) {
+                    if (selectedPage == NanHistoryPages.Tags && selectedItemsSize == 1) {
+                        IconButton(onClick = { tagEditorDialogState = true }) {
+                            Icon(Icons.Rounded.Edit, "Edit tag")
+                        }
+                    }
                     if (selectedPage != NanHistoryPages.Tags) {
                         IconButton(onClick = {
                             selectAll()
@@ -630,7 +646,7 @@ fun MainView() {
                             Icon(painterResource(R.drawable.ic_select_all), "Select all")
                         }
                         IconButton(onClick = {
-                            eventAddTagDialogState = true
+                            tagPickerDialogState = true
                         }) {
                             Icon(painterResource(R.drawable.ic_tag), "Add tag")
                         }
@@ -679,7 +695,7 @@ fun MainView() {
                     actions = {
                         if (selectedPage == NanHistoryPages.Tags) {
                             IconButton(onClick = {
-                                newTagDialogState = true
+                                tagEditorDialogState = true
                             }) {
                                 Icon(Icons.Rounded.Add, "Add tag")
                             }
@@ -789,6 +805,7 @@ fun MainView() {
                         )
                     }
                 }
+
             }
         }
     }
@@ -864,19 +881,21 @@ fun MainView() {
     }
 
     TagPickerDialog(
-        state = eventAddTagDialogState,
+        state = tagPickerDialogState,
         onDismissRequest = {
             resetSelectionMode()
-            eventAddTagDialogState = false
+            tagPickerDialogState = false
         },
         eventIds = selectedEvents.map { it.id }
     )
 
-    NewTagDialog(
-        state = newTagDialogState,
+    TagEditorDialog(
+        state = tagEditorDialogState,
         onDismissRequest = {
-            newTagDialogState = false
-        }
+            tagEditorDialogState = false
+            resetSelectionMode()
+        },
+        tagId = selectedTags.firstOrNull()?.id
     )
 
     if (needUpdate) needUpdate = false
@@ -920,6 +939,29 @@ fun EventList(
     val selectionMode by selectionState.isSelectionMode.collectAsState()
     val selectedItems by selectionState.selectedItems.collectAsState()
 
+    var highlightedDay by remember { mutableStateOf<LocalDate?>(null) }
+
+    if (viewModel.mode == EventSelectMode.Default) viewModel.onGotoDay {
+        highlightedDay = it
+
+        val grouped = eventList.groupBy {
+            dayList.find { day -> day.date == it.time.toLocalDate() }!!
+        }
+
+        // Log.d("NanHistoryDebug", "GROUPED: $grouped")
+
+        var index = 0
+        for ((day, events) in grouped) {
+            if (day.date == it) {
+                scope.launch {
+                    lazyListState.scrollToItem(index)
+                }
+                break
+            }
+            index += events.size + 1
+        }
+    }
+
 //    Log.d("NanHistoryDebug", "RECORDING: $isRecording, EVENT ID: $recordEventId")
 
     if (!selectionMode) selectionState.clear()
@@ -945,7 +987,35 @@ fun EventList(
                     val day =
                         if (loadHeaderData) dayList.find { it.date == date }
                         else null
+
                     val selected = selectedItems.containsAll(events)
+                    val highlighted = highlightedDay == date
+
+                    var fading by remember { mutableStateOf(false) }
+                    var isHighlighting by remember { mutableStateOf(highlighted) }
+
+                    val highlightedColor = MaterialTheme.colorScheme.primaryContainer
+
+                    val duration = if (fading) 1000 else 0
+                    val targetColor = if (fading && highlighted) Color.Transparent else highlightedColor
+
+                    val backgroundColor = if (isHighlighting)
+                        animateColorAsState(
+                            targetValue = targetColor,
+                            animationSpec = tween(durationMillis = duration),
+                            finishedListener = {
+                                if (!fading) {
+                                    fading = true
+                                }
+                                else {
+                                    isHighlighting = false
+                                    fading = false
+                                }
+                            }
+                        )
+                        else null
+
+
                     if (day != null) EventListHeader(
                         historyDay = day,
                         modifier = Modifier
@@ -966,9 +1036,13 @@ fun EventList(
                                         if (selected) selectionState.deselectAll(events)
                                         else selectionState.selectAll(events)
                                     }
+                                    else if (viewModel.mode != EventSelectMode.Default) {
+                                        viewModel.gotoDay(date)
+                                    }
                                 }
                             )
-                            .zIndex(0f),
+                            .zIndex(0f)
+                            .background(if (isHighlighting) backgroundColor!!.value else Color.Transparent),
                         expanded = expandedCurrent.contains(date),
                         eventCount = events.size,
                         selected = selected,

@@ -1,6 +1,7 @@
 package id.my.nanclouder.nanhistory.ui.tags
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -27,18 +28,22 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.lib.backgroundTagColor
+import id.my.nanclouder.nanhistory.lib.borderTagColor
 import id.my.nanclouder.nanhistory.lib.history.HistoryTag
 import id.my.nanclouder.nanhistory.lib.textTagColor
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun TagsView(tags: List<HistoryTag>, limit: Int = 3, wrap: Boolean = false, favorite: Boolean = false) {
+fun TagsView(
+    tags: List<HistoryTag>,
+    limit: Int = 3, wrap: Boolean = false,
+    favorite: Boolean = false,
+    darkTheme: Boolean = isSystemInDarkTheme()
+) {
     if (tags.isEmpty() && !favorite) return
 
     var tagLimit = limit
-
-    val darkTheme = isSystemInDarkTheme()
 
     val scrollState = rememberScrollState()
     val rowModifier = Modifier.horizontalScroll(state = scrollState)
@@ -66,8 +71,9 @@ fun TagsView(tags: List<HistoryTag>, limit: Int = 3, wrap: Boolean = false, favo
                 modifier = Modifier
                     .background(
                         color = tag.tint.backgroundTagColor(darkTheme),
-                        shape = RoundedCornerShape(100.dp)
+                        shape = RoundedCornerShape(100.dp),
                     )
+                    .border(1.dp, tag.tint.borderTagColor(darkTheme), RoundedCornerShape(100.dp))
                     .padding(PaddingValues(horizontal = 8.dp, vertical = 4.dp))
                     .sizeIn(),
                 overflow = TextOverflow.Ellipsis,

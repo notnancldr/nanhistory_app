@@ -3,10 +3,7 @@ package id.my.nanclouder.nanhistory.ui.main
 import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -29,10 +26,10 @@ enum class EventSelectMode {
 
 class EventListViewModel(
     context: Context,
-    private val from: LocalDate = LocalDate.MIN,
-    private val until: LocalDate = LocalDate.parse("9999-12-31"),
-    private val mode: EventSelectMode = EventSelectMode.Default,
-    private val tagId: String? = null
+    val from: LocalDate = LocalDate.MIN,
+    val until: LocalDate = LocalDate.parse("9999-12-31"),
+    val mode: EventSelectMode = EventSelectMode.Default,
+    val tagId: String? = null
 ) : ViewModel() {
     private val _events = MutableStateFlow<List<HistoryEvent>>(emptyList()) // Holds loaded data
     val events: StateFlow<List<HistoryEvent>> = _events // Expose sorted list
@@ -42,6 +39,9 @@ class EventListViewModel(
 
     private val _isLoading = MutableStateFlow(false) // Loading state
     val isLoading: StateFlow<Boolean> = _isLoading // Expose as immutable
+
+    private var _onGotoDay: ((LocalDate) -> Unit)? = null
+    private var _onGotoEvent: ((String) -> Unit)? = null
 
     private val db: AppDatabase = AppDatabase.getInstance(context)
     private val dao: AppDao = db.appDao()
@@ -54,6 +54,18 @@ class EventListViewModel(
     override fun onCleared() {
         super.onCleared()
         viewModelScope.cancel()
+    }
+
+    fun onGotoDay(block: (LocalDate) -> Unit) { _onGotoDay = block }
+
+    fun gotoDay(date: LocalDate) {
+        _onGotoDay?.invoke(date)
+    }
+
+    fun onGotoEvent(block: (String) -> Unit) { _onGotoEvent = block }
+
+    fun gotoEvent(eventId: String) {
+        _onGotoEvent?.invoke(eventId)
     }
 
     fun search(query: String) {

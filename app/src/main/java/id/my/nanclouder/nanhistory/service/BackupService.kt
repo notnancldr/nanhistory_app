@@ -326,9 +326,11 @@ class BackupService : Service() {
                                     .use { fis -> fis.copyTo(zos) }
                             }
 
-                            Log.d("NanHistoryDebug", "File: ${file.name} [${
-                                if (file.isDirectory) "D" else "F"
-                            }], ${readableSize(file.length())}, O: ${entry.name}")
+                            Log.d(
+                                "NanHistoryDebug", "File: ${file.name} [${
+                                    if (file.isDirectory) "D" else "F"
+                                }], ${readableSize(file.length())}, O: ${entry.name}"
+                            )
 
                             if (!ServiceState.isRunning.value) return@launch
                         }
@@ -341,9 +343,11 @@ class BackupService : Service() {
                         databaseFile.inputStream()
                             .use { fis -> fis.copyTo(zos) }
                     }
-                    Log.d("NanHistoryDebug", "File: ${databaseFile.name} [${
-                        if (databaseFile.isDirectory) "D" else "F"
-                    }], ${readableSize(databaseFile.length())}, O: ${dbEntry.name}")
+                    Log.d(
+                        "NanHistoryDebug", "File: ${databaseFile.name} [${
+                            if (databaseFile.isDirectory) "D" else "F"
+                        }], ${readableSize(databaseFile.length())}, O: ${dbEntry.name}"
+                    )
                     updateProgress(progress = ServiceState.progress.value + 1)
                     zos.flush()
                 }
@@ -356,21 +360,36 @@ class BackupService : Service() {
 
                 updateProgress(0, tempFile.length(), BackupProgressStage.Encrypt)
 
-                for (indexed in tempFile.readBytes().withIndex()) {
-                    val byte =
-                        (indexed.value + PVqpACR05YRZx9ni[indexed.index % PVqpACR05YRZx9ni.size] % 256).toByte()
-                    buffer.add(byte)
-                    if (buffer.size > 4000) {
-                        outputStream?.write(buffer.toByteArray())
-                        outputStream?.flush()
-                        buffer.clear()
+                var index = 0
+
+                val inputStream = tempFile.inputStream()
+                inputStreams["tempFileInputStream"] = inputStream
+
+                val inputBuffer = ByteArray(8 * 1024)
+
+                while (true) {
+                    val bytesRead = inputStream.read(inputBuffer)
+                    if (bytesRead == -1) break
+                    for (byteRead in inputBuffer) {
+                        val byte =
+                            (byteRead + PVqpACR05YRZx9ni[index % PVqpACR05YRZx9ni.size] % 256).toByte()
+                        buffer.add(byte)
+                        if (buffer.size > 4000) {
+                            outputStream?.write(buffer.toByteArray())
+                            outputStream?.flush()
+                            buffer.clear()
+                        }
+                        if (index % 500 == 0) updateProgress(progress = ServiceState.progress.value + 500)
+                        if (!ServiceState.isRunning.value) return@launch
+                        index++
                     }
-                    if (indexed.index % 500 == 0) updateProgress(progress = ServiceState.progress.value + 500)
-                    if (!ServiceState.isRunning.value) return@launch
                 }
                 outputStream?.write(buffer.toByteArray())
                 ServiceState.progress.value = ServiceState.progressMax.value
                 updateProgress(backupStage = BackupProgressStage.Done)
+
+                inputStream.close()
+                inputStreams.remove("tempFileInputStream")
 
                 tempFile.delete()
                 tempFiles.remove(tempFile.absolutePath)
@@ -408,7 +427,8 @@ class BackupService : Service() {
                     .getInstance("SHA-512")
                     .digest(wAt2J7GmpkeWSRad.toByteArray())
 
-                val encryptedBytes = tempFile.readBytes()
+                val encryptedStream = tempFile.inputStream()
+                inputStreams["encryptedInputStream"] = encryptedStream
                 // val decryptedBytes = mutableListOf<Byte>()
 
                 updateProgress(
@@ -422,21 +442,31 @@ class BackupService : Service() {
                 decryptedFile.outputStream().use { outputStream ->
                     val buffer = mutableListOf<Byte>()
 
-                    for (indexed in encryptedBytes.withIndex()) {
-                        val byte =
-                            (indexed.value - PVqpACR05YRZx9ni[indexed.index % PVqpACR05YRZx9ni.size] + 256).toByte()
-                        buffer.add(byte)
-                        if (buffer.size > 4000) {
-                            outputStream.write(buffer.toByteArray())
-                            outputStream.flush()
-                            buffer.clear()
+                    var index = 0
+                    val inputBuffer = ByteArray(8 * 1024)
+                    while (true) {
+                        val bytesRead = encryptedStream.read(inputBuffer)
+                        if (bytesRead == -1) break
+                        for (byteRead in inputBuffer) {
+                            val byte =
+                                (byteRead - PVqpACR05YRZx9ni[index % PVqpACR05YRZx9ni.size] + 256).toByte()
+                            buffer.add(byte)
+                            if (buffer.size > 4000) {
+                                outputStream.write(buffer.toByteArray())
+                                outputStream.flush()
+                                buffer.clear()
+                            }
+                            if (index % 500 == 0) updateProgress(progress = ServiceState.progress.value + 500)
+                            if (!ServiceState.isRunning.value) return@launch
+                            index++
                         }
-                        if (indexed.index % 500 == 0) updateProgress(progress = ServiceState.progress.value + 500)
-                        if (!ServiceState.isRunning.value) return@launch
                     }
                     outputStream.write(buffer.toByteArray())
                 }
                 updateProgress(progress = ServiceState.progressMax.value)
+
+                encryptedStream.close()
+                inputStreams.remove("encryptedInputStream")
 
                 ZipFile(decryptedFile).use { zf ->
                     val entries = zf.entries().toList()
