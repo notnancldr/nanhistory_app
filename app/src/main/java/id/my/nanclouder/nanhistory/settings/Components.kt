@@ -194,31 +194,35 @@ fun SettingsSwitch(
     modifier: Modifier = Modifier,
     configValue: Config.BooleanValue,
     title: String,
-    description: String,
+    description: String? = null,
     enabled: Boolean = true,
     icon: Painter? = null,
+    onUpdated: ((Boolean) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
 
     var active by rememberSaveable { mutableStateOf(configValue.get(context)) }
 
+    val color = if (enabled) Color.Unspecified else Color.Gray
+
     ListItem(
         leadingContent = {
             if (icon != null) Icon(icon, "Icon")
         },
         headlineContent = {
-            Text(title)
+            Text(title, color = color)
         },
-        supportingContent = {
-            Text(description)
-        },
+        supportingContent = if (description != null) ({
+            Text(description, color = color)
+        }) else null,
         trailingContent = {
             Switch(
                 checked = active,
                 onCheckedChange = withHaptic<Boolean>(haptic) {
                     active = it
                     configValue.set(context, active)
+                    onUpdated?.invoke(it)
                 },
                 enabled = enabled,
                 modifier = Modifier.height(32.dp)

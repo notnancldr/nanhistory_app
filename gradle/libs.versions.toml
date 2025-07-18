@@ -21,6 +21,7 @@ playServicesLocation = "21.3.0"
 material3Android = "1.3.1"
 roomRuntime = "2.7.1"
 colorpicker = "1.1.2"
+workRuntimeKtx = "2.9.0"
 
 [libraries]
 android-sdk-v1151 = { module = "org.maplibre.gl:android-sdk", version.ref = "androidSdkVersion" }
@@ -49,6 +50,7 @@ osmdroid-android = { module = "org.osmdroid:osmdroid-android", version.ref = "os
 play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
 androidx-material3-android = { group = "androidx.compose.material3", name = "material3-android", version.ref = "material3Android" }
 compose-colorpicker = { module = "com.github.skydoves:colorpicker-compose", version.ref = "colorpicker" }
+androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntimeKtx" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

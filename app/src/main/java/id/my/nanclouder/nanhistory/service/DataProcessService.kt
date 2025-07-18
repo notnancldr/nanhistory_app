@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Binder
@@ -40,18 +41,40 @@ import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 import kotlin.system.exitProcess
 
-class BackupService : Service() {
+class DataProcessService : Service() {
     companion object {
-        private const val BACKUP_IMPORT_CHANNEL_ID = "backup_channel"
+        private const val DATA_PROCESS_CHANNEL_ID = "backup_and_data_channel"
+        private const val MIGRATION_CODE_FILEPATH = "migration_code"
 
         const val ACTION_CANCEL_SERVICE = "ACTION_CANCEL_SERVICE"
 
         const val OPERATION_UNKNOWN = -1
         const val OPERATION_BACKUP = 0
         const val OPERATION_IMPORT = 1
+        const val OPERATION_MIGRATE = 2
 
         const val OPERATION_TYPE_EXTRA = "operationType"
         const val FILE_URI_EXTRA = "fileUri"
+
+        private const val CURRENT_MIGRATION_CODE = 1
+
+        fun checkMigration(context: Context): Boolean {
+            val migrationCodeFile = File(context.filesDir, MIGRATION_CODE_FILEPATH)
+            if (migrationCodeFile.exists()) migrationCodeFile.readText().let {
+                return it.toInt() == CURRENT_MIGRATION_CODE
+            }
+            else return false
+        }
+
+        fun updateMigrationCode(context: Context) {
+            val migrationCodeFile = File(context.filesDir, MIGRATION_CODE_FILEPATH)
+            migrationCodeFile.writeText(CURRENT_MIGRATION_CODE.toString())
+        }
+
+        fun resetMigrationCode(context: Context) {
+            val migrationCodeFile = File(context.filesDir, MIGRATION_CODE_FILEPATH)
+            migrationCodeFile.delete()
+        }
     }
 
     object ServiceState {
@@ -68,15 +91,16 @@ class BackupService : Service() {
 
     object ImportState {
         val stage = MutableStateFlow<ImportProgressStage?>(null)
+        val migrationName = MutableStateFlow<String?>(null)
     }
 
     inner class MyBinder : Binder() {
-        fun getService(): BackupService = this@BackupService
+        fun getService(): DataProcessService = this@DataProcessService
     }
 
     private val binder = MyBinder()
     private val serviceScope = CoroutineScope(Dispatchers.IO)
-    private var operationType = -1
+    private var operationType = OPERATION_UNKNOWN
 
     private var lastNotificationUpdate = Instant.MIN
 
@@ -119,7 +143,19 @@ class BackupService : Service() {
         val fileUri = intent?.getStringExtra(FILE_URI_EXTRA)?.toUri()
         operationType = intent?.getIntExtra(OPERATION_TYPE_EXTRA, -1) ?: -1
 
-        if (fileUri != null && operationType != -1) {
+        if (operationType == OPERATION_MIGRATE) {
+            ServiceState.operationType.value = operationType
+            ServiceState.progressMax.value = 1
+            ServiceState.progress.value = 0
+            ServiceState.errorMessage.value = null
+
+            updateProgress(importStage = ImportProgressStage.Migrate)
+            processMigration()
+
+            startForeground(2, getNotification())
+            ServiceState.isRunning.value = true
+        }
+        else if (fileUri != null && operationType != OPERATION_UNKNOWN) {
             ServiceState.operationType.value = operationType
             ServiceState.progressMax.value = 1
             ServiceState.progress.value = 0
@@ -135,7 +171,8 @@ class BackupService : Service() {
             }
             startForeground(2, notification)
             ServiceState.isRunning.value = true
-        } else {
+        }
+        else {
             stopSelf()
             return START_NOT_STICKY
         }
@@ -144,17 +181,17 @@ class BackupService : Service() {
     }
 
     private fun createNotificationChannel() {
-        val name = "Backup and Import Data"
-        val descriptionText = "Notification channel for backup and import data"
+        val name = "Backup and Data Update"
+        val descriptionText = "Notification channel for backup, import data, and data update"
         val importance = NotificationManager.IMPORTANCE_DEFAULT
-        val channel = NotificationChannel(BACKUP_IMPORT_CHANNEL_ID, name, importance).apply {
+        val channel = NotificationChannel(DATA_PROCESS_CHANNEL_ID, name, importance).apply {
             description = descriptionText
         }
         notificationManager.createNotificationChannel(channel)
     }
 
     private fun getNotification(ongoing: Boolean = true): Notification {
-        return NotificationCompat.Builder(this, BACKUP_IMPORT_CHANNEL_ID)
+        return NotificationCompat.Builder(this, DATA_PROCESS_CHANNEL_ID)
             .apply {
                 val adder = if (operationType == OPERATION_BACKUP) {
                     when (BackupState.stage.value) {
@@ -184,13 +221,16 @@ class BackupService : Service() {
                         if (BackupState.stage.value != BackupProgressStage.Error) "Backup Data ($percentage%)"
                         else "Backup Failed"
                     }
-                    else {
+                    else if (operationType == OPERATION_IMPORT) {
                         if (
                             ImportState.stage.value != ImportProgressStage.Error &&
                             ImportState.stage.value != ImportProgressStage.Migrate
                         ) "Import Data ($percentage%)"
                         else if (ImportState.stage.value == ImportProgressStage.Migrate) "Migrating Data Structure"
                         else "Import Failed"
+                    }
+                    else {
+                        "Updating Data"
                     }
                 )
                 setContentText(
@@ -207,7 +247,7 @@ class BackupService : Service() {
                             else -> "Unknown backup stage!"
                         }
                     }
-                    else {
+                    else if (operationType == OPERATION_IMPORT) {
                         when (ImportState.stage.value) {
                             ImportProgressStage.Init -> "Initializing import"
                             ImportProgressStage.Decrypt -> "Decrypting data (${
@@ -221,6 +261,9 @@ class BackupService : Service() {
                             else -> "Unknown import stage!"
                         }
                     }
+                    else {
+                        ImportState.migrationName.value
+                    }
                 )
                 setSmallIcon(R.drawable.ic_launcher_foreground)
                 setSilent(true)
@@ -231,11 +274,15 @@ class BackupService : Service() {
                     // Only show progress bar if backup or import is in progress
                     if (
                         BackupState.stage.value == BackupProgressStage.Init ||
-                        ImportState.stage.value == ImportProgressStage.Init
+                        ImportState.stage.value == ImportProgressStage.Init ||
+                        ImportState.stage.value == ImportProgressStage.Migrate
                     ) {
                         setProgress(100, 0, true)
                     } else {
-                        setProgress(100, percentage, ImportState.stage.value == ImportProgressStage.Migrate)
+                        setProgress(
+                            100,
+                            if (ImportState.stage.value == ImportProgressStage.Migrate) 100 else percentage,
+                            ImportState.stage.value == ImportProgressStage.Migrate)
                     }
                 }
             }
@@ -478,6 +525,8 @@ class BackupService : Service() {
                         }
                     outputDirectory.mkdirs()
 
+                    resetMigrationCode(context)
+
                     updateProgress(
                         progress = 0,
                         max = entries.size.toLong(),
@@ -487,7 +536,7 @@ class BackupService : Service() {
                     entries.forEach {
                         val outputFile = File(outputDirectory, it.name)
 
-                        var outputFilePath = ""
+                        val outputFilePath: String
                         if (it.isDirectory) {
                             outputFilePath = outputFile.absolutePath
                             outputFile.mkdirs()
@@ -534,10 +583,16 @@ class BackupService : Service() {
             inputStreams.remove("inputStream")
 
             updateProgress(
-                progress = ServiceState.progressMax.value,
+                progress = 0,
+                max = 100,
                 importStage = ImportProgressStage.Migrate
             )
-            migrateData(context) { _, _ -> }
+            migrateData(context) { state, name ->
+                updateProgress(
+                    progress = (state.progress * 100).toLong()
+                )
+                ImportState.migrationName.value = name
+            }
 
             updateProgress(importStage = ImportProgressStage.Done)
 
@@ -546,7 +601,39 @@ class BackupService : Service() {
 
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
-            exitProcess(0)
+
+            // exitProcess(0)
+
+//            val activityIntent = Intent(this@DataProcessService, MainActivity::class.java)
+//            activityIntent.flags =
+//                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+//                Intent.FLAG_ACTIVITY_NEW_TASK or
+//                Intent.FLAG_ACTIVITY_SINGLE_TOP
+//            startActivity(activityIntent)
+        }
+    }
+
+    private fun processMigration() {
+        val context = applicationContext
+        serviceScope.launch {
+            updateProgress(importStage = ImportProgressStage.Migrate)
+            migrateData(context) { state, name ->
+                ImportState.migrationName.value = name
+                updateProgress(
+                    progress = (state.progress * 100).toLong(),
+                    max = 100L
+                )
+            }
+
+            updateProgress(
+                progress = 100,
+                importStage = ImportProgressStage.Done
+            )
+
+            updateMigrationCode(applicationContext)
+
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
         }
     }
 

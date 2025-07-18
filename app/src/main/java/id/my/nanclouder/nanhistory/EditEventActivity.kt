@@ -410,6 +410,12 @@ fun EditEventView(eventId: String?) {
                                 readOnly = true,
                                 shape = textFieldShape,
                                 label = { Text("Transportation") },
+                                leadingIcon = {
+                                    if (transportationType.iconId != null) Icon(
+                                        painterResource(transportationType.iconId!!),
+                                        "Transportation"
+                                    )
+                                },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                                 // colors = ExposedDropdownMenuDefaults.textFieldColors(),
                             )
@@ -419,6 +425,11 @@ fun EditEventView(eventId: String?) {
                             ) {
                                 TransportationType.entries.forEach { option ->
                                     DropdownMenuItem(
+                                        leadingIcon = {
+                                            if (option.iconId != null) Icon(
+                                                painterResource(option.iconId), "Transportation type"
+                                            )
+                                        },
                                         text = { Text(option.name, style = MaterialTheme.typography.bodyLarge) },
                                         onClick = {
                                             transportationType = option

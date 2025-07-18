@@ -17,4 +17,6 @@
     <string name="title_activity_fileplayer">FilePlayerActivity</string>
     <string name="title_activity_deleted_event">DeletedEventActivity</string>
     <string name="title_activity_tag_detail">TagDetailActivity</string>
+    <string name="title_activity_settings_auto_delete">AutoDeleteSettingsActivity</string>
+    <string name="title_activity_settings_developer">DeveloperOptionsActivity</string>
 </resources>

@@ -1,5 +1,6 @@
 package id.my.nanclouder.nanhistory.ui
 
+import android.content.Intent
 import android.media.MediaPlayer
 import android.util.Log
 import androidx.activity.compose.BackHandler
@@ -15,7 +16,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -29,9 +29,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.requiredWidthIn
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -46,6 +45,7 @@ import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -58,7 +58,6 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -76,16 +75,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import com.github.skydoves.colorpicker.compose.BrightnessSlider
 import com.github.skydoves.colorpicker.compose.HsvColorPicker
 import com.github.skydoves.colorpicker.compose.rememberColorPickerController
+import id.my.nanclouder.nanhistory.ImportProgressStage
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.DayTagCrossRef
@@ -95,7 +99,7 @@ import id.my.nanclouder.nanhistory.db.toHistoryTag
 import id.my.nanclouder.nanhistory.lib.history.HistoryTag
 import id.my.nanclouder.nanhistory.lib.history.generateTagId
 import id.my.nanclouder.nanhistory.lib.readableTimeHours
-import id.my.nanclouder.nanhistory.lib.textTagColor
+import id.my.nanclouder.nanhistory.service.DataProcessService
 import id.my.nanclouder.nanhistory.ui.tags.TagsView
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import kotlinx.coroutines.Dispatchers
@@ -429,7 +433,7 @@ fun TagPickerDialog(
                                         MaterialTheme.colorScheme.secondaryContainer,
                                 headlineColor =
                                     if (!isSelected)
-                                        tagData.tint.textTagColor(darkTheme)
+                                        MaterialTheme.colorScheme.onSurface
                                     else
                                         MaterialTheme.colorScheme.primary,
                                 trailingIconColor = MaterialTheme.colorScheme.primary
@@ -776,6 +780,136 @@ fun TagPreview(
                 ) {
                     TagsView(tags = listOf(tag), darkTheme = darkTheme)
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DataProcessDialog() {
+    val dataProcessType by DataProcessService.ServiceState.operationType.collectAsState()
+    val dataProcessStage by DataProcessService.ImportState.stage.collectAsState()
+    val migrationName by DataProcessService.ImportState.migrationName.collectAsState()
+
+    val dataProcessProgress by DataProcessService.ServiceState.progress.collectAsState()
+    val dataProcessProgressMax by DataProcessService.ServiceState.progressMax.collectAsState()
+
+    BasicAlertDialog(
+        // BasicAlertDialog(
+        onDismissRequest = {},
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+        )
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .requiredWidthIn(max = 296.dp)
+                    .padding(32.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.CenterVertically),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                val context = LocalContext.current
+                val infiniteTransition = rememberInfiniteTransition(label = "rotation")
+
+                val title =
+                    if (dataProcessStage == ImportProgressStage.Migrate) {
+                        "Updating Data"
+                    }
+                    else if (dataProcessType == DataProcessService.OPERATION_IMPORT) {
+                        "Importing Data"
+                    }
+                    else {
+                        "Processing"
+                    }
+
+                val text =
+                    if (dataProcessStage == ImportProgressStage.Migrate) {
+                        "Migrating data: $migrationName"
+                    }
+                    else {
+                        if (dataProcessStage == ImportProgressStage.Init) "Initializing"
+                        else if (dataProcessStage == ImportProgressStage.Decrypt) "Decrypting"
+                        else if (dataProcessStage == ImportProgressStage.Extract) "Extracting"
+                        else "Importing"
+                    }
+
+                val iconAlpha by infiniteTransition.animateFloat(
+                    initialValue = 0.3f,
+                    targetValue = 1f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(durationMillis = 800, easing = LinearEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "iconAlpha"
+                )
+
+                Icon(
+                    painterResource(R.drawable.ic_cloud_download),
+                    "Processing Data",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .size(88.dp)
+                        .alpha(iconAlpha)
+                )
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center
+                )
+                Text(text, textAlign = TextAlign.Center)
+                val primaryColor = MaterialTheme.colorScheme.primary
+                val primaryContainerColor = MaterialTheme.colorScheme.primaryContainer
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(12.dp)
+                        .padding(vertical = 4.dp)
+                ) {
+                    drawLine(
+                        color = primaryContainerColor,
+                        start = Offset(0f, 0f),
+                        end = Offset(size.width, 0f),
+                        strokeWidth = size.height,
+                        cap = StrokeCap.Round
+                    )
+                    drawLine(
+                        color = primaryColor,
+                        start = Offset(0f, 0f),
+                        end = Offset(size.width * dataProcessProgress / dataProcessProgressMax, 0f),
+                        strokeWidth = size.height,
+                        cap = StrokeCap.Round
+                    )
+                }
+                if (dataProcessType == DataProcessService.OPERATION_IMPORT) Button(
+                    enabled = !(
+                        dataProcessStage == ImportProgressStage.Done ||
+                        dataProcessStage == ImportProgressStage.Extract ||
+                        dataProcessStage == ImportProgressStage.Migrate
+                    ),
+                    onClick = {
+                        val cancelIntent = Intent(context, DataProcessService::class.java).apply {
+                            action = DataProcessService.ACTION_CANCEL_SERVICE
+                        }
+                        context.startService(cancelIntent)
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                ) {
+                    Text("Cancel")
+                }
+//                Row(
+//                    verticalAlignment = Alignment.CenterVertically,
+//                    horizontalArrangement = Arrangement.End
+//                ) {
+//                    Text("${round(migrationState.progress * 100)}%")
+//                }
             }
         }
     }

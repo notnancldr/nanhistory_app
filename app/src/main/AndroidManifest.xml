@@ -35,7 +35,7 @@
         android:theme="@style/Theme.NanHistory"
         tools:targetApi="34">
         <activity
-            android:name=".DeletedEventActivity"
+            android:name=".TrashActivity"
             android:exported="false"
             android:label="@string/title_activity_deleted_event"
             android:theme="@style/Theme.NanHistory" />
@@ -65,9 +65,19 @@
             android:label="@string/title_activity_settings_storage"
             android:theme="@style/Theme.NanHistory" />
         <activity
+            android:name=".settings.AutoDeleteSettingsActivity"
+            android:exported="false"
+            android:label="@string/title_activity_settings_auto_delete"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
             android:name=".settings.ExperimentalSettingsActivity"
             android:exported="false"
             android:label="@string/title_activity_settings_experimental"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".settings.DeveloperOptionsActivity"
+            android:exported="false"
+            android:label="@string/title_activity_settings_developer"
             android:theme="@style/Theme.NanHistory" />
         <activity
             android:name=".debug.DebugActivity"
@@ -116,7 +126,7 @@
             android:exported="false"
             android:foregroundServiceType="location|microphone" />
         <service
-            android:name=".service.BackupService"
+            android:name=".service.DataProcessService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="dataSync" />

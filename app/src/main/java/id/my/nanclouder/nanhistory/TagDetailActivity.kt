@@ -29,10 +29,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -45,8 +43,6 @@ import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.toHistoryTag
 import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
-import id.my.nanclouder.nanhistory.lib.history.HistoryTag
-import id.my.nanclouder.nanhistory.lib.history.safeDelete
 import id.my.nanclouder.nanhistory.state.rememberSelectionState
 import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
 import id.my.nanclouder.nanhistory.ui.SelectionAppBar
@@ -226,7 +222,7 @@ fun TaggedEventList(tagId: String) {
                         deleteDialogLock = true
                         scope.launch {
                             withContext(Dispatchers.IO) {
-                                dao.softDeleteEvents(selectedItems.map { it.id })
+                                AppDatabase.moveToTrash(dao, context, selectedItems.map { it.id })
                             }
                             deleteDialogState = false
                             deleteDialogProgress = null

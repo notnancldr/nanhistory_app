@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -61,7 +62,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -91,7 +91,6 @@ import id.my.nanclouder.nanhistory.lib.TimeFormatter
 import id.my.nanclouder.nanhistory.lib.getLocationData
 import id.my.nanclouder.nanhistory.lib.history.EventPoint
 import id.my.nanclouder.nanhistory.lib.history.EventRange
-import id.my.nanclouder.nanhistory.lib.history.TransportationType
 import id.my.nanclouder.nanhistory.lib.history.generateEventId
 import id.my.nanclouder.nanhistory.lib.history.getFilePathFromDate
 import id.my.nanclouder.nanhistory.lib.history.validateSignature
@@ -376,16 +375,17 @@ fun DetailContent(eventId: String, path: String) {
                         },
                     ) { Icon(Icons.Rounded.Edit, "Edit tag") }
                     VerticalDivider()
-                    if (eventData.tags.isNotEmpty()) TagsView(eventData.tags, limit = Int.MAX_VALUE)
+                    if (eventData.tags.isNotEmpty()) TagsView(eventData.tags, limit = Int.MAX_VALUE, wrap = true)
                     else Text("No tags")
                 }
                 else {
                     ComponentPlaceholder(Modifier
-                        .width(64.dp)
-                        .height(16.dp))
-                    ComponentPlaceholder(Modifier
-                        .width(64.dp)
-                        .height(16.dp))
+                        .width(164.dp)
+                        .height(72.dp)
+                        .padding(vertical = 8.dp))
+                    // ComponentPlaceholder(Modifier
+                    //     .width(64.dp)
+                    //     .height(16.dp))
                 }
             }
             Box(Modifier.height(8.dp))
@@ -577,14 +577,19 @@ fun DetailContent(eventId: String, path: String) {
                                 if (minutes > 0) text += "${minutes}m "
                                 if (seconds > 0) text += "${seconds}s"
 
-                                Text(text, color = Color.Gray)
-                                if (eventData.transportationType != TransportationType.Unspecified) {
-                                    Box(Modifier.width(4.dp))
-                                    Text(
-                                        "(${eventData.transportationType.name})",
-                                        color = Color.Gray
+                                if (eventData.transportationType.iconId != null) {
+                                    // Text(
+                                    //     "(${eventData.transportationType.name})",
+                                    //     color = Color.Gray
+                                    // )
+                                    Icon(
+                                        painterResource(eventData.transportationType.iconId!!),
+                                        eventData.transportationType.name,
+                                        tint = Color.Gray
                                     )
+                                    Box(Modifier.width(4.dp))
                                 }
+                                Text(text, color = Color.Gray)
                             }
                         },
                         modifier = Modifier.height(40.dp)
@@ -616,6 +621,7 @@ fun DetailContent(eventId: String, path: String) {
             if (showInfo && eventData != null) ModalBottomSheet(
                 modifier = Modifier
                     .fillMaxHeight(),
+                containerColor = MaterialTheme.colorScheme.surface,
                 sheetState = sheetState,
                 onDismissRequest = {
                     showInfo = false
@@ -629,6 +635,19 @@ fun DetailContent(eventId: String, path: String) {
                     val timeFormat = { time: ZonedDateTime ->
                         "${time.format(DateFormatter)} ${time.format(TimeFormatter)}"
                     }
+
+                    ListItem(
+                        headlineContent = {
+                            Text(
+                                "Event Info",
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                        },
+                        leadingContent = {
+                            Icon(Icons.Rounded.Info, "Info")
+                        }
+                    )
+
                     ListItem(
                         overlineContent = {
                             Text("Created")
@@ -651,6 +670,22 @@ fun DetailContent(eventId: String, path: String) {
                         },
                         headlineContent = {
                             Text(eventData.id)
+                        }
+                    )
+                    ListItem(
+                        overlineContent = {
+                            Text("Audio")
+                        },
+                        headlineContent = {
+                            Text(eventData.audio ?: "-")
+                        }
+                    )
+                    ListItem(
+                        overlineContent = {
+                            Text("Location data")
+                        },
+                        headlineContent = {
+                            Text(eventData.locationPath ?: "-")
                         }
                     )
                     if (eventData is EventRange) ListItem(
@@ -718,7 +753,7 @@ fun DetailContent(eventId: String, path: String) {
                     confirmButton = {
                         Button(
                             onClick = {
-                                scope.launch { dao.softDeleteEvents(listOf(eventData.id)) }
+                                scope.launch { AppDatabase.moveToTrash(dao, context, listOf(eventData.id)) }
 
                                 context.getActivity()?.run {
                                     setUpdateResult()

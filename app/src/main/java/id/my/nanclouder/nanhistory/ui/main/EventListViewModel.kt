@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 enum class EventSelectMode {
-    Default, Favorite, Search, Deleted, Tagged
+    Default, FavoriteEvent, FavoriteDay, Search, Deleted, Tagged
 }
 
 class EventListViewModel(
@@ -40,6 +40,14 @@ class EventListViewModel(
     private val _isLoading = MutableStateFlow(false) // Loading state
     val isLoading: StateFlow<Boolean> = _isLoading // Expose as immutable
 
+    private var _currentEvents = emptyList<HistoryEvent>()
+    val currentEvents
+        get() = _currentEvents
+
+    private var _currentDays = emptyList<HistoryDay>()
+    val currentDays
+        get() = _currentDays
+
     private var _onGotoDay: ((LocalDate) -> Unit)? = null
     private var _onGotoEvent: ((String) -> Unit)? = null
 
@@ -49,6 +57,16 @@ class EventListViewModel(
     init {
         // Start loading files when ViewModel initializes
         load()
+        viewModelScope.launch {
+            _events.collect {
+                _currentEvents = it
+            }
+        }
+        viewModelScope.launch {
+            _days.collect {
+                _currentDays = it
+            }
+        }
     }
 
     override fun onCleared() {
@@ -99,7 +117,7 @@ class EventListViewModel(
         }
         viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = false
-            AppDatabase.getDaysInRange(dao, from, until, mode == EventSelectMode.Favorite).collect { days ->
+            AppDatabase.getDaysInRange(dao, from, until, mode == EventSelectMode.FavoriteDay).collect { days ->
                 _days.value = days
                 Log.d("NanHistoryDebug", "Loaded ${days.size} days")
             }

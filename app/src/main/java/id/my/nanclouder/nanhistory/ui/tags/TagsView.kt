@@ -37,7 +37,8 @@ import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 @Composable
 fun TagsView(
     tags: List<HistoryTag>,
-    limit: Int = 3, wrap: Boolean = false,
+    limit: Int = 2,
+    wrap: Boolean = false,
     favorite: Boolean = false,
     darkTheme: Boolean = isSystemInDarkTheme()
 ) {

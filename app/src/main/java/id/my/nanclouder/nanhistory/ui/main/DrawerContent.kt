@@ -1,7 +1,9 @@
 package id.my.nanclouder.nanhistory.ui.main
 
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,16 +18,20 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
 import id.my.nanclouder.nanhistory.BackupActivity
-import id.my.nanclouder.nanhistory.DeletedEventActivity
+import id.my.nanclouder.nanhistory.TrashActivity
 import id.my.nanclouder.nanhistory.debug.DebugActivity
 import id.my.nanclouder.nanhistory.R
+import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.settings.SettingsActivity
 import id.my.nanclouder.nanhistory.lib.getPackageInfo
 
@@ -56,10 +62,10 @@ fun DrawerContent() {
                 NavigationDrawerItem(
                     modifier = itemModifier,
                     icon = { Icon(painterResource(R.drawable.ic_delete_filled), "Deleted") },
-                    label = { drawerItemText("Deleted Events") },
+                    label = { drawerItemText("Trash") },
                     selected = false,
                     onClick = {
-                        val intent = Intent(context, DeletedEventActivity::class.java)
+                        val intent = Intent(context, TrashActivity::class.java)
                         context.startActivity(intent)
                     }
                 )
@@ -98,12 +104,21 @@ fun DrawerContent() {
                 horizontalArrangement = Arrangement.End,
                 modifier = Modifier.padding(16.dp)
             ) {
+                var clickCount by remember { mutableIntStateOf(0) }
                 val packageInfo = getPackageInfo(context)
                 if (packageInfo != null) Text(
                     "v${packageInfo.versionName} - build ${packageInfo.longVersionCode}",
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.labelLarge
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier
+                        .clickable {
+                            clickCount++
+                            if (clickCount == 10) {
+                                Toast.makeText(context, "Developer mode enabled", Toast.LENGTH_SHORT).show()
+                                Config.developerModeEnabled.set(context, true)
+                            }
+                        }
                 )
             }
         }

@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import id.my.nanclouder.nanhistory.R
+import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.getActivity
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 
@@ -106,6 +107,21 @@ class SettingsActivity : ComponentActivity() {
                 )
                 ListItem(
                     modifier = Modifier.clickable {
+                        val intent = Intent(context, AutoDeleteSettingsActivity::class.java)
+                        context.startActivity(intent)
+                    },
+                    leadingContent = {
+                        Icon(painterResource(R.drawable.ic_delete_filled), "Auto-delete settings")
+                    },
+                    headlineContent = {
+                        Text("Auto-delete")
+                    },
+                    supportingContent = {
+                        Text("Event auto deletion")
+                    }
+                )
+                ListItem(
+                    modifier = Modifier.clickable {
                         val intent = Intent(context, ExperimentalSettingsActivity::class.java)
                         context.startActivity(intent)
                     },
@@ -117,6 +133,21 @@ class SettingsActivity : ComponentActivity() {
                     },
                     supportingContent = {
                         Text("Experimental options")
+                    }
+                )
+                if (Config.developerModeEnabled.get(applicationContext)) ListItem(
+                    modifier = Modifier.clickable {
+                        val intent = Intent(context, DeveloperOptionsActivity::class.java)
+                        context.startActivity(intent)
+                    },
+                    leadingContent = {
+                        Icon(painterResource(R.drawable.ic_code), "Developer Options")
+                    },
+                    headlineContent = {
+                        Text("Developer Options")
+                    },
+                    supportingContent = {
+                        Text("Options for developer")
                     }
                 )
             }

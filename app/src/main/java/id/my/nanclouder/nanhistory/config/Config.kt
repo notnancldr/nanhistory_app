@@ -10,6 +10,9 @@ object Config {
     private const val PATH = "config/config.json"
 
     object Default {
+        const val DEVELOPER_MODE_ENABLED = false
+        const val DEVELOPER_1HOUR_AUTO_DELETE = false
+
         const val SERVICE_MAX_DURATION = 900
         const val LOCATION_ACCURACY_THRESHOLD = 20
         const val LOCATION_MINIMUM_DISTANCE = 30
@@ -22,6 +25,9 @@ object Config {
         const val AUDIO_STEREO_CHANNEL = false
         const val AUDIO_ENCODING_BITRATE = 128
         const val AUDIO_SAMPLING_RATE = 44
+
+        const val AUTO_DELETE_NOTIFY_USER = true
+        const val AUTO_DELETE_ALWAYS_ASK = false
     }
 
     private fun readOrCreateNew(context: Context): String {
@@ -64,6 +70,13 @@ object Config {
             setConfig(context, name, value)
     }
 
+    val developerModeEnabled = BooleanValue(
+        "developerModeEnabled", Default.DEVELOPER_MODE_ENABLED
+    )
+    val developer1hourAutoDelete = BooleanValue(
+        "developer1hourAutoDelete", Default.DEVELOPER_1HOUR_AUTO_DELETE
+    )
+
     val serviceMaxDuration = IntValue(
         "serviceMaxDuration", Default.SERVICE_MAX_DURATION
     )
@@ -77,6 +90,7 @@ object Config {
     val locationUpdateInterval = IntValue(
         "locationUpdateInterval", Default.LOCATION_UPDATE_INTERVAL
     )
+
     val audioRecordMaxDuration = IntValue(
         "audioRecordMaxDuration", Default.AUDIO_RECORD_MAX_DURATION
     )
@@ -86,6 +100,7 @@ object Config {
     val includeAudioRecord = BooleanValue(
         "includeAudioRecord", Default.INCLUDE_AUDIO_RECORD
     )
+
     val audioStereoChannel = BooleanValue(
         "audioStereoChannel", Default.AUDIO_STEREO_CHANNEL
     )
@@ -94,5 +109,12 @@ object Config {
     )
     val audioSamplingRate = IntValue(
         "audioSamplingRate", Default.AUDIO_SAMPLING_RATE
+    )
+
+    val autoDeleteNotifyUser = BooleanValue(
+        "audioDeleteNotifyUser", Default.AUTO_DELETE_NOTIFY_USER
+    )
+    val autoDeleteAlwaysAsk = BooleanValue(
+        "audioDeleteAlwaysAsk", Default.AUTO_DELETE_ALWAYS_ASK
     )
 }

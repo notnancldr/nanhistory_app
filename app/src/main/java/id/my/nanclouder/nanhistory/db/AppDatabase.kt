@@ -5,11 +5,13 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.lib.history.HistoryDay
 import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
 import id.my.nanclouder.nanhistory.ui.main.EventSelectMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.time.Instant
 import java.time.LocalDate
 
 @Database(
@@ -53,8 +55,8 @@ abstract class AppDatabase : RoomDatabase() {
             mode: EventSelectMode = EventSelectMode.Default
         ): Flow<List<HistoryEvent>> {
             return when (mode) {
-                EventSelectMode.Favorite -> dao.getFavoriteEvents()
-                EventSelectMode.Deleted -> dao.getDeletedEvents()
+                EventSelectMode.FavoriteEvent -> dao.getFavoriteEvents()
+                EventSelectMode.Deleted -> dao.getDeletedEventsFlow()
                 else -> dao.getEventsInRange(from.toString(), until.toString())
             }.map { events ->
                 events.map {
@@ -90,6 +92,14 @@ abstract class AppDatabase : RoomDatabase() {
                     it.toHistoryEvent()
                 }
             }
+        }
+
+        suspend fun moveToTrash(dao: AppDao, context: Context, ids: List<String>) {
+            val delete1hour = Config.developer1hourAutoDelete.get(context) && Config.developerModeEnabled.get(context)
+            if (delete1hour)
+                dao.softDeleteEvents(ids, Instant.now().plusSeconds(3600).toEpochMilli())
+            else
+                dao.softDeleteEvents(ids)
         }
 
         suspend fun ensureDayExists(dao: AppDao, date: LocalDate) {

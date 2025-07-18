@@ -39,13 +39,13 @@ interface AppDao {
     suspend fun toggleFavoriteEvent(id: String)
 
     @Query("UPDATE events SET deletePermanently = :deleteTime WHERE id IN (:ids)")
-    fun softDeleteEvents(
+    suspend fun softDeleteEvents(
         ids: List<String>,
         deleteTime: Long = Instant.now().plusSeconds(2_592_000).toEpochMilli()
     )
 
     @Query("UPDATE events SET deletePermanently = NULL WHERE id IN (:ids)")
-    fun restoreEvents(
+    suspend fun restoreEvents(
         ids: List<String>
     )
 
@@ -59,7 +59,11 @@ interface AppDao {
 
     @Transaction
     @Query("SELECT * FROM events WHERE deletePermanently IS NOT NULL ORDER BY timestamp DESC")
-    fun getDeletedEvents(): Flow<List<EventWithTags>>
+    fun getDeletedEventsFlow(): Flow<List<EventWithTags>>
+
+    @Transaction
+    @Query("SELECT * FROM events WHERE deletePermanently IS NOT NULL ORDER BY timestamp DESC")
+    suspend fun getDeletedEvents(): List<EventWithTags>
 
     @Transaction
     @Query(

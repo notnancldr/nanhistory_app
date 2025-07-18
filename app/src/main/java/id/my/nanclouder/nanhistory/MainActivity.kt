@@ -1,26 +1,39 @@
 package id.my.nanclouder.nanhistory
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import id.my.nanclouder.nanhistory.lib.history.migrateLocationData
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import id.my.nanclouder.nanhistory.service.DataProcessService
+import id.my.nanclouder.nanhistory.ui.DataProcessDialog
 import id.my.nanclouder.nanhistory.ui.main.MainView
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
+import id.my.nanclouder.nanhistory.worker.AutoDeleteWorker
 import org.osmdroid.config.Configuration
 import org.osmdroid.library.BuildConfig
 import java.time.Instant
+import java.util.concurrent.TimeUnit
 
 enum class NanHistoryPages {
-    Events, Tags, Search
+    Events, Favorite, Tags, Search
 }
 
 enum class ListFilters {
@@ -33,6 +46,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        scheduleAutoDelete()
 
         enableEdgeToEdge()
         onBackPressedDispatcher.addCallback(this, object: OnBackPressedCallback(true) {
@@ -50,9 +65,53 @@ class MainActivity : ComponentActivity() {
             update = {
                 setUpdate = !setUpdate
             }
+
+            var showMainView by remember { mutableStateOf(false) }
+            var migrationNeeded by remember { mutableStateOf(false) }
+
+            val importState by DataProcessService.ImportState.stage.collectAsState()
+            val dataProcessType by DataProcessService.ServiceState.operationType.collectAsState()
+            val dataProcessIsRunning by DataProcessService.ServiceState.isRunning.collectAsState()
+
+            LaunchedEffect(dataProcessIsRunning) {
+                if (
+                    !DataProcessService.checkMigration(this@MainActivity) &&
+                    dataProcessType == DataProcessService.OPERATION_UNKNOWN &&
+                    !dataProcessIsRunning
+                ) {
+                    migrationNeeded = true
+                    showMainView = false
+
+                    val intent = Intent(this@MainActivity, DataProcessService::class.java)
+                    intent.putExtra(DataProcessService.OPERATION_TYPE_EXTRA, DataProcessService.OPERATION_MIGRATE)
+                    startService(intent)
+                }
+                else if (
+                    (
+                        dataProcessType == DataProcessService.OPERATION_IMPORT ||
+                        dataProcessType == DataProcessService.OPERATION_MIGRATE
+                    ) && dataProcessIsRunning
+                ) {
+                    showMainView = false
+                }
+                else {
+                    showMainView = true
+                }
+            }
+
+            if (migrationNeeded && !showMainView && !dataProcessIsRunning) {
+                migrationNeeded = false
+                showMainView = true
+            }
+
             NanHistoryTheme {
-                key(setUpdate) {
+                if (showMainView) key(setUpdate) {
                     MainView()
+                }
+                else {
+                    Scaffold { padding ->
+                        Column(Modifier.padding(padding)) { DataProcessDialog() }
+                    }
                 }
             }
         }
@@ -68,6 +127,18 @@ class MainActivity : ComponentActivity() {
         requestPermissions(arrayOf(
             android.Manifest.permission.WAKE_LOCK,
         ), 102)
+    }
+
+    private fun scheduleAutoDelete() {
+        val request = PeriodicWorkRequestBuilder<AutoDeleteWorker>(1, TimeUnit.DAYS)
+            .build()
+
+        WorkManager.getInstance(this)
+            .enqueueUniquePeriodicWork(
+                "AutoDeleteWorker",
+                ExistingPeriodicWorkPolicy.UPDATE,
+                request
+            )
     }
 }
 

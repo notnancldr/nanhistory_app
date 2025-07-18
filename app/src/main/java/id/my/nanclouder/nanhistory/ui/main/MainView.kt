@@ -21,7 +21,12 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -35,6 +40,7 @@ import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
@@ -42,7 +48,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidthIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyListLayoutInfo
@@ -59,6 +68,7 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -72,10 +82,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -86,6 +98,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -97,6 +110,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -109,9 +123,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
@@ -278,6 +294,8 @@ fun MainView() {
     var appliedFilter by rememberSaveable { mutableStateOf(ListFilters.Recent) }
     val selectedPage = NanHistoryPages.entries[pagerState.currentPage]
 
+    var selectedFavorite by rememberSaveable { mutableIntStateOf(0) }
+
     val filterIndex =
         if (pagerState.currentPage != NanHistoryPages.Search.ordinal) appliedFilter.ordinal
         else 3
@@ -330,6 +348,16 @@ fun MainView() {
 
     val eventsViewModel = rememberEventListViewModel()
     val searchViewModel = rememberEventListViewModel(mode = EventSelectMode.Search)
+    val favoriteEventsViewModel = rememberEventListViewModel(mode = EventSelectMode.FavoriteEvent)
+    val favoriteDayViewModel = rememberEventListViewModel(mode = EventSelectMode.FavoriteDay)
+
+    val onGoto = { it: LocalDate ->
+        scope.launch {
+            pagerState.scrollToPage(NanHistoryPages.Events.ordinal)
+            eventsViewModel.gotoDay(it)
+        }
+        Unit
+    }
 
     searchViewModel.onGotoDay {
         scope.launch {
@@ -337,10 +365,14 @@ fun MainView() {
             eventsViewModel.gotoDay(it)
         }
     }
+    favoriteEventsViewModel.onGotoDay(onGoto)
+    favoriteDayViewModel.onGotoDay(onGoto)
 
     val eventsSelectionState = rememberSelectionState<HistoryEvent>()
     val searchSelectionState = rememberSelectionState<HistoryEvent>()
     val tagListSelectionState = rememberSelectionState<HistoryTag>()
+    val favoriteEventSelectionState = rememberSelectionState<HistoryEvent>()
+    val favoriteDaySelectionState = rememberSelectionState<HistoryEvent>()
 
     val haptic = LocalHapticFeedback.current
     val vibrator = (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager)
@@ -362,6 +394,10 @@ fun MainView() {
             NanHistoryPages.Events -> eventsSelectionState.reset()
             NanHistoryPages.Search -> searchSelectionState.reset()
             NanHistoryPages.Tags -> tagListSelectionState.reset()
+            NanHistoryPages.Favorite -> {
+                if (selectedFavorite == 0) favoriteEventSelectionState.reset()
+                else favoriteDaySelectionState.reset()
+            }
         }
     }
 
@@ -376,6 +412,16 @@ fun MainView() {
                 searchSelectionState.clear()
                 searchSelectionState.selectAll(searchViewModel.events.value)
             }
+            NanHistoryPages.Favorite -> {
+                if (selectedFavorite == 0) {
+                    favoriteEventSelectionState.clear()
+                    favoriteEventSelectionState.selectAll(favoriteEventsViewModel.events.value)
+                }
+                else {
+                    favoriteDaySelectionState.clear()
+                    favoriteDaySelectionState.selectAll(favoriteDayViewModel.events.value)
+                }
+            }
             // NanHistoryPages.Tags -> tagListSelectionState.selectAll()
             else -> {}
         }
@@ -383,20 +429,30 @@ fun MainView() {
 
     val selectedEvents by when (selectedPage) {
         NanHistoryPages.Events -> eventsSelectionState.selectedItems
+        NanHistoryPages.Favorite -> favoriteEventSelectionState.selectedItems
         NanHistoryPages.Search -> searchSelectionState.selectedItems
         else -> listOf(emptyList<HistoryEvent>()).stream().consumeAsFlow()
     }.collectAsState(emptyList())
 
+    val selectedDays by favoriteDaySelectionState.selectedItems.collectAsState(emptyList())
     val selectedTags by tagListSelectionState.selectedItems.collectAsState(emptyList())
 
     val selectedItemsSize by when (selectedPage) {
         NanHistoryPages.Events -> eventsSelectionState.selectedItems
+        NanHistoryPages.Favorite -> {
+            if (selectedFavorite == 0) favoriteEventSelectionState.selectedItems
+            else favoriteDaySelectionState.selectedItems
+        }
         NanHistoryPages.Tags -> tagListSelectionState.selectedItems
         NanHistoryPages.Search -> searchSelectionState.selectedItems
     }.map { it.size }.collectAsState(0)
 
     val selectionMode by when (selectedPage) {
         NanHistoryPages.Events -> eventsSelectionState.isSelectionMode
+        NanHistoryPages.Favorite -> {
+            if (selectedFavorite == 0) favoriteEventSelectionState.isSelectionMode
+            else favoriteDaySelectionState.isSelectionMode
+        }
         NanHistoryPages.Tags -> tagListSelectionState.isSelectionMode
         NanHistoryPages.Search -> searchSelectionState.isSelectionMode
     }.collectAsState()
@@ -404,9 +460,9 @@ fun MainView() {
     val openDeleteDialog = {
         val size = selectedItemsSize
         deleteDialogTitle =
-            "Delete item" + (if (size < 2) "?" else "s?")
+            "Move item to Trash" + (if (size < 2) "?" else "s?")
         deleteDialogText =
-            "Do you want to delete $size item${(if (size < 2) "" else "s")}?"
+            "Do you want to move $size item${(if (size < 2) "" else "s")} to Trash?"
         deleteButtonState = true
         deleteDialogState = true
     }
@@ -435,6 +491,8 @@ fun MainView() {
     }
 
     LaunchedEffect(Unit) {
+        Log.d("NanHistoryDebug", "LaunchedEffect")
+
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         val packageName = context.packageName
         if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
@@ -451,10 +509,10 @@ fun MainView() {
         else if (!recordPermissionState.allPermissionsGranted)
             recordPermissionState.launchMultiplePermissionRequest()
 
-        migrateData(context) { state, name ->
-            migrationState = state
-            migrationName = name
-        }
+        // migrateData(context) { state, name ->
+        //     migrationState = state
+        //     migrationName = name
+        // }
 
         val addTileRequested = qsSharedPreferences.getBoolean("addTileRequested", false)
         if (!addTileRequested) requestAddTile(context) {
@@ -469,16 +527,52 @@ fun MainView() {
         // viewModels.forEach { it.value?.reload() }
     }
 
-    if (!migrationState.finish) AlertDialog (
+    if (!migrationState.finish) BasicAlertDialog(
+    // BasicAlertDialog(
         onDismissRequest = {},
-        dismissButton = {},
-        confirmButton = {},
-        title = {
-            Text("Migrating Data")
-        },
-        text = {
-            Column {
-                Text("Migrating data: $migrationName")
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+        )
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .requiredWidthIn(max = 296.dp)
+                    .padding(32.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                val infiniteTransition = rememberInfiniteTransition(label = "rotation")
+
+                val iconAlpha by infiniteTransition.animateFloat(
+                    initialValue = 0.3f,
+                    targetValue = 1f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(durationMillis = 800, easing = LinearEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "iconAlpha"
+                )
+
+                Icon(
+                    painterResource(R.drawable.ic_cloud_download),
+                    "Updating Data",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .size(88.dp)
+                        .alpha(iconAlpha)
+                )
+                Box(Modifier.height(8.dp))
+                Text(
+                    "Updating Data",
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center
+                )
+                Box(Modifier.height(8.dp))
+                Text("Migrating data: $migrationName", textAlign = TextAlign.Center)
                 Box(Modifier.height(8.dp))
                 val primaryColor = MaterialTheme.colorScheme.primary
                 val primaryContainerColor = MaterialTheme.colorScheme.primaryContainer
@@ -511,7 +605,7 @@ fun MainView() {
 //                }
             }
         }
-    )
+    }
 
     if (permissionDialogState) AlertDialog(
         onDismissRequest = {
@@ -737,6 +831,20 @@ fun MainView() {
                         }
                     )
                     NavigationBarItem(
+                        selected = selectedPage == NanHistoryPages.Favorite,
+                        onClick = navigationOnClick(NanHistoryPages.Favorite),
+                        icon = {
+                            val icon = painterResource(
+                                if (selectedPage == NanHistoryPages.Favorite) R.drawable.ic_favorite_filled
+                                else R.drawable.ic_favorite
+                            )
+                            Icon(icon, "Favorite")
+                        },
+                        label = {
+                            Text("Favorite")
+                        }
+                    )
+                    NavigationBarItem(
                         selected = selectedPage == NanHistoryPages.Tags,
                         onClick = navigationOnClick(NanHistoryPages.Tags),
                         icon = {
@@ -783,27 +891,82 @@ fun MainView() {
                 val eventsLazyListState = rememberLazyListState()
                 val tagsLazyListState = rememberLazyListState()
                 val searchLazyListState = rememberLazyListState()
+                val favoriteEventListState = rememberLazyListState()
+                val favoriteDayListState = rememberLazyListState()
 
                 HorizontalPager(
                     state = pagerState
                 ) { page ->
                     Log.d("NanHistoryDebug", "PAGE: $page")
-                    when (page) {
-                        NanHistoryPages.Events.ordinal -> EventList(
+                    if (page == NanHistoryPages.Events.ordinal) key(Unit) {
+                        EventList(
                             viewModel = eventsViewModel,
                             lazyListState = eventsLazyListState,
                             selectionState = eventsSelectionState
                         )
-                        NanHistoryPages.Tags.ordinal -> TagList(
-                            lazyListState = tagsLazyListState,
-                            selectionState = tagListSelectionState
+                    }
+                    else if (page == NanHistoryPages.Favorite.ordinal) {
+                        val onClick = { index: Int ->
+                            if (selectedFavorite != index) selectedFavorite = index
+                        }
+                        val selector = @Composable {
+                            val onClick1 = { onClick(0) }
+                            val onClick2 = { onClick(1) }
+
+                            val buttonContentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
+
+                            Row(
+                                modifier = Modifier
+                                    .padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                if (selectedFavorite == 0) {
+                                    Button(
+                                        onClick = onClick1, contentPadding = buttonContentPadding
+                                    ) {
+                                        Text("Events")
+                                    }
+                                    OutlinedButton(
+                                        onClick = onClick2, contentPadding = buttonContentPadding
+                                    ) {
+                                        Text("Days")
+                                    }
+                                } else {
+                                    OutlinedButton(
+                                        onClick = onClick1, contentPadding = buttonContentPadding
+                                    ) {
+                                        Text("Events")
+                                    }
+                                    Button(
+                                        onClick = onClick2, contentPadding = buttonContentPadding
+                                    ) {
+                                        Text("Days")
+                                    }
+                                }
+                            }
+                        }
+                        if (selectedFavorite == 0) EventList(
+                            viewModel = favoriteEventsViewModel,
+                            lazyListState = favoriteEventListState,
+                            selectionState = favoriteEventSelectionState,
+                            topItem = { selector() }
                         )
-                        NanHistoryPages.Search.ordinal -> EventList(
-                            viewModel = searchViewModel,
-                            lazyListState = searchLazyListState,
-                            selectionState = searchSelectionState
+                        else EventList(
+                            viewModel = favoriteDayViewModel,
+                            lazyListState = favoriteDayListState,
+                            selectionState = favoriteDaySelectionState,
+                            topItem = { selector() }
                         )
                     }
+                    else if (page == NanHistoryPages.Tags.ordinal) TagList(
+                        lazyListState = tagsLazyListState,
+                        selectionState = tagListSelectionState
+                    )
+                    else if (page == NanHistoryPages.Search.ordinal) EventList(
+                        viewModel = searchViewModel,
+                        lazyListState = searchLazyListState,
+                        selectionState = searchSelectionState
+                    )
                 }
 
             }
@@ -838,8 +1001,8 @@ fun MainView() {
                         if (selectedPage != NanHistoryPages.Tags) scope.launch {
                             lock = true
                             deleteButtonState = false
-                            deleteDialogTitle = "Deleting Events"
-                            deleteDialogText = "Deleting..."
+                            deleteDialogTitle = "Moving items"
+                            deleteDialogText = "Moving..."
                             withContext(Dispatchers.IO) {
                                 val selectedItems = when (pagerState.currentPage) {
                                     NanHistoryPages.Events.ordinal -> eventsSelectionState.selectedItems.value
@@ -847,8 +1010,8 @@ fun MainView() {
                                     else -> emptyList()
                                 }
                                 deleteDialogText =
-                                    "Deleting events..."
-                                dao.softDeleteEvents(selectedItems.map { it.id })
+                                    "Moving items to trash..."
+                                AppDatabase.moveToTrash(dao, context, selectedItems.map { it.id })
                             }
                             lock = false
                             resetSelectionMode()
@@ -931,8 +1094,12 @@ fun EventList(
     val db = remember { AppDatabase.getInstance(context) }
     val dao = remember { db.appDao() }
 
-    val eventList by viewModel.events.collectAsState()
-    val dayList by viewModel.days.collectAsState()
+    val dayList by viewModel.days.collectAsState(viewModel.currentDays)
+    val eventListState by viewModel.events.collectAsState(viewModel.currentEvents)
+
+    val dateList = dayList.map { it.date }
+
+    val eventList = eventListState.filter { event -> event.time.toLocalDate() in dateList }
 
     val haptic = LocalHapticFeedback.current
 
@@ -941,25 +1108,34 @@ fun EventList(
 
     var highlightedDay by remember { mutableStateOf<LocalDate?>(null) }
 
-    if (viewModel.mode == EventSelectMode.Default) viewModel.onGotoDay {
-        highlightedDay = it
+    var gotoDay by remember { mutableStateOf<LocalDate?>(null) }
 
-        val grouped = eventList.groupBy {
-            dayList.find { day -> day.date == it.time.toLocalDate() }!!
-        }
+    if (viewModel.mode == EventSelectMode.Default) viewModel.onGotoDay { date ->
+        gotoDay = date
+    }
 
-        // Log.d("NanHistoryDebug", "GROUPED: $grouped")
+    LaunchedEffect(gotoDay, dayList, eventList) {
+        if (gotoDay != null && dayList.isNotEmpty() && eventList.isNotEmpty()) {
 
-        var index = 0
-        for ((day, events) in grouped) {
-            if (day.date == it) {
-                scope.launch {
-                    lazyListState.scrollToItem(index)
-                }
-                break
+            highlightedDay = gotoDay
+
+            val grouped = eventList.groupBy {
+                dayList.find { day -> day.date == it.time.toLocalDate() }!!
             }
-            index += events.size + 1
+
+            // Log.d("NanHistoryDebug", "GROUPED: $grouped")
+
+            var index = 0
+            for ((day, events) in grouped) {
+                if (day.date == gotoDay) {
+                    lazyListState.scrollToItem(index)
+                    break
+                }
+                index += events.size + 1
+            }
         }
+        delay(200L)
+        gotoDay = null
     }
 
 //    Log.d("NanHistoryDebug", "RECORDING: $isRecording, EVENT ID: $recordEventId")

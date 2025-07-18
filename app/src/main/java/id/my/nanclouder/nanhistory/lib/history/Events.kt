@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.toDayEntity
 import id.my.nanclouder.nanhistory.db.toEventEntity
@@ -28,9 +29,15 @@ enum class EventTypes {
     Point, Range
 }
 
-enum class TransportationType {
-    Unspecified, Walk, Bicycle, Motorcycle, Car, Train,
-    Airplane, Ferry
+enum class TransportationType(val iconId: Int? = null) {
+    Unspecified,
+    Walk(R.drawable.ic_directions_walk),
+    Bicycle(R.drawable.ic_pedal_bike),
+    Motorcycle(R.drawable.ic_motorcycle),
+    Car(R.drawable.ic_directions_car),
+    Train(R.drawable.ic_train),
+    Airplane(R.drawable.ic_flight),
+    Ferry(R.drawable.ic_directions_boat);
 }
 
 object HistoryFileDataProperty {
@@ -402,8 +409,11 @@ class MigrationState(
 )
 
 suspend fun migrateData(context: Context, onUpdate: ((MigrationState, String) -> Unit)) {
+    Log.d("NanHistoryDebug", "MIGRATING...")
+    onUpdate(MigrationState(0f, true), "")
     migrateLocationData(context) { onUpdate(it, "locationData") }
     migrateToDatabase(context) { onUpdate(it, "toDatabase") }
+    onUpdate(MigrationState(1f, true), "toDatabase")
 }
 
 suspend fun migrateToDatabase(context: Context, onUpdate: ((MigrationState) -> Unit)) {
@@ -435,7 +445,7 @@ suspend fun migrateToDatabase(context: Context, onUpdate: ((MigrationState) -> U
             data.delete(context)
         }
 
-        onUpdate(MigrationState(1f, true))
+        onUpdate(MigrationState(1f, false))
     }
 }
 
@@ -448,9 +458,9 @@ suspend fun migrateLocationData(context: Context, onUpdate: ((MigrationState) ->
     var progress = 0
 
     withContext(Dispatchers.IO) {
-        fileList.forEach iterator@{ file ->
+        for (file in fileList) {
             progress++
-            if (file.isDirectory) return@iterator
+            if (file.isDirectory) continue
 
             val fileData = gson.fromJson<Map<String, Any?>>(
                 file.readText(),
@@ -459,7 +469,7 @@ suspend fun migrateLocationData(context: Context, onUpdate: ((MigrationState) ->
 
             if ((matchOrNull<Double>(fileData[HistoryFileDataProperty.FILE_VERSION])
                     ?: 0.0) >= 6.0
-            ) return@iterator
+            ) continue
 
             val events =
                 matchOrNull<List<Map<String, Any?>>>(fileData[HistoryFileDataProperty.EVENTS])
@@ -522,7 +532,7 @@ suspend fun migrateLocationData(context: Context, onUpdate: ((MigrationState) ->
             onUpdate(MigrationState((progress / totalData).toFloat(), false))
         }
     }
-    onUpdate(MigrationState(1f, true))
+    onUpdate(MigrationState(1f, false))
 }
 
 fun generateOldSignature(eventData: Map<String, Any?>): String {

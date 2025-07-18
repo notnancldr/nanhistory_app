@@ -5,8 +5,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
@@ -30,7 +33,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -39,6 +41,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
 import id.my.nanclouder.nanhistory.lib.history.safeDelete
@@ -52,7 +56,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class DeletedEventActivity : ComponentActivity() {
+class TrashActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -60,7 +64,7 @@ class DeletedEventActivity : ComponentActivity() {
 
         setContent {
             NanHistoryTheme {
-                DeletedEventView()
+                TrashView()
             }
         }
     }
@@ -68,7 +72,7 @@ class DeletedEventActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DeletedEventView() {
+fun TrashView() {
     val context = LocalContext.current
     val viewModel = EventListViewModel(
         context = context,
@@ -106,7 +110,7 @@ fun DeletedEventView() {
         topBar = {
             if (!selectionMode) TopAppBar(
                 title = {
-                    Text("Deleted Events")
+                    Text("Trash")
                 },
                 navigationIcon = {
                     IconButton(
@@ -190,7 +194,24 @@ fun DeletedEventView() {
                 viewModel = viewModel,
                 selectionState = selectionState,
                 lazyListState = listState,
-                loadHeaderData = false
+                loadHeaderData = false,
+                topItem = {
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 32.dp)
+                            .padding(bottom = 8.dp)
+                    ) {
+                        Text(
+                            "Every item in Trash will be deleted permanently after 30 days. You can either restore it or let it deleted. You can also delete it permanently now.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
             )
         }
 

@@ -3,7 +3,6 @@ package id.my.nanclouder.nanhistory
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -19,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,20 +28,17 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -50,28 +47,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import id.my.nanclouder.nanhistory.lib.LogData
 import id.my.nanclouder.nanhistory.lib.readableSize
-import id.my.nanclouder.nanhistory.service.BackupService
+import id.my.nanclouder.nanhistory.service.DataProcessService
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.BufferedInputStream
-import java.io.BufferedOutputStream
-import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.io.InputStream
-import java.io.OutputStream
-import java.security.MessageDigest
-import java.time.Instant
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
-import java.util.zip.ZipEntry
-import java.util.zip.ZipFile
-import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
 
 const val wAt2J7GmpkeWSRad = "6KwXgzCInQAjdwxtyVG5ZfNtk82BhNSC9KQN9mynQYXcQ6Ut4mAlVS1iGMejg09P"
 
@@ -109,13 +90,16 @@ fun BackupView() {
 //    var progressTarget by rememberSaveable { mutableLongStateOf(0L) }
 //    var backupStage by rememberSaveable { mutableStateOf<BackupProgressStage?>(null) }
 
-    val progress by BackupService.ServiceState.progress.collectAsState()
-    val progressTarget by BackupService.ServiceState.progressMax.collectAsState()
-    val backupStage by BackupService.BackupState.stage.collectAsState()
-    val importStage by BackupService.ImportState.stage.collectAsState()
-    val currentOperation by BackupService.ServiceState.operationType.collectAsState()
+    val progress by DataProcessService.ServiceState.progress.collectAsState()
+    val progressTarget by DataProcessService.ServiceState.progressMax.collectAsState()
+    val backupStage by DataProcessService.BackupState.stage.collectAsState()
+    val importStage by DataProcessService.ImportState.stage.collectAsState()
+    val currentOperation by DataProcessService.ServiceState.operationType.collectAsState()
 
-    val serviceIsRunning by BackupService.ServiceState.isRunning.collectAsState()
+    val serviceIsRunning by DataProcessService.ServiceState.isRunning.collectAsState()
+
+    var importConfirmation by remember { mutableStateOf(false) }
+    var importPath by remember { mutableStateOf<String?>(null) }
 
 //    if (importStage == ImportProgressStage.Done) {
 //        val intent = Intent(context, MainActivity::class.java)
@@ -138,9 +122,9 @@ fun BackupView() {
                 // There are no request codes
                 val data: Intent? = result.data
                 data?.data?.let { uri ->
-                    val intent = Intent(context, BackupService::class.java)
-                    intent.putExtra(BackupService.FILE_URI_EXTRA, uri.toString())
-                    intent.putExtra(BackupService.OPERATION_TYPE_EXTRA, BackupService.OPERATION_BACKUP)
+                    val intent = Intent(context, DataProcessService::class.java)
+                    intent.putExtra(DataProcessService.FILE_URI_EXTRA, uri.toString())
+                    intent.putExtra(DataProcessService.OPERATION_TYPE_EXTRA, DataProcessService.OPERATION_BACKUP)
                     context.startForegroundService(intent)
 
 //                    snackbarHostState.showSnackbar("Backup success")
@@ -160,16 +144,28 @@ fun BackupView() {
                 val data: Intent? = result.data
 
                 data?.data?.let { uri ->
-                    val intent = Intent(context, BackupService::class.java)
-                    intent.putExtra(BackupService.FILE_URI_EXTRA, uri.toString())
-                    intent.putExtra(BackupService.OPERATION_TYPE_EXTRA, BackupService.OPERATION_IMPORT)
-                    context.startForegroundService(intent)
+                    importPath = uri.toString()
+                    importConfirmation = true
                 } ?: snackbarHostState.showSnackbar("No file selected")
 
             } else {
                 snackbarHostState.showSnackbar("Import canceled")
             }
         }
+    }
+
+    if (
+        currentOperation == DataProcessService.OPERATION_IMPORT &&
+        serviceIsRunning
+    ) {
+        val activityIntent = Intent(context, MainActivity::class.java)
+        activityIntent.flags =
+            Intent.FLAG_ACTIVITY_CLEAR_TOP or
+            Intent.FLAG_ACTIVITY_NEW_TASK or
+            Intent.FLAG_ACTIVITY_SINGLE_TOP
+
+        context.startActivity(activityIntent)
+        context.getActivity()?.finish()
     }
 
     Scaffold(
@@ -207,7 +203,7 @@ fun BackupView() {
                 },
                 supportingContent = {
                     val currentStage = backupStage
-                    if (currentStage == null) Text("Backup important data in 'history' directory.")
+                    if (currentStage == null) Text("Create backup file and store it in local storage")
                     else {
                         Column {
                             val progressTargetSafe = if (progressTarget == 0L) 1L else progressTarget
@@ -255,14 +251,14 @@ fun BackupView() {
                 },
                 trailingContent = {
                     Button(
-                        enabled = !(serviceIsRunning && currentOperation == BackupService.OPERATION_IMPORT),
+                        enabled = !(serviceIsRunning && currentOperation == DataProcessService.OPERATION_IMPORT),
                         onClick = {
                             if (!serviceIsRunning) {
                                 handleBackup(launcherBackup)
                             }
                             else {
-                                val cancelIntent = Intent(context, BackupService::class.java).apply {
-                                    action = BackupService.ACTION_CANCEL_SERVICE
+                                val cancelIntent = Intent(context, DataProcessService::class.java).apply {
+                                    action = DataProcessService.ACTION_CANCEL_SERVICE
                                 }
                                 context.startService(cancelIntent)
                             }
@@ -270,7 +266,8 @@ fun BackupView() {
                         colors =
                             if (serviceIsRunning) {
                                 ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.error
+                                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                                    contentColor = MaterialTheme.colorScheme.onErrorContainer
                                 )
                             }
                             else {
@@ -290,7 +287,7 @@ fun BackupView() {
                 },
                 supportingContent = {
                     val currentStage = importStage
-                    if (currentStage == null) Text("Import backup data to 'history' directory,")
+                    if (currentStage == null) Text("Restore history data from local backup file")
                     else {
                         Column {
                             val progressTargetSafe = if (progressTarget == 0L) 1L else progressTarget
@@ -341,28 +338,56 @@ fun BackupView() {
                 },
                 trailingContent = {
                     Button(
-                        enabled = !(serviceIsRunning && currentOperation == BackupService.OPERATION_BACKUP),
+                        enabled = !serviceIsRunning,
                         onClick = {
                             if (!serviceIsRunning) {
                                 handleImport(launcherImport)
-                            }
-                            else {
-                                val cancelIntent = Intent(context, BackupService::class.java).apply {
-                                    action = BackupService.ACTION_CANCEL_SERVICE
-                                }
-                                context.startService(cancelIntent)
                             }
                         },
                         colors =
                             if (serviceIsRunning) {
                                 ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.error
+                                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                                    contentColor = MaterialTheme.colorScheme.onErrorContainer
                                 )
                             } else {
                                 ButtonDefaults.buttonColors()
                             }
                     ) {
-                        Text(if (serviceIsRunning) "Cancel" else "Import Now")
+                        Text("Import Now")
+                    }
+                }
+            )
+            if (importConfirmation) AlertDialog(
+                onDismissRequest = {
+                    importConfirmation = false
+                },
+                title = {
+                    Text("Import Data")
+                },
+                text = {
+                    Text("Importing this data will overwrite the existing data, are you sure want to continue?")
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            importConfirmation = false
+                            val intent = Intent(context, DataProcessService::class.java)
+                            intent.putExtra(DataProcessService.FILE_URI_EXTRA, importPath ?: "")
+                            intent.putExtra(DataProcessService.OPERATION_TYPE_EXTRA, DataProcessService.OPERATION_IMPORT)
+                            context.startForegroundService(intent)
+                        }
+                    ) {
+                        Text("Import")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            importConfirmation = false
+                        }
+                    ) {
+                        Text("Cancel")
                     }
                 }
             )
