@@ -30,16 +30,20 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
@@ -51,7 +55,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidthIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyListLayoutInfo
@@ -62,6 +65,8 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Edit
@@ -82,7 +87,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SnackbarHost
@@ -123,10 +127,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
@@ -147,7 +155,6 @@ import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
 import id.my.nanclouder.nanhistory.lib.history.HistoryFileData
 import id.my.nanclouder.nanhistory.lib.history.MigrationState
 import id.my.nanclouder.nanhistory.lib.history.getFilePathFromDate
-import id.my.nanclouder.nanhistory.lib.history.migrateData
 import id.my.nanclouder.nanhistory.service.RecordService
 import id.my.nanclouder.nanhistory.ui.SearchAppBar
 import id.my.nanclouder.nanhistory.ui.SelectionAppBar
@@ -177,6 +184,7 @@ import id.my.nanclouder.nanhistory.state.SelectionState
 import id.my.nanclouder.nanhistory.state.rememberSelectionState
 import id.my.nanclouder.nanhistory.ui.ColorIcon
 import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
+import id.my.nanclouder.nanhistory.ui.SelectableButton
 import id.my.nanclouder.nanhistory.ui.TagEditorDialog
 import id.my.nanclouder.nanhistory.ui.TagPickerDialog
 import kotlinx.coroutines.flow.map
@@ -460,7 +468,7 @@ fun MainView() {
     val openDeleteDialog = {
         val size = selectedItemsSize
         deleteDialogTitle =
-            "Move item to Trash" + (if (size < 2) "?" else "s?")
+            "Move items to Trash"
         deleteDialogText =
             "Do you want to move $size item${(if (size < 2) "" else "s")} to Trash?"
         deleteButtonState = true
@@ -898,75 +906,208 @@ fun MainView() {
                     state = pagerState
                 ) { page ->
                     Log.d("NanHistoryDebug", "PAGE: $page")
-                    if (page == NanHistoryPages.Events.ordinal) key(Unit) {
-                        EventList(
-                            viewModel = eventsViewModel,
-                            lazyListState = eventsLazyListState,
-                            selectionState = eventsSelectionState
-                        )
-                    }
-                    else if (page == NanHistoryPages.Favorite.ordinal) {
-                        val onClick = { index: Int ->
-                            if (selectedFavorite != index) selectedFavorite = index
+                    when (page) {
+                        NanHistoryPages.Events.ordinal -> key(Unit) {
+                            EventList(
+                                viewModel = eventsViewModel,
+                                lazyListState = eventsLazyListState,
+                                selectionState = eventsSelectionState,
+                                onEmptyContent = {
+                                    Image(
+                                        painter = painterResource(
+                                            if (isSystemInDarkTheme()) R.drawable.hint_no_event_dark
+                                            else R.drawable.hint_no_event
+                                        ),
+                                        modifier = Modifier
+                                            .height(196.dp)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .border(
+                                                width = 1.dp,
+                                                color = MaterialTheme.colorScheme.outline,
+                                                shape = RoundedCornerShape(16.dp)
+                                            ),
+                                        contentDescription = null
+                                    )
+
+                                    Box(Modifier.height(8.dp))
+
+                                    Text(
+                                        text = "No events here",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+
+                                    val addIconId = "addIcon"
+                                    val recordIconId = "recordIcon"
+
+                                    val text = buildAnnotatedString {
+                                        append("Record an event by pressing ")
+                                        appendInlineContent(recordIconId, "record icon.")
+                                        append(" or add new event by clicking ")
+                                        appendInlineContent(addIconId, "add icon")
+                                    }
+                                    val inlineContent = mapOf(
+                                        addIconId to InlineTextContent(
+                                            Placeholder(
+                                                width = 16.sp,
+                                                height = 16.sp,
+                                                placeholderVerticalAlign = PlaceholderVerticalAlign.Center
+                                            )
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Add,
+                                                contentDescription = "Add icon",
+                                                tint = Color.Gray,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        },
+                                        recordIconId to InlineTextContent(
+                                            Placeholder(
+                                                width = 16.sp,
+                                                height = 16.sp,
+                                                placeholderVerticalAlign = PlaceholderVerticalAlign.Center
+                                            )
+                                        ) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.ic_circle_filled),
+                                                contentDescription = "Record icon",
+                                                tint = Color.Gray,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        }
+                                    )
+
+                                    Text(
+                                        text = text,
+                                        inlineContent = inlineContent,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        textAlign = TextAlign.Center,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            )
                         }
-                        val selector = @Composable {
-                            val onClick1 = { onClick(0) }
-                            val onClick2 = { onClick(1) }
+                        NanHistoryPages.Favorite.ordinal -> {
+                            val onClick = { index: Int ->
+                                if (selectedFavorite != index) selectedFavorite = index
+                            }
+                            val selector = @Composable {
+                                val onClick1 = { onClick(0) }
+                                val onClick2 = { onClick(1) }
 
-                            val buttonContentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
+                                val buttonContentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
 
-                            Row(
-                                modifier = Modifier
-                                    .padding(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                if (selectedFavorite == 0) {
-                                    Button(
-                                        onClick = onClick1, contentPadding = buttonContentPadding
+                                Row(
+                                    modifier = Modifier
+                                        .padding(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    SelectableButton(
+                                        selected = selectedFavorite == 0,
+                                        onClick = onClick1,
+                                        contentPadding = buttonContentPadding,
+                                        modifier = Modifier.weight(1f)
                                     ) {
                                         Text("Events")
                                     }
-                                    OutlinedButton(
-                                        onClick = onClick2, contentPadding = buttonContentPadding
-                                    ) {
-                                        Text("Days")
-                                    }
-                                } else {
-                                    OutlinedButton(
-                                        onClick = onClick1, contentPadding = buttonContentPadding
-                                    ) {
-                                        Text("Events")
-                                    }
-                                    Button(
-                                        onClick = onClick2, contentPadding = buttonContentPadding
+                                    SelectableButton(
+                                        selected = selectedFavorite == 1,
+                                        onClick = onClick2,
+                                        contentPadding = buttonContentPadding,
+                                        modifier = Modifier.weight(1f)
                                     ) {
                                         Text("Days")
                                     }
                                 }
                             }
+
+                            val onEmptyContent: @Composable (ColumnScope.() -> Unit) = {
+                                Image(
+                                    painter = painterResource(
+                                        if (isSystemInDarkTheme()) R.drawable.hint_no_favorite_dark
+                                        else R.drawable.hint_no_favorite
+                                    ),
+                                    modifier = Modifier
+                                        .height(196.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .border(
+                                            width = 1.dp,
+                                            color = MaterialTheme.colorScheme.outline,
+                                            shape = RoundedCornerShape(16.dp)
+                                        ),
+                                    contentDescription = null
+                                )
+
+                                Box(Modifier.height(8.dp))
+
+                                Text(
+                                    text = "No favorite items",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+
+                                val favoriteIconId = "favoriteIcon"
+
+                                val text = buildAnnotatedString {
+                                    append("You can add favorite items by selecting the items then click ")
+                                    appendInlineContent(favoriteIconId, "favorite icon")
+                                    append(" or by clicking ")
+                                    appendInlineContent(favoriteIconId, "favorite icon")
+                                    append(" at top right corner of event detail.")
+                                }
+                                val inlineContent = mapOf(
+                                    favoriteIconId to InlineTextContent(
+                                        Placeholder(
+                                            width = 16.sp,
+                                            height = 16.sp,
+                                            placeholderVerticalAlign = PlaceholderVerticalAlign.Center
+                                        )
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_favorite),
+                                            contentDescription = "Favorite icon",
+                                            tint = Color.Gray,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    },
+                                )
+
+                                Text(
+                                    text = text,
+                                    inlineContent = inlineContent,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    textAlign = TextAlign.Center,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            Column {
+                                selector()
+                                if (selectedFavorite == 0) EventList(
+                                    viewModel = favoriteEventsViewModel,
+                                    lazyListState = favoriteEventListState,
+                                    selectionState = favoriteEventSelectionState,
+                                    onEmptyContent = onEmptyContent
+                                )
+                                else EventList(
+                                    viewModel = favoriteDayViewModel,
+                                    lazyListState = favoriteDayListState,
+                                    selectionState = favoriteDaySelectionState,
+                                    onEmptyContent = onEmptyContent
+                                    // topItem = { selector() }
+                                )
+                            }
                         }
-                        if (selectedFavorite == 0) EventList(
-                            viewModel = favoriteEventsViewModel,
-                            lazyListState = favoriteEventListState,
-                            selectionState = favoriteEventSelectionState,
-                            topItem = { selector() }
+                        NanHistoryPages.Tags.ordinal -> TagList(
+                            lazyListState = tagsLazyListState,
+                            selectionState = tagListSelectionState
                         )
-                        else EventList(
-                            viewModel = favoriteDayViewModel,
-                            lazyListState = favoriteDayListState,
-                            selectionState = favoriteDaySelectionState,
-                            topItem = { selector() }
+                        NanHistoryPages.Search.ordinal -> EventList(
+                            viewModel = searchViewModel,
+                            lazyListState = searchLazyListState,
+                            selectionState = searchSelectionState
                         )
                     }
-                    else if (page == NanHistoryPages.Tags.ordinal) TagList(
-                        lazyListState = tagsLazyListState,
-                        selectionState = tagListSelectionState
-                    )
-                    else if (page == NanHistoryPages.Search.ordinal) EventList(
-                        viewModel = searchViewModel,
-                        lazyListState = searchLazyListState,
-                        selectionState = searchSelectionState
-                    )
                 }
 
             }
@@ -1085,7 +1226,8 @@ fun EventList(
     loadHeaderData: Boolean = true,
     lazyListState: LazyListState = rememberLazyListState(),
     scrollBehavior: TopAppBarScrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(),
-    topItem: (@Composable LazyItemScope.() -> Unit)? = null
+    topItem: (@Composable LazyItemScope.() -> Unit)? = null,
+    onEmptyContent: (@Composable ColumnScope.() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1142,7 +1284,7 @@ fun EventList(
 
     if (!selectionMode) selectionState.clear()
 
-    Box(Modifier.fillMaxSize()) {
+    if (eventList.isNotEmpty()) Box(Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
@@ -1306,6 +1448,14 @@ fun EventList(
 
         QuickScroll(lazyListState)
     }
+    else Column(
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        content = onEmptyContent ?: {}
+    )
 }
 
 @Composable
@@ -1452,7 +1602,7 @@ private fun TagList(
         it.map { tag -> tag.toHistoryTag() }
     }.collectAsState(emptyList())
 
-    Box(Modifier.fillMaxSize()) {
+    if (tags.isNotEmpty()) Box(Modifier.fillMaxSize()) {
         LazyColumn(
             state = lazyListState,
             modifier = Modifier
@@ -1510,5 +1660,68 @@ private fun TagList(
         }
 
         QuickScroll(lazyListState)
+    }
+    else Column(
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp)
+    ) {
+        Image(
+            painter = painterResource(
+                if (isSystemInDarkTheme()) R.drawable.hint_no_tag_dark
+                else R.drawable.hint_no_tag
+            ),
+            modifier = Modifier
+                .height(196.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outline,
+                    shape = RoundedCornerShape(16.dp)
+                ),
+            contentDescription = null
+        )
+
+        Box(Modifier.height(8.dp))
+
+        Text(
+            text = "No tags here",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        val addIcon = "addIcon"
+
+        val text = buildAnnotatedString {
+            append("Add tag by clicking ")
+            appendInlineContent(addIcon, "add icon")
+            append(" at top right corner, it's useful to organize your events.")
+        }
+        val inlineContent = mapOf(
+            addIcon to InlineTextContent(
+                Placeholder(
+                    width = 16.sp,
+                    height = 16.sp,
+                    placeholderVerticalAlign = PlaceholderVerticalAlign.Center
+                )
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_add),
+                    contentDescription = "Add icon",
+                    tint = Color.Gray,
+                    modifier = Modifier.fillMaxSize()
+                )
+            },
+        )
+
+        Text(
+            text = text,
+            inlineContent = inlineContent,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

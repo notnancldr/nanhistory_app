@@ -32,6 +32,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Info
@@ -44,6 +45,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -360,29 +362,65 @@ fun DetailContent(eventId: String, path: String) {
                 .padding(paddingValues)
                 .verticalScroll(scrollState)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            Column(
                 modifier = Modifier
-                    .padding(horizontal = 16.dp)
+                    .fillMaxWidth()
+                    .padding(8.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (eventData != null) {
-                    IconButton(
-                        modifier = Modifier
-                            .width(24.dp),
-                        onClick = {
-                            tagDialogState = true
-                        },
-                    ) { Icon(Icons.Rounded.Edit, "Edit tag") }
-                    VerticalDivider()
-                    if (eventData.tags.isNotEmpty()) TagsView(eventData.tags, limit = Int.MAX_VALUE, wrap = true)
-                    else Text("No tags")
-                }
-                else {
-                    ComponentPlaceholder(Modifier
-                        .width(164.dp)
-                        .height(72.dp)
-                        .padding(vertical = 8.dp))
+                    if (eventData.tags.isNotEmpty()) {
+                        val isTagMoreThanOne = eventData.tags.size > 1
+                        Text(
+                            "${eventData.tags.size} tag${if (isTagMoreThanOne) "s" else ""}",
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        IconButton(
+                            onClick = {
+                                tagDialogState = true
+                            },
+                            colors = IconButtonDefaults.filledIconButtonColors()
+                        ) {
+                            if (eventData.tags.isNotEmpty()) Icon(Icons.Rounded.Edit, "Edit tag")
+                            else Icon(Icons.Rounded.Add, "Add tag")
+                        }
+                        VerticalDivider()
+                        if (eventData.tags.isNotEmpty()) TagsView(
+                            eventData.tags,
+                            limit = Int.MAX_VALUE,
+                            wrap = true
+                        )
+                        else Text(
+                            "No tags",
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                } else {
+                    ComponentPlaceholder(
+                        Modifier
+                            .width(54.dp)
+                            .height(18.dp)
+                            .padding(vertical = 8.dp)
+                    )
+                    ComponentPlaceholder(
+                        Modifier
+                            .width(164.dp)
+                            .height(72.dp)
+                            .padding(vertical = 8.dp)
+                    )
                     // ComponentPlaceholder(Modifier
                     //     .width(64.dp)
                     //     .height(16.dp))

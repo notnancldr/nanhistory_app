@@ -7,9 +7,15 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.StartOffset
+import androidx.compose.animation.core.StartOffsetType
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateValue
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -17,6 +23,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,7 +52,9 @@ import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ButtonElevation
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -74,16 +83,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.painter.BrushPainter
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.github.skydoves.colorpicker.compose.BrightnessSlider
@@ -272,7 +289,36 @@ fun AudioPlayer(path: String) {
 
 @Composable
 fun ComponentPlaceholder(modifier: Modifier = Modifier) {
-    val infiniteTransition = rememberInfiniteTransition(label = "rotation")
+    val infiniteTransition = rememberInfiniteTransition(label = "gradient")
+
+    val offset by infiniteTransition.animateValue(
+        initialValue = 0.dp,
+        targetValue = 128.dp,
+        label = "offset",
+        typeConverter = Dp.VectorConverter,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        )
+    )
+
+    val tileSize = with(LocalDensity.current) {
+        64.dp.toPx()
+    }
+
+    val listColors = listOf(
+        Color(0xFF707070),
+        Color(0xFF909090)
+    )
+
+    val gradient = with(LocalDensity.current) {
+        Brush.horizontalGradient(
+            colors = listColors,
+            startX = 0f + offset.toPx(),
+            endX = tileSize + offset.toPx(),
+            tileMode = TileMode.Mirror
+        )
+    }
 
     val alpha by infiniteTransition.animateFloat(
         initialValue = 0.3f,
@@ -286,8 +332,8 @@ fun ComponentPlaceholder(modifier: Modifier = Modifier) {
 
     Box(
         modifier
-            .alpha(alpha)
-            .background(Color.Gray, RoundedCornerShape(16.dp))
+             .alpha(alpha)
+            .background(gradient, RoundedCornerShape(16.dp))
             .clip(RoundedCornerShape(16.dp))
     )
 }
@@ -814,8 +860,8 @@ fun DataProcessDialog() {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 val context = LocalContext.current
-                val infiniteTransition = rememberInfiniteTransition(label = "rotation")
-
+//                val infiniteTransition = rememberInfiniteTransition(label = "rotation")
+//
                 val title =
                     if (dataProcessStage == ImportProgressStage.Migrate) {
                         "Updating Data"
@@ -838,23 +884,61 @@ fun DataProcessDialog() {
                         else "Importing"
                     }
 
-                val iconAlpha by infiniteTransition.animateFloat(
-                    initialValue = 0.3f,
-                    targetValue = 1f,
+//                val iconAlpha by infiniteTransition.animateFloat(
+//                    initialValue = 0.3f,
+//                    targetValue = 1f,
+//                    animationSpec = infiniteRepeatable(
+//                        animation = tween(durationMillis = 800, easing = LinearEasing),
+//                        repeatMode = RepeatMode.Reverse
+//                    ),
+//                    label = "iconAlpha"
+//                )
+
+                val infiniteTransition = rememberInfiniteTransition(label = "gradient")
+
+                val offset by infiniteTransition.animateValue(
+                    initialValue = 0.dp,
+                    targetValue = 128.dp,
+                    label = "offset",
+                    typeConverter = Dp.VectorConverter,
                     animationSpec = infiniteRepeatable(
                         animation = tween(durationMillis = 800, easing = LinearEasing),
-                        repeatMode = RepeatMode.Reverse
-                    ),
-                    label = "iconAlpha"
+                        repeatMode = RepeatMode.Restart
+                    )
                 )
 
+                val tileSize = with(LocalDensity.current) {
+                    64.dp.toPx()
+                }
+
+                val listColors = listOf(
+                    Color(0xFF707070),
+                    Color(0xFF909090)
+                )
+
+                val gradient = with(LocalDensity.current) {
+                    Brush.horizontalGradient(
+                        colors = listColors,
+                        startX = 0f + offset.toPx(),
+                        endX = tileSize + offset.toPx(),
+                        tileMode = TileMode.Mirror
+                    )
+                }
+
                 Icon(
-                    painterResource(R.drawable.ic_cloud_download),
-                    "Processing Data",
+                    contentDescription = "Processing Data",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
                         .size(88.dp)
-                        .alpha(iconAlpha)
+                        .graphicsLayer(alpha = 0.99f)
+                        .drawWithCache {
+                            onDrawWithContent {
+                                drawContent()
+                                drawRect(gradient, blendMode = BlendMode.SrcAtop)
+                            }
+                        },
+                        //.alpha(iconAlpha)
+                    painter = painterResource(R.drawable.ic_cloud_download),
                 )
                 Text(
                     title,
@@ -913,4 +997,75 @@ fun DataProcessDialog() {
             }
         }
     }
+}
+
+@Composable
+fun SelectableButton(
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    colors: ButtonColors = ButtonDefaults.buttonColors(),
+    elevation: ButtonElevation? = ButtonDefaults.buttonElevation(),
+    contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
+    interactionSource: MutableInteractionSource? = null,
+    content: @Composable RowScope.() -> Unit,
+) {
+    val transitionDuration = 1000
+
+    val cornerRadius by animateDpAsState(
+        targetValue = if (selected) 64.dp else 12.dp,
+        label = "cornerRadius"
+    )
+
+    val containerColor by animateColorAsState(
+        targetValue = if (selected) colors.containerColor else Color.Transparent,
+        label = "bgColor"
+    )
+
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) colors.contentColor else MaterialTheme.colorScheme.primary,
+        label = "contentColor"
+    )
+
+    val borderWidth by animateDpAsState(
+        targetValue = if (selected) 0.dp else 1.dp,
+        label = "borderWidth"
+    )
+
+    val shape = RoundedCornerShape(cornerRadius)
+
+    Button(
+        onClick = onClick,
+        content = content,
+        shape = shape,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = containerColor,
+            contentColor = contentColor
+        ),
+        modifier = modifier,
+        border = BorderStroke(
+            width = borderWidth,
+            color = Color.Gray
+        ),
+        enabled = enabled,
+        elevation = elevation,
+        contentPadding = contentPadding,
+        interactionSource = interactionSource
+    )
+
+//    Surface(
+//        shape = shape,
+//        modifier = Modifier
+//            .clip
+//            .clickable { onClick() },
+//        color = containerColor,
+//        contentColor = contentColor,
+//        border = BorderStroke(
+//            width = borderWidth,
+//            color = Color.Gray
+//        )
+//    ) {
+//        Row(content = content, modifier = Modifier.padding(contentPadding))
+//    }
 }

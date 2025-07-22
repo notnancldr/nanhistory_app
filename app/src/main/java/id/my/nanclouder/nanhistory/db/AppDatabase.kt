@@ -1,6 +1,7 @@
 package id.my.nanclouder.nanhistory.db
 
 import android.content.Context
+import android.util.Log
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -9,8 +10,10 @@ import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.lib.history.HistoryDay
 import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
 import id.my.nanclouder.nanhistory.ui.main.EventSelectMode
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 
@@ -112,6 +115,20 @@ abstract class AppDatabase : RoomDatabase() {
                         metadata = mapOf()
                     )
                 )
+            }
+        }
+    }
+
+    suspend fun forceCheckpoint() {
+        withContext(Dispatchers.IO) {
+            val db = INSTANCE?.openHelper
+                ?.writableDatabase
+            db?.query("pragma wal_checkpoint(restart)")?.use {
+                // Optionally inspect results
+                if (it.moveToFirst()) {
+                    val result = it.getInt(0)
+                    Log.d("Checkpoint", "Result code: $result")
+                }
             }
         }
     }

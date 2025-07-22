@@ -14,7 +14,6 @@ import androidx.core.app.NotificationCompat
 import androidx.core.net.toUri
 import id.my.nanclouder.nanhistory.BackupProgressStage
 import id.my.nanclouder.nanhistory.ImportProgressStage
-import id.my.nanclouder.nanhistory.MainActivity
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.lib.LogData
@@ -39,7 +38,6 @@ import java.time.Instant
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
-import kotlin.system.exitProcess
 
 class DataProcessService : Service() {
     companion object {
@@ -358,6 +356,10 @@ class DataProcessService : Service() {
                         max = inputFiles.sumOf { it.toList().size }.toLong() + 1,
                         backupStage = BackupProgressStage.Compress
                     )
+
+                    val db = AppDatabase.getInstance(applicationContext)
+
+                    db.forceCheckpoint()
 
                     inputFiles.forEach {
                         for (file in it) {
