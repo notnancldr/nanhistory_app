@@ -320,6 +320,7 @@ class RecordService : Service() {
         event.metadata["record_updates"] = updates
 
         eventLocations.writeToLocationFile(locationFile)
+        event.locationPath = locationPath
         Log.d(
             "RecordService",
             "Event signature valid: B: $signatureValidBeforeUpdate, A: ${event.validateSignature(applicationContext)}"

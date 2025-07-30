@@ -1,7 +1,9 @@
 package id.my.nanclouder.nanhistory.ui.tags
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -21,16 +23,20 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.R
+import id.my.nanclouder.nanhistory.TagDetailActivity
 import id.my.nanclouder.nanhistory.lib.backgroundTagColor
 import id.my.nanclouder.nanhistory.lib.borderTagColor
 import id.my.nanclouder.nanhistory.lib.history.HistoryTag
 import id.my.nanclouder.nanhistory.lib.textTagColor
+import id.my.nanclouder.nanhistory.ui.TagDetailDialogState
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -40,11 +46,15 @@ fun TagsView(
     limit: Int = 2,
     wrap: Boolean = false,
     favorite: Boolean = false,
-    darkTheme: Boolean = isSystemInDarkTheme()
+    clickable: Boolean = true,
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    tagDetailDialogState: TagDetailDialogState? = null
 ) {
     if (tags.isEmpty() && !favorite) return
 
     var tagLimit = limit
+
+    val context = LocalContext.current
 
     val scrollState = rememberScrollState()
     val rowModifier = Modifier.horizontalScroll(state = scrollState)
@@ -70,10 +80,13 @@ fun TagsView(
                 tag.name,
                 color = tag.tint.textTagColor(darkTheme),
                 modifier = Modifier
+                    .clip(RoundedCornerShape(100.dp))
                     .background(
                         color = tag.tint.backgroundTagColor(darkTheme),
-                        shape = RoundedCornerShape(100.dp),
                     )
+                    .clickable {
+                        tagDetailDialogState?.open(tag.id)
+                    }
                     .border(1.dp, tag.tint.borderTagColor(darkTheme), RoundedCornerShape(100.dp))
                     .padding(PaddingValues(horizontal = 8.dp, vertical = 4.dp))
                     .sizeIn(),

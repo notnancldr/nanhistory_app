@@ -56,6 +56,7 @@ import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
 import id.my.nanclouder.nanhistory.lib.history.validateSignature
 import id.my.nanclouder.nanhistory.lib.matchOrNull
 import id.my.nanclouder.nanhistory.lib.readableTimeHours
+import id.my.nanclouder.nanhistory.ui.TagDetailDialogState
 import id.my.nanclouder.nanhistory.ui.tags.TagsView
 import kotlinx.coroutines.delay
 import java.time.Instant
@@ -68,7 +69,8 @@ fun EventListItem(
     eventData: HistoryEvent,
     modifier: Modifier = Modifier,
     selected: Boolean = false,
-    recording: Boolean = false
+    recording: Boolean = false,
+    tagDetailDialogState: TagDetailDialogState? = null
 ) {
     val context = LocalContext.current
 
@@ -205,7 +207,7 @@ fun EventListItem(
             }
         },
         supportingContent = {
-            TagsView(eventData.tags, favorite = eventData.favorite) // TODO
+            TagsView(eventData.tags, favorite = eventData.favorite, tagDetailDialogState = tagDetailDialogState) // TODO
         },
         trailingContent = {
             Text(timeStr)

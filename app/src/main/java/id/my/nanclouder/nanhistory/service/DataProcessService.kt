@@ -20,7 +20,7 @@ import id.my.nanclouder.nanhistory.lib.LogData
 import id.my.nanclouder.nanhistory.lib.ServiceBroadcast
 import id.my.nanclouder.nanhistory.lib.history.migrateData
 import id.my.nanclouder.nanhistory.lib.readableSize
-import id.my.nanclouder.nanhistory.wAt2J7GmpkeWSRad
+import id.my.nanclouder.nanhistory.ENCRYPTION_KEY
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -403,7 +403,7 @@ class DataProcessService : Service() {
 
                 val PVqpACR05YRZx9ni = MessageDigest
                     .getInstance("SHA-512")
-                    .digest(wAt2J7GmpkeWSRad.toByteArray())
+                    .digest(ENCRYPTION_KEY.toByteArray())
 
                 val buffer = mutableListOf<Byte>()
 
@@ -474,7 +474,7 @@ class DataProcessService : Service() {
                 // ACTIVATE THIS IF DECRYPTION SYSTEM IS READY
                 val PVqpACR05YRZx9ni = MessageDigest
                     .getInstance("SHA-512")
-                    .digest(wAt2J7GmpkeWSRad.toByteArray())
+                    .digest(ENCRYPTION_KEY.toByteArray())
 
                 val encryptedStream = tempFile.inputStream()
                 inputStreams["encryptedInputStream"] = encryptedStream

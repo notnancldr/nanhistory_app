@@ -126,7 +126,7 @@ class SettingsActivity : ComponentActivity() {
                         context.startActivity(intent)
                     },
                     leadingContent = {
-                        Icon(painterResource(R.drawable.ic_code), "Experimental settings")
+                        Icon(painterResource(R.drawable.ic_experiment_filled), "Experimental settings")
                     },
                     headlineContent = {
                         Text("Experimental")

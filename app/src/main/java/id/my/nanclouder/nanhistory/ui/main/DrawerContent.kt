@@ -18,8 +18,10 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -34,6 +36,7 @@ import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.settings.SettingsActivity
 import id.my.nanclouder.nanhistory.lib.getPackageInfo
+import kotlinx.coroutines.delay
 
 @Composable
 fun DrawerContent() {
@@ -44,6 +47,17 @@ fun DrawerContent() {
 
     val drawerItemText = @Composable { text: String ->
         Text(text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.W700)
+    }
+
+    var isDeveloper by remember {
+        mutableStateOf(Config.developerModeEnabled.get(context))
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(100)
+            isDeveloper = Config.developerModeEnabled.get(context)
+        }
     }
 
     ModalDrawerSheet(modifier = Modifier.width(300.dp)) {
@@ -89,7 +103,7 @@ fun DrawerContent() {
                         context.startActivity(intent)
                     }
                 )
-                NavigationDrawerItem(
+                if (isDeveloper) NavigationDrawerItem(
                     modifier = itemModifier,
                     icon = { Icon(painterResource(R.drawable.ic_code), "Debug") },
                     label = { drawerItemText("Debug") },
@@ -117,6 +131,7 @@ fun DrawerContent() {
                             if (clickCount == 10) {
                                 Toast.makeText(context, "Developer mode enabled", Toast.LENGTH_SHORT).show()
                                 Config.developerModeEnabled.set(context, true)
+                                isDeveloper = true
                             }
                         }
                 )

@@ -5,13 +5,16 @@ import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Warning
@@ -19,6 +22,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -38,6 +42,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.getActivity
+import id.my.nanclouder.nanhistory.ui.TagDetailDialogState
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import java.io.File
 
@@ -46,7 +51,7 @@ import java.io.File
 fun FileListView(
     appBarTitle: String,
     child: String? = null,
-    deleteButton: Boolean = false
+    deleteButton: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -117,7 +122,14 @@ fun FileListView(
                 stickyHeader(key = 9999999) {
                     ListItem(
                         headlineContent = {
-                            Text(dirTree.joinToString("/") { it.name })
+                            Row(
+                                Modifier.horizontalScroll(rememberScrollState())
+                            ) {
+                                Text(
+                                    dirTree.joinToString(" > ") { it.name },
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     )
                 }
@@ -156,7 +168,8 @@ fun FileListView(
                         },
                         overlineContent = {
                             item.parentFile?.absolutePath?.let {
-                                Text(it.replace(context.filesDir.path, ""))
+                                val replaced = it.replace(context.dataDir.path, "")
+                                Text(replaced.ifBlank { it })
                             }
                         },
                         supportingContent = {

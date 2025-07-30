@@ -185,8 +185,10 @@ import id.my.nanclouder.nanhistory.state.rememberSelectionState
 import id.my.nanclouder.nanhistory.ui.ColorIcon
 import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
 import id.my.nanclouder.nanhistory.ui.SelectableButton
+import id.my.nanclouder.nanhistory.ui.TagDetailDialog
 import id.my.nanclouder.nanhistory.ui.TagEditorDialog
 import id.my.nanclouder.nanhistory.ui.TagPickerDialog
+import id.my.nanclouder.nanhistory.ui.rememberTagDetailDialogState
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.stream.consumeAsFlow
 import kotlin.math.roundToInt
@@ -1233,6 +1235,8 @@ fun EventList(
     val scope = rememberCoroutineScope()
     val expanded = remember { mutableStateListOf<LocalDate>() }
 
+    val tagDetailDialogState = rememberTagDetailDialogState()
+
     val db = remember { AppDatabase.getInstance(context) }
     val dao = remember { db.appDao() }
 
@@ -1404,6 +1408,7 @@ fun EventList(
                         event,
                         selected = selected,
                         recording = recording,
+                        tagDetailDialogState = tagDetailDialogState,
                         modifier = Modifier
                             .animateItem(fadeInSpec = null, fadeOutSpec = null)
                             .combinedClickable(
@@ -1447,6 +1452,7 @@ fun EventList(
         }
 
         QuickScroll(lazyListState)
+        TagDetailDialog(tagDetailDialogState)
     }
     else Column(
         verticalArrangement = Arrangement.Center,

@@ -10,8 +10,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.StartOffset
-import androidx.compose.animation.core.StartOffsetType
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
@@ -67,6 +65,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -93,7 +92,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.painter.BrushPainter
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -108,11 +106,13 @@ import com.github.skydoves.colorpicker.compose.HsvColorPicker
 import com.github.skydoves.colorpicker.compose.rememberColorPickerController
 import id.my.nanclouder.nanhistory.ImportProgressStage
 import id.my.nanclouder.nanhistory.R
+import id.my.nanclouder.nanhistory.TagDetailActivity
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.DayTagCrossRef
 import id.my.nanclouder.nanhistory.db.EventTagCrossRef
 import id.my.nanclouder.nanhistory.db.TagEntity
 import id.my.nanclouder.nanhistory.db.toHistoryTag
+import id.my.nanclouder.nanhistory.getActivity
 import id.my.nanclouder.nanhistory.lib.history.HistoryTag
 import id.my.nanclouder.nanhistory.lib.history.generateTagId
 import id.my.nanclouder.nanhistory.lib.readableTimeHours
@@ -291,9 +291,11 @@ fun AudioPlayer(path: String) {
 fun ComponentPlaceholder(modifier: Modifier = Modifier) {
     val infiniteTransition = rememberInfiniteTransition(label = "gradient")
 
+    val width = 128.dp
+
     val offset by infiniteTransition.animateValue(
         initialValue = 0.dp,
-        targetValue = 128.dp,
+        targetValue = width * 2,
         label = "offset",
         typeConverter = Dp.VectorConverter,
         animationSpec = infiniteRepeatable(
@@ -303,7 +305,7 @@ fun ComponentPlaceholder(modifier: Modifier = Modifier) {
     )
 
     val tileSize = with(LocalDensity.current) {
-        64.dp.toPx()
+        width.toPx()
     }
 
     val listColors = listOf(
@@ -1068,4 +1070,100 @@ fun SelectableButton(
 //    ) {
 //        Row(content = content, modifier = Modifier.padding(contentPadding))
 //    }
+}
+
+class TagDetailDialogState {
+    private var _isOpen by mutableStateOf(false)
+    private var _tagId by mutableStateOf<String?>(null)
+
+    val isOpen get() = _isOpen
+    val tagId get() = _tagId
+
+    fun open(tagId: String) {
+        _tagId = tagId
+        _isOpen = true
+    }
+
+    fun close() {
+        _isOpen = false
+        _tagId = null
+    }
+}
+
+@Composable
+fun rememberTagDetailDialogState() =
+    remember { TagDetailDialogState() }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TagDetailDialog(state: TagDetailDialogState, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+
+    val db = AppDatabase.getInstance(context)
+    val dao = db.appDao()
+
+    if (state.isOpen) BasicAlertDialog(
+        onDismissRequest = {
+            state.close()
+        },
+        modifier = modifier
+    ) {
+        val tagFlow by dao.getTagById(state.tagId!!).collectAsState(null)
+        val tagData = tagFlow
+
+        Surface(
+            Modifier.clip(RoundedCornerShape(32.dp)),
+            color = MaterialTheme.colorScheme.surfaceContainer
+        ) {
+            val useCountFlow = tagData?.let {
+                dao.getEventCountForTag(tagData.id).collectAsState(0)
+            }
+
+            val useCount = useCountFlow?.value ?: 0
+            BackHandler {
+                state.close()
+            }
+            if (tagData != null) Column(
+                Modifier
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = tagData.name,
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    ColorIcon(tagData.tint)
+                }
+                Text(
+                    text = tagData.description,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = "${
+                        if (useCount == 0) "No" else useCount
+                    } event${if (useCount == 1) "" else "s"} using this tag",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.titleSmall
+                )
+                TextButton(
+                    onClick = {
+                        state.close()
+                        val intent = Intent(context, TagDetailActivity::class.java)
+                        intent.putExtra("tagId", tagData.id)
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Detail")
+                }
+            }
+            else ComponentPlaceholder(Modifier.fillMaxWidth().height(128.dp))
+        }
+
+    }
 }

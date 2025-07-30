@@ -100,7 +100,9 @@ import id.my.nanclouder.nanhistory.lib.shareFile
 import id.my.nanclouder.nanhistory.service.RecordService
 import id.my.nanclouder.nanhistory.ui.AudioPlayer
 import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
+import id.my.nanclouder.nanhistory.ui.TagDetailDialog
 import id.my.nanclouder.nanhistory.ui.TagPickerDialog
+import id.my.nanclouder.nanhistory.ui.rememberTagDetailDialogState
 import id.my.nanclouder.nanhistory.ui.tags.TagsView
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import kotlinx.coroutines.Dispatchers
@@ -156,22 +158,12 @@ fun DetailContent(eventId: String, path: String) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    val tagDetailDialogState = rememberTagDetailDialogState()
+
     var showSignatureInfo by rememberSaveable { mutableStateOf(false) }
     var deleteDialogState by rememberSaveable { mutableStateOf(false) }
 
-    var currentPath by rememberSaveable { mutableStateOf(path) }
-
     var showInfo by remember { mutableStateOf(false) }
-
-    var audioAvailable by remember { mutableStateOf(true) }
-    var audioPath by remember { mutableStateOf<String?>(null) }
-
-    fun setUpdateResult() {
-        val intent = Intent().apply {
-            putExtra("path", currentPath)
-        }
-        context.getActivity()?.setResult(1, intent)
-    }
 
     val db = AppDatabase.getInstance(context)
     val dao = db.appDao()
@@ -209,6 +201,8 @@ fun DetailContent(eventId: String, path: String) {
         eventLocations = eventData?.getLocations(context) ?: mapOf()
         locationData = eventLocations.getLocationData()
     }
+
+    TagDetailDialog(tagDetailDialogState)
 
     if (!eventNotFound) Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
@@ -261,7 +255,6 @@ fun DetailContent(eventId: String, path: String) {
                             onClick = {
                                 val intent = Intent(context, EditEventActivity::class.java)
                                 intent.putExtra("eventId", eventId)
-                                intent.putExtra("path", currentPath)
                                 context.startActivity(intent)
                             },
                             enabled = !recording
@@ -285,7 +278,7 @@ fun DetailContent(eventId: String, path: String) {
                                     text = { Text("Info") },
                                     onClick = { showInfo = true; menuExpanded = false }
                                 )
-                                if (audioAvailable) DropdownMenuItem(
+                                if (eventData.audio != null) DropdownMenuItem(
                                     leadingIcon = {
                                         Icon(Icons.Outlined.Share, "Share audio", tint = Color.Gray)
                                     },
@@ -293,7 +286,7 @@ fun DetailContent(eventId: String, path: String) {
                                     onClick = {
                                         shareFile(
                                             context,
-                                            audioPath!!.removePrefix(context.filesDir.absolutePath)
+                                            "audio/" + eventData.audio!!.removePrefix(context.filesDir.absolutePath)
                                         )
                                         menuExpanded = false
                                     }
@@ -313,7 +306,6 @@ fun DetailContent(eventId: String, path: String) {
                                             Intent(context, EventLocationActivity::class.java)
                                                 .apply {
                                                     putExtra("eventId", eventId)
-                                                    putExtra("path", currentPath)
                                                     putExtra("cutMode", true)
                                                 }
                                         context.startActivity(intent)
@@ -373,7 +365,7 @@ fun DetailContent(eventId: String, path: String) {
                     .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (eventData != null) {
+                if (eventData != null && !recording) {
                     if (eventData.tags.isNotEmpty()) {
                         val isTagMoreThanOne = eventData.tags.size > 1
                         Text(
@@ -400,7 +392,8 @@ fun DetailContent(eventId: String, path: String) {
                         if (eventData.tags.isNotEmpty()) TagsView(
                             eventData.tags,
                             limit = Int.MAX_VALUE,
-                            wrap = true
+                            wrap = true,
+                            tagDetailDialogState = tagDetailDialogState
                         )
                         else Text(
                             "No tags",
@@ -794,7 +787,6 @@ fun DetailContent(eventId: String, path: String) {
                                 scope.launch { AppDatabase.moveToTrash(dao, context, listOf(eventData.id)) }
 
                                 context.getActivity()?.run {
-                                    setUpdateResult()
                                     finish()
                                 }
                             },

@@ -198,9 +198,19 @@ fun readableTimeHours(duration: Duration): String {
     return text
 }
 
-fun getAudioFile(context: Context, path: String): File {
-    return File(context.filesDir, "audio/$path")
-}
+fun getAudioFile(context: Context, path: String) =
+    File(context.filesDir, "audio/$path")
+
+fun getLocationFile(context: Context, path: String) =
+    File(context.filesDir, "locations/$path")
+
+fun getAudioFiles(context: Context) =
+    File(context.filesDir, "audio")
+        .walkTopDown().filter { it.isFile }.toList()
+
+fun getLocationFiles(context: Context) =
+    File(context.filesDir, "locations")
+        .walkTopDown().filter { it.isFile }.toList()
 
 fun shareFile(context: Context, fileName: String) {
     val file = File(context.filesDir, fileName)

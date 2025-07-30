@@ -44,6 +44,12 @@ interface AppDao {
         deleteTime: Long = Instant.now().plusSeconds(2_592_000).toEpochMilli()
     )
 
+    @Query("SELECT * FROM events WHERE audio = :audio")
+    fun getEventsByAudio(audio: String): Flow<List<EventEntity>>
+
+    @Query("SELECT * FROM events WHERE locationPath = :location")
+    fun getEventsByLocation(location: String): Flow<List<EventEntity>>
+
     @Query("UPDATE events SET deletePermanently = NULL WHERE id IN (:ids)")
     suspend fun restoreEvents(
         ids: List<String>
@@ -188,6 +194,12 @@ interface AppDao {
         dates: List<LocalDate>,
         dayCount: Int = dates.size
     ): Flow<List<String>>
+
+    @Query(
+        "SELECT COUNT(*) FROM event_tag_cross_refs " +
+        "WHERE tagId = :tagId"
+    )
+    fun getEventCountForTag(tagId: String): Flow<Int>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDayTagCrossRef(crossRef: DayTagCrossRef)

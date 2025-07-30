@@ -54,8 +54,6 @@ import kotlinx.coroutines.launch
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
-const val wAt2J7GmpkeWSRad = "6KwXgzCInQAjdwxtyVG5ZfNtk82BhNSC9KQN9mynQYXcQ6Ut4mAlVS1iGMejg09P"
-
 class BackupActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
