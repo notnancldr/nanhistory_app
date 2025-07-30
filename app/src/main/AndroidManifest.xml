@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="geo" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.NanHistory"
+        tools:targetApi="34">
+        <activity
+            android:name=".TrashActivity"
+            android:exported="false"
+            android:label="@string/title_activity_deleted_event"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".BackupActivity"
+            android:exported="false"
+            android:label="@string/title_activity_backup"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".EventLocationActivity"
+            android:exported="false"
+            android:label="@string/title_activity_event_location"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".settings.SettingsActivity"
+            android:exported="false"
+            android:label="@string/title_activity_settings"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".settings.RecordSettingsActivity"
+            android:exported="false"
+            android:label="@string/title_activity_settings_record"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".settings.StorageSettingsActivity"
+            android:exported="false"
+            android:label="@string/title_activity_settings_storage"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".settings.AutoDeleteSettingsActivity"
+            android:exported="false"
+            android:label="@string/title_activity_settings_auto_delete"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".settings.ExperimentalSettingsActivity"
+            android:exported="false"
+            android:label="@string/title_activity_settings_experimental"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".settings.DeveloperOptionsActivity"
+            android:exported="false"
+            android:label="@string/title_activity_settings_developer"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".debug.DebugActivity"
+            android:exported="false"
+            android:label="@string/title_activity_debug"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".debug.FileSystemActivity"
+            android:exported="false"
+            android:label="@string/title_activity_filesystem"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".debug.LogListActivity"
+            android:exported="false"
+            android:label="@string/title_activity_log_list"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".debug.FilePreviewActivity"
+            android:exported="false"
+            android:label="@string/title_activity_filepreview"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".debug.FilePlayerActivity"
+            android:exported="false"
+            android:label="@string/title_activity_fileplayer"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".debug.ConfigViewActivity"
+            android:exported="false"
+            android:label="@string/title_activity_config_view"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".debug.DataDirActivity"
+            android:exported="false"
+            android:label="DataDirActivity"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".debug.AudioListActivity"
+            android:exported="false"
+            android:label="AudioListActivity"
+            android:theme="@style/Theme.NanHistory" />
+
+        <service
+            android:name=".service.RecordService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location|microphone" />
+        <service
+            android:name=".service.DataProcessService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".service.RecordTileService"
+            android:label="Record Event"
+            android:icon="@drawable/ic_event_record"
+            android:exported="true"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data android:name="android.service.quicksettings.ACTIVE_TILE"
+                android:value="true" />
+
+        </service>
+
+        <activity
+            android:name=".EditEventActivity"
+            android:exported="false"
+            android:label="@string/title_activity_edit_event"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".EventDetailActivity"
+            android:exported="false"
+            android:label="@string/title_activity_event_detail"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".TagDetailActivity"
+            android:exported="false"
+            android:label="@string/title_activity_tag_detail"
+            android:theme="@style/Theme.NanHistory" />
+<!--        <activity-->
+<!--            android:name=".MapLibreTest"-->
+<!--            android:exported="false"-->
+<!--            android:label="MapLibreTest"-->
+<!--            android:theme="@style/Theme.NanHistory" />-->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.NanHistory">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+
+</manifest>

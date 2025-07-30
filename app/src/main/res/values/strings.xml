@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_name">NanHistory</string>
+    <string name="title_activity_event_detail">EventDetailAcitivity</string>
+    <string name="title_activity_edit_event">EditEventActivity</string>
+    <string name="title_activity_debug">DebugActivity</string>
+    <string name="title_activity_event_location">EventLocationActivity</string>
+    <string name="title_activity_filesystem">FileSystemActivity</string>
+    <string name="title_activity_filepreview">FilePreviewActivity</string>
+    <string name="title_activity_log_list">LogListActivity</string>
+    <string name="title_activity_backup">BackupActivity</string>
+    <string name="title_activity_settings">SettingsActivity</string>
+    <string name="title_activity_config_view">ConfigViewActivity</string>
+    <string name="record_notification_action">Stop Button</string>
+    <string name="title_activity_settings_record">RecordSettingsActivity</string>
+    <string name="title_activity_settings_storage">StorageSettingsActivity</string>
+    <string name="title_activity_settings_experimental">ExperimentalSettingsActivity</string>
+    <string name="title_activity_fileplayer">FilePlayerActivity</string>
+    <string name="title_activity_deleted_event">DeletedEventActivity</string>
+    <string name="title_activity_tag_detail">TagDetailActivity</string>
+    <string name="title_activity_settings_auto_delete">AutoDeleteSettingsActivity</string>
+    <string name="title_activity_settings_developer">DeveloperOptionsActivity</string>
+</resources>
