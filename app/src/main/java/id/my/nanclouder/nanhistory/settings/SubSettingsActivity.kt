@@ -26,10 +26,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import id.my.nanclouder.nanhistory.getActivity
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
+import id.my.nanclouder.nanhistory.utils.NewUIComponentActivity
 
 open class SubSettingsActivity(
     val title: String
-) : ComponentActivity() {
+) : NewUIComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 

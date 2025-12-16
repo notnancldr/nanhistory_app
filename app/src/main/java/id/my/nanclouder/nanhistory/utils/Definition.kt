@@ -1,10 +1,11 @@
-package id.my.nanclouder.nanhistory.lib
+package id.my.nanclouder.nanhistory.utils
 
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.util.Log
+import android.widget.Toast
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -47,9 +48,11 @@ object ServiceBroadcast {
 }
 
 object RecordStatus {
+    const val RESTARTING = -2
     const val BUSY = -1
     const val READY = 0
-    const val RUNNING = 1
+    const val IDLE = 1
+    const val RUNNING = 2
 }
 
 data class Coordinate(val latitude: Double, val longitude: Double) {
@@ -64,12 +67,14 @@ inline fun <reified T> matchOrNull(value: Any?): T? =
     if (value is T) value else null
 
 fun String.toCoordinateOrNull(): Coordinate? {
-    val split = this.split(",", limit = 2)
-//    Log.d("NanHistoryDebug", "To coordinate: $split")
-    val latlong = split.map { it.trim().toDoubleOrNull() }
-    if (latlong.firstOrNull() == null || latlong.lastOrNull() == null || latlong.size != 2) return null
-//    Log.d("NanHistoryDebug", "Str: $this, output: ${Coordinate(latlong[0]!!, latlong[1]!!)}")
-    return Coordinate(latlong[0]!!, latlong[1]!!)
+    val parts = this.split(",", limit = 2)
+        .map { it.trim().toDoubleOrNull() }
+
+    return if (parts.size == 2 && parts[0] != null && parts[1] != null) {
+        Coordinate(parts[0]!!, parts[1]!!)
+    } else {
+        null
+    }
 }
 
 fun String.toCoordinate(): Coordinate = this.toCoordinateOrNull() ?: throw NumberFormatException()
@@ -223,4 +228,38 @@ fun shareFile(context: Context, fileName: String) {
     }
 
     context.startActivity(Intent.createChooser(intent, "Share file via"))
+}
+
+/**
+ * Shares a file using an ACTION_SEND intent.
+ * This function handles creating a FileProvider URI for the file.
+ *
+ * @param context The context from which to start the activity.
+ * @param filePath The absolute path to the file to be shared.
+ */
+fun shareFileAbsolute(context: Context, filePath: String) {
+    val file = File(filePath)
+    if (!file.exists()) {
+        Toast.makeText(context, "File not found for sharing.", Toast.LENGTH_SHORT).show()
+        return
+    }
+
+    try {
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider", // Make sure this matches the authority in your manifest
+            file
+        )
+
+        val shareIntent: Intent = Intent().apply {
+            action = Intent.ACTION_SEND
+            putExtra(Intent.EXTRA_STREAM, uri)
+            type = context.contentResolver.getType(uri) // Dynamically get MIME type
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(shareIntent, "Share Image"))
+    } catch (e: Exception) {
+        Log.e("ShareMap", "Error sharing file: $e\nFile path: $filePath")
+        Toast.makeText(context, "Failed to prepare image for sharing: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+    }
 }

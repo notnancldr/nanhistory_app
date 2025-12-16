@@ -1,4 +1,4 @@
-package id.my.nanclouder.nanhistory.lib
+package id.my.nanclouder.nanhistory.utils
 
 import android.content.Context
 import id.my.nanclouder.nanhistory.db.AppDatabase

@@ -13,6 +13,9 @@ import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import id.my.nanclouder.nanhistory.config.LocationIterationLogic
+import id.my.nanclouder.nanhistory.utils.transportModel.TransportModelTrainingModal
+import id.my.nanclouder.nanhistory.utils.transportModel.TransportModelTrainingScreen
 
 class DeveloperOptionsActivity : SubSettingsActivity("Developer Options") {
     @Composable
@@ -38,6 +41,38 @@ class DeveloperOptionsActivity : SubSettingsActivity("Developer Options") {
                 configValue = Config.developer1hourAutoDelete,
                 enabled = developerModeEnabled
             )
+
+            CategoryHeader(
+                icon = painterResource(R.drawable.ic_circle_filled),
+                iconDescription = "Record",
+                title = "Recording"
+            )
+            SettingsSwitch(
+                title = "Service debug notification",
+                description = "Enable debug notification for service.",
+                configValue = Config.developerServiceDebug,
+                enabled = developerModeEnabled
+            )
+            SettingsDropdown(
+                title = "Location iteration logic",
+                description = "Choose specific check logic for location iteration.",
+                configValue = Config.locationIterationLogic,
+                enumClass = LocationIterationLogic::class.java
+            )
+
+            CategoryHeader(
+                icon = painterResource(R.drawable.ic_directions_car_filled),
+                iconDescription = "Transport Detection",
+                title = "Transport Mode Detection"
+            )
+            SettingsSwitch(
+                title = "Show detected transport",
+                description = "Show auto-determined transport mode from transport mode determination algorithm.",
+                configValue = Config.developerShowDetectedTransport,
+                enabled = developerModeEnabled
+            )
+            TransportModelTrainingModal()
+
             // SettingsSwitch(
             //     title = "Always ask before auto-delete",
             //     description = "Always ask user before auto deletion happens.",

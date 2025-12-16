@@ -8,13 +8,13 @@ import androidx.room.Index
 import androidx.room.Junction
 import androidx.room.PrimaryKey
 import androidx.room.Relation
-import id.my.nanclouder.nanhistory.lib.history.EventPoint
-import id.my.nanclouder.nanhistory.lib.history.EventRange
-import id.my.nanclouder.nanhistory.lib.history.EventTypes
-import id.my.nanclouder.nanhistory.lib.history.HistoryDay
-import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
-import id.my.nanclouder.nanhistory.lib.history.HistoryTag
-import id.my.nanclouder.nanhistory.lib.history.TransportationType
+import id.my.nanclouder.nanhistory.utils.history.EventPoint
+import id.my.nanclouder.nanhistory.utils.history.EventRange
+import id.my.nanclouder.nanhistory.utils.history.EventTypes
+import id.my.nanclouder.nanhistory.utils.history.HistoryDay
+import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
+import id.my.nanclouder.nanhistory.utils.history.HistoryTag
+import id.my.nanclouder.nanhistory.utils.history.TransportationType
 import java.time.LocalDate
 import java.time.ZonedDateTime
 
@@ -25,7 +25,8 @@ import java.time.ZonedDateTime
             entity = DayEntity::class,
             parentColumns = ["date"],
             childColumns = ["date"],
-            onDelete = ForeignKey.CASCADE
+            onDelete = ForeignKey.CASCADE,
+            // onUpdate = ForeignKey.CASCADE,
         )
     ],
     indices = [

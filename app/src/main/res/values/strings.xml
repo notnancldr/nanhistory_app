@@ -19,4 +19,6 @@
     <string name="title_activity_tag_detail">TagDetailActivity</string>
     <string name="title_activity_settings_auto_delete">AutoDeleteSettingsActivity</string>
     <string name="title_activity_settings_developer">DeveloperOptionsActivity</string>
+    <string name="title_activity_settings_appearance">AppearanceSettingsActivity</string>
+    <string name="title_activity_about">AboutActivity</string>
 </resources>

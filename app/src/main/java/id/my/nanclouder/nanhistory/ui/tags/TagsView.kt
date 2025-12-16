@@ -1,6 +1,5 @@
 package id.my.nanclouder.nanhistory.ui.tags
 
-import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,9 +10,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.FlowRowScope
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,11 +28,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.R
-import id.my.nanclouder.nanhistory.TagDetailActivity
-import id.my.nanclouder.nanhistory.lib.backgroundTagColor
-import id.my.nanclouder.nanhistory.lib.borderTagColor
-import id.my.nanclouder.nanhistory.lib.history.HistoryTag
-import id.my.nanclouder.nanhistory.lib.textTagColor
+import id.my.nanclouder.nanhistory.utils.backgroundTagColor
+import id.my.nanclouder.nanhistory.utils.borderTagColor
+import id.my.nanclouder.nanhistory.utils.history.HistoryTag
+import id.my.nanclouder.nanhistory.utils.textTagColor
 import id.my.nanclouder.nanhistory.ui.TagDetailDialogState
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 
@@ -111,7 +107,6 @@ fun TagsView(
     }
 
     FlowRow(
-        modifier = Modifier.padding(PaddingValues(vertical = 8.dp)),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.CenterVertically),
         maxLines = if (wrap) Int.MAX_VALUE else 1

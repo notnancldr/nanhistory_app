@@ -64,6 +64,10 @@ interface AppDao {
     fun getFavoriteEvents(): Flow<List<EventWithTags>>
 
     @Transaction
+    @Query("SELECT * FROM events WHERE deletePermanently IS NULL AND date = :date ORDER BY timestamp DESC")
+    fun getEventsByDay(date: LocalDate): Flow<List<EventWithTags>>
+
+    @Transaction
     @Query("SELECT * FROM events WHERE deletePermanently IS NOT NULL ORDER BY timestamp DESC")
     fun getDeletedEventsFlow(): Flow<List<EventWithTags>>
 
@@ -81,8 +85,97 @@ interface AppDao {
     fun searchEvents(query: String): Flow<List<EventWithTags>>
 
     @Transaction
-    @Query("SELECT * FROM events WHERE id = :eventId")
+    @Query(
+        "SELECT * FROM events WHERE (" +
+                // ----- TITLE FIELD -----
+                "(' ' || LOWER(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(title, CHAR(10), ' ')," +      // \n
+                "CHAR(13), ' ')," +                     // \r
+                "CHAR(9), ' ')," +                      // \t
+                "'.', ' ')," +               // .
+                "',' , ' ')," +              // ,
+                "':', ' ')," +               // :
+                "';', ' ')," +               // ;
+                "'\"', ' ')," +              // "
+                "'''', ' ')," +              // '
+                "'!', ' ')," +               // !
+                "'?', ' ')," +               // ?
+                "'(', ' ')," +               // (
+                "')', ' ')" +                // )
+                ") || ' ') LIKE '% ' || LOWER(:query) || ' %' " +
+
+                "OR " +
+
+                // ----- DESCRIPTION FIELD -----
+                "(' ' || LOWER(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(" +
+                "REPLACE(description, CHAR(10), ' ')," +
+                "CHAR(13), ' ')," +
+                "CHAR(9), ' ')," +
+                "'.', ' ')," +
+                "',' , ' ')," +
+                "':', ' ')," +
+                "';', ' ')," +
+                "'\"', ' ')," +
+                "'''', ' ')," +
+                "'!', ' ')," +
+                "'?', ' ')," +
+                "'(', ' ')," +
+                "')', ' ')" +
+                ") || ' ') LIKE '% ' || LOWER(:query) || ' %' " +
+
+                ") AND deletePermanently IS NULL " +
+                "ORDER BY timestamp DESC"
+    )
+    fun searchEventsMatchWholeWord(query: String): Flow<List<EventWithTags>>
+
+    @Transaction
+    @Query(
+        "SELECT DISTINCT evt.* FROM events evt " +
+                "JOIN event_tag_cross_refs crsrf ON evt.id = crsrf.eventId " +
+                "WHERE crsrf.tagId IN (:tagIds) AND evt.deletePermanently IS NULL " +
+                "AND (LOWER(evt.title) LIKE LOWER('%' || :query || '%') " +
+                "OR LOWER(evt.description) LIKE LOWER('%' || :query || '%')) " +
+                "GROUP BY evt.id " +
+                "HAVING COUNT(DISTINCT crsrf.tagId) = :tagCount " +
+                "ORDER BY evt.timestamp DESC"
+    )
+    fun searchEventsWithTagIds(
+        query: String,
+        tagIds: List<String>,
+        tagCount: Int = tagIds.size
+    ): Flow<List<EventWithTags>>
+
+    @Transaction
+    @Query("SELECT * FROM events WHERE id IN (:eventId)")
     suspend fun getEventById(eventId: String): EventWithTags?
+
+    @Transaction
+    @Query("SELECT * FROM events WHERE id = :eventIds")
+    suspend fun getEventsByIds(eventIds: List<String>): List<EventWithTags>
 
     @Transaction
     @Query("SELECT * FROM events WHERE id = :eventId")
@@ -103,7 +196,7 @@ interface AppDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDay(day: DayEntity)
 
-    @Update
+    @Update(onConflict = OnConflictStrategy.REPLACE)
     suspend fun updateDay(day: DayEntity)
 
     @Delete
@@ -169,6 +262,9 @@ interface AppDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertEventTagCrossRefs(crossRefs: List<EventTagCrossRef>)
 
+    @Query("SELECT * FROM tags WHERE LOWER(name) LIKE LOWER('%' || :query || '%')")
+    fun searchTagsByName(query: String): Flow<List<TagEntity>>
+
     @Delete
     suspend fun deleteEventTagCrossRef(crossRef: EventTagCrossRef)
 
@@ -217,6 +313,9 @@ interface AppDao {
     @Query("DELETE FROM events WHERE deletePermanently IS NOT NULL AND deletePermanently < :currentTime")
     suspend fun deleteOldEvents(currentTime: Long = Instant.now().toEpochMilli())
 
+    /* Views */
+    @Query("SELECT * FROM events_time_with_tag WHERE tag_id = :tagId ORDER BY time ASC")
+    fun getEventsTimeByTag(tagId: String): Flow<List<EventsTimeWithTag>>
 
     //!!!! DELETE ALL DATA !!!!//
     @Query("DELETE FROM events")

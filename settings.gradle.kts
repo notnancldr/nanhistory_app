@@ -21,4 +21,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "NanHistory"
 include(":app")
- 

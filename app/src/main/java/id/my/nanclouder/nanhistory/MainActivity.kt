@@ -1,6 +1,7 @@
 package id.my.nanclouder.nanhistory
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
@@ -22,10 +23,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.service.DataProcessService
 import id.my.nanclouder.nanhistory.ui.DataProcessDialog
 import id.my.nanclouder.nanhistory.ui.main.MainView
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
+import id.my.nanclouder.nanhistory.utils.NewUIComponentActivity
+import id.my.nanclouder.nanhistory.utils.transportModel.TrainingDataCache
 import id.my.nanclouder.nanhistory.worker.AutoDeleteWorker
 import org.osmdroid.config.Configuration
 import org.osmdroid.library.BuildConfig
@@ -40,14 +44,17 @@ enum class ListFilters {
     Recent, Favorite, All/*, Search*/
 }
 
-class MainActivity : ComponentActivity() {
+class MainActivity : NewUIComponentActivity() {
     private var update: (() -> Unit) = { }
     private var startTime: Long = 0L
+
+    private val transportDetectionTrainingDataCache = TrainingDataCache
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         scheduleAutoDelete()
+        Config.prepareCache(this)
 
         enableEdgeToEdge()
         onBackPressedDispatcher.addCallback(this, object: OnBackPressedCallback(true) {
@@ -69,7 +76,6 @@ class MainActivity : ComponentActivity() {
             var showMainView by remember { mutableStateOf(false) }
             var migrationNeeded by remember { mutableStateOf(false) }
 
-            val importState by DataProcessService.ImportState.stage.collectAsState()
             val dataProcessType by DataProcessService.ServiceState.operationType.collectAsState()
             val dataProcessIsRunning by DataProcessService.ServiceState.isRunning.collectAsState()
 
@@ -115,18 +121,34 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        requestPermissions(arrayOf(
-            android.Manifest.permission.ACCESS_BACKGROUND_LOCATION,
-            android.Manifest.permission.ACCESS_FINE_LOCATION,
-            android.Manifest.permission.ACCESS_COARSE_LOCATION,
-            android.Manifest.permission.POST_NOTIFICATIONS,
-        ), 100)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requestPermissions(arrayOf(
+                android.Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+                android.Manifest.permission.ACCESS_FINE_LOCATION,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION,
+                android.Manifest.permission.POST_NOTIFICATIONS,
+            ), 100)
+        }
+        else {
+            requestPermissions(arrayOf(
+                android.Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+                android.Manifest.permission.ACCESS_FINE_LOCATION,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION,
+            ), 100)
+        }
         requestPermissions(arrayOf(
             android.Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
         ), 101)
         requestPermissions(arrayOf(
             android.Manifest.permission.WAKE_LOCK,
         ), 102)
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        // Refresh config cache
+        Config.prepareCache(this)
     }
 
     private fun scheduleAutoDelete() {

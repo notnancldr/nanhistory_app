@@ -44,11 +44,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.db.AppDatabase
-import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
-import id.my.nanclouder.nanhistory.lib.history.safeDelete
+import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
+import id.my.nanclouder.nanhistory.utils.history.safeDelete
 import id.my.nanclouder.nanhistory.state.rememberSelectionState
+import id.my.nanclouder.nanhistory.ui.EventList
 import id.my.nanclouder.nanhistory.ui.SelectionAppBar
-import id.my.nanclouder.nanhistory.ui.main.EventList
 import id.my.nanclouder.nanhistory.ui.main.EventListViewModel
 import id.my.nanclouder.nanhistory.ui.main.EventSelectMode
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme

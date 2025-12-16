@@ -1,4 +1,4 @@
-package id.my.nanclouder.nanhistory.lib
+package id.my.nanclouder.nanhistory.utils
 
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType

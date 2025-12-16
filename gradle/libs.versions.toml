@@ -4,6 +4,7 @@ agp = "8.10.1"
 androidSdk = "<latest-version>"
 androidSdkVersion = "11.5.1"
 arthenicaFfmpegKitFull = "6.0-2"
+capturable = "3.0.1"
 ffmpegKitFullVersion = "5.1.LTS"
 googleAccompanistPermissions = "0.37.0"
 gson = "2.11.0"
@@ -22,14 +23,21 @@ material3Android = "1.3.1"
 roomRuntime = "2.7.1"
 colorpicker = "1.1.2"
 workRuntimeKtx = "2.9.0"
+appcompat = "1.6.1"
+material = "1.10.0"
+foundationLayout = "1.9.4"
+foundation = "1.9.4"
+foundationVersion = "1.9.5"
 
 [libraries]
 android-sdk-v1151 = { module = "org.maplibre.gl:android-sdk", version.ref = "androidSdkVersion" }
 androidx-activity = { module = "androidx.activity:activity", version.ref = "activity" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
 androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "roomRuntime" }
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "roomRuntime" }
 arthenica-ffmpeg-kit-full = { module = "com.arthenica:ffmpeg-kit-full", version.ref = "ffmpegKitFullVersion" }
+capturable = { module = "dev.shreyaspatil:capturable", version.ref = "capturable" }
 ffmpeg-kit-full-v602 = { module = "com.arthenica:ffmpeg-kit-full", version.ref = "arthenicaFfmpegKitFull" }
 google-accompanist-permissions = { module = "com.google.accompanist:accompanist-permissions", version.ref = "googleAccompanistPermissions" }
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
@@ -51,9 +59,14 @@ play-services-location = { group = "com.google.android.gms", name = "play-servic
 androidx-material3-android = { group = "androidx.compose.material3", name = "material3-android", version.ref = "material3Android" }
 compose-colorpicker = { module = "com.github.skydoves:colorpicker-compose", version.ref = "colorpicker" }
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntimeKtx" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+androidx-compose-foundation-layout = { group = "androidx.compose.foundation", name = "foundation-layout", version.ref = "foundationLayout" }
+androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundation" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
 jetbrainsKotlinAndroid = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+android-library = { id = "com.android.library", version.ref = "agp" }
 

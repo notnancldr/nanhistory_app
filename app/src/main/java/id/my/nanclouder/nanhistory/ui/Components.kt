@@ -17,6 +17,10 @@ import androidx.compose.animation.core.animateValue
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -33,6 +37,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidthIn
 import androidx.compose.foundation.layout.size
@@ -54,6 +59,7 @@ import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonElevation
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -97,9 +103,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.github.skydoves.colorpicker.compose.BrightnessSlider
 import com.github.skydoves.colorpicker.compose.HsvColorPicker
@@ -107,15 +116,15 @@ import com.github.skydoves.colorpicker.compose.rememberColorPickerController
 import id.my.nanclouder.nanhistory.ImportProgressStage
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.TagDetailActivity
+import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.DayTagCrossRef
 import id.my.nanclouder.nanhistory.db.EventTagCrossRef
 import id.my.nanclouder.nanhistory.db.TagEntity
 import id.my.nanclouder.nanhistory.db.toHistoryTag
-import id.my.nanclouder.nanhistory.getActivity
-import id.my.nanclouder.nanhistory.lib.history.HistoryTag
-import id.my.nanclouder.nanhistory.lib.history.generateTagId
-import id.my.nanclouder.nanhistory.lib.readableTimeHours
+import id.my.nanclouder.nanhistory.utils.history.HistoryTag
+import id.my.nanclouder.nanhistory.utils.history.generateTagId
+import id.my.nanclouder.nanhistory.utils.readableTimeHours
 import id.my.nanclouder.nanhistory.service.DataProcessService
 import id.my.nanclouder.nanhistory.ui.tags.TagsView
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
@@ -129,6 +138,7 @@ import java.io.IOException
 import java.time.Duration
 import java.time.LocalDate
 import java.time.ZonedDateTime
+import kotlin.math.round
 
 @Composable
 fun ToggleButton(
@@ -170,6 +180,13 @@ fun RequestMultiplePermissions(
 
 @Composable
 fun AudioPlayer(path: String) {
+    val newUI = Config.appearanceNewUI.getCache()
+    if (newUI) AudioPlayer_New(path)
+    else AudioPlayer_Old(path)
+}
+
+@Composable
+fun AudioPlayer_Old(path: String) {
     var isPlaying by remember { mutableStateOf(false) }
     var progress by remember { mutableIntStateOf(0) } // progress: 0.0 to 1.0
     var recordDuration by remember { mutableIntStateOf(0) }
@@ -288,6 +305,225 @@ fun AudioPlayer(path: String) {
 }
 
 @Composable
+fun AudioPlayer_New(path: String) {
+    var isPlaying by remember { mutableStateOf(false) }
+    var progress by remember { mutableIntStateOf(0) }
+    var recordDuration by remember { mutableIntStateOf(0) }
+    var userIsSeeking by remember { mutableStateOf(false) }
+    var audioAvailable by remember { mutableStateOf(true) }
+
+    val context = LocalContext.current
+
+    val mediaPlayer = remember {
+        if (android.os.Build.VERSION.SDK_INT >= 34) MediaPlayer(context).apply {
+            try {
+                setDataSource(path)
+                prepare()
+            } catch (e: IOException) {
+                audioAvailable = false
+            }
+        } else {
+            audioAvailable = false
+            null
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        recordDuration = mediaPlayer?.duration ?: 0
+    }
+
+    LaunchedEffect(isPlaying, userIsSeeking) {
+        if (isPlaying) {
+            mediaPlayer?.start()
+        } else {
+            if (mediaPlayer?.isPlaying == true) {
+                mediaPlayer.pause()
+            }
+        }
+        while (isPlaying && !userIsSeeking) {
+            val current = mediaPlayer?.currentPosition
+            progress = current ?: 0
+            delay(100L)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        mediaPlayer?.setOnCompletionListener {
+            isPlaying = false
+            progress = 0
+        }
+
+        onDispose {
+            mediaPlayer?.release()
+        }
+    }
+
+    val file = File(path)
+    val progressSeconds = Duration.ofMillis(progress.toLong())
+    val durationSeconds = Duration.ofMillis(recordDuration.toLong())
+    val progressPercent = if (recordDuration > 0) (progress.toFloat() / recordDuration) * 100 else 0f
+
+    if (file.isFile) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp)),
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            tonalElevation = 2.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Play/Pause Button
+                    Surface(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                        color = MaterialTheme.colorScheme.primary,
+                        tonalElevation = 4.dp
+                    ) {
+                        IconButton(
+                            onClick = { isPlaying = !isPlaying },
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            Icon(
+                                if (!isPlaying) painterResource(R.drawable.ic_play_arrow_filled)
+                                else painterResource(R.drawable.ic_pause_filled),
+                                contentDescription = if (isPlaying) "Pause" else "Play",
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+
+                    // Time Display
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            "${readableTimeHours(progressSeconds)} / ${readableTimeHours(durationSeconds)}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            "${round(progressPercent)}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
+
+                // Progress Slider with custom styling
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Slider(
+                        value = progress.toFloat(),
+                        onValueChange = {
+                            userIsSeeking = true
+                            progress = it.toInt()
+                        },
+                        onValueChangeFinished = {
+                            mediaPlayer?.seekTo(progress)
+                            userIsSeeking = false
+                        },
+                        colors = SliderDefaults.colors(
+                            thumbColor = MaterialTheme.colorScheme.primary,
+                            activeTrackColor = MaterialTheme.colorScheme.primary,
+                            inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        valueRange = 0f..recordDuration.toFloat(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .padding(4.dp)
+                    )
+//
+//                    Row(
+//                        modifier = Modifier.fillMaxWidth(),
+//                        horizontalArrangement = Arrangement.SpaceBetween
+//                    ) {
+//                        Text(
+//                            readableTimeHours(progressSeconds),
+//                            style = MaterialTheme.typography.labelSmall,
+//                            color = MaterialTheme.colorScheme.outline
+//                        )
+//                        Text(
+//                            readableTimeHours(durationSeconds),
+//                            style = MaterialTheme.typography.labelSmall,
+//                            color = MaterialTheme.colorScheme.outline
+//                        )
+//                    }
+                }
+            }
+        }
+    } else {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp)),
+            color = MaterialTheme.colorScheme.errorContainer,
+            tonalElevation = 2.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(10.dp)),
+                    color = MaterialTheme.colorScheme.error
+                ) {
+                    Icon(
+                        Icons.Rounded.Warning,
+                        contentDescription = "Error",
+                        tint = MaterialTheme.colorScheme.onError,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(8.dp)
+                    )
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        "Audio file unavailable",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Text(
+                        if (file.isDirectory) "The audio file is a directory"
+                        else "Audio file not found at path",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun ComponentPlaceholder(modifier: Modifier = Modifier) {
     val infiniteTransition = rememberInfiniteTransition(label = "gradient")
 
@@ -362,9 +598,335 @@ fun ColorIcon(color: Color, modifier: Modifier = Modifier) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TagPickerDialog(
+    state: Boolean,
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    eventIds: List<String> = emptyList(),
+    dayDates: List<LocalDate> = emptyList(),
+) {
+    val newUI = Config.appearanceNewUI.get(LocalContext.current)
+    if (newUI) {
+        TagPickerDialog_New(
+            state = state,
+            onDismissRequest = onDismissRequest,
+            modifier = modifier,
+            eventIds = eventIds,
+            dayDates = dayDates
+        )
+    }
+    else {
+        TagPickerDialog_Old(
+            state = state,
+            onDismissRequest = onDismissRequest,
+            modifier = modifier,
+            eventIds = eventIds,
+            dayDates = dayDates
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TagPickerDialog_New(
+    state: Boolean,
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    eventIds: List<String> = emptyList(),
+    dayDates: List<LocalDate> = emptyList(),
+) {
+    if (state) BasicAlertDialog(
+        onDismissRequest = {},
+        modifier = modifier.fillMaxWidth(0.9f),
+    ) {
+        val context = LocalContext.current
+        val haptic = LocalHapticFeedback.current
+        val scope = rememberCoroutineScope()
+
+        val listState = rememberLazyListState()
+
+        val db = AppDatabase.getInstance(context)
+        val dao = db.appDao()
+
+        val tagList by dao.getAllTags().map {
+            it.map { tag -> tag.toHistoryTag() }
+        }.collectAsState(emptyList())
+
+        var oldSelected by remember { mutableStateOf<List<String>?>(null) }
+        val selectedItems = remember { mutableStateListOf<HistoryTag>() }
+
+        var newTagDialogState by remember { mutableStateOf(false) }
+
+        BackHandler {
+            onDismissRequest()
+        }
+
+        LaunchedEffect(Unit) {
+            oldSelected = dao.getTagIdsMatchingAllEventIds(eventIds)
+                .first()
+            selectedItems.addAll(tagList.filter { it.id in oldSelected!! })
+        }
+
+        val itemOnClick = { tag: HistoryTag ->
+            if (selectedItems.contains(tag))
+                selectedItems.remove(tag)
+            else selectedItems.add(tag)
+        }
+
+        val darkTheme = isSystemInDarkTheme()
+
+        var isProcessing by rememberSaveable { mutableStateOf(false) }
+
+        Surface(
+            Modifier
+                .clip(RoundedCornerShape(24.dp))
+                .fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = 8.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxHeight(0.85f)
+                    .fillMaxWidth()
+            ) {
+                // Header
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp)
+                ) {
+                    Text(
+                        "Select Tags",
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = { newTagDialogState = true },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.Add,
+                            "New Tag",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    IconButton(
+                        onClick = onDismissRequest,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.Close,
+                            "Close",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // Divider
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+
+                // Tags List
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 12.dp)
+                ) {
+                    if (oldSelected != null) items(tagList.size) { index ->
+                        val tagData = tagList[index]
+                        val isSelected = selectedItems.contains(tagData)
+
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 4.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    itemOnClick(tagData)
+                                },
+                            color = if (isSelected)
+                                tagData.tint.copy(alpha = 0.12f)
+                            else
+                                Color.Transparent,
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                // Tag Color Indicator
+                                Box(
+                                    modifier = Modifier
+                                        .size(12.dp)
+                                        .background(
+                                            color = tagData.tint,
+                                            shape = RoundedCornerShape(3.dp)
+                                        )
+                                )
+
+                                // Tag Name
+                                Text(
+                                    text = tagData.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (isSelected)
+                                        tagData.tint
+                                    else
+                                        MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                // Checkmark
+                                if (isSelected) {
+                                    Icon(
+                                        Icons.Rounded.Check,
+                                        "Selected",
+                                        tint = tagData.tint,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    else {
+                        items(3) {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                                    .clip(RoundedCornerShape(12.dp)),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    ComponentPlaceholder(Modifier.size(12.dp))
+                                    ComponentPlaceholder(Modifier.fillMaxWidth(0.6f).height(16.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Divider
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+
+                // Action Buttons
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismissRequest,
+                        enabled = !isProcessing,
+                        modifier = Modifier.height(40.dp)
+                    ) {
+                        Text("Cancel")
+                    }
+
+                    Button(
+                        onClick = {
+                            isProcessing = true
+                            scope.launch(Dispatchers.IO) {
+                                val selectedItemsIds = selectedItems.map { it.id }
+
+                                val insertedEventTag = mutableListOf<EventTagCrossRef>()
+                                val insertedDayTag = mutableListOf<DayTagCrossRef>()
+                                val deletedEventTag = mutableListOf<EventTagCrossRef>()
+                                val deletedDayTag = mutableListOf<DayTagCrossRef>()
+
+                                for (eventId in eventIds) {
+                                    for (tag in selectedItems) {
+                                        val eventTagCrossRef = EventTagCrossRef(
+                                            eventId = eventId,
+                                            tagId = tag.id
+                                        )
+                                        if (tag.id !in oldSelected!!)
+                                            insertedEventTag.add(eventTagCrossRef)
+                                    }
+                                    for (tagId in oldSelected!!) {
+                                        val eventTagCrossRef = EventTagCrossRef(
+                                            eventId = eventId,
+                                            tagId = tagId
+                                        )
+                                        if (tagId !in selectedItemsIds)
+                                            deletedEventTag.add(eventTagCrossRef)
+                                    }
+                                }
+                                for (date in dayDates) {
+                                    for (tag in selectedItems) {
+                                        val dayTagCrossRef = DayTagCrossRef(
+                                            date = date,
+                                            tagId = tag.id
+                                        )
+                                        if (tag.id !in oldSelected!!)
+                                            insertedDayTag.add(dayTagCrossRef)
+                                    }
+                                    for (tagId in oldSelected!!) {
+                                        val dayTagCrossRef = DayTagCrossRef(
+                                            date = date,
+                                            tagId = tagId
+                                        )
+                                        if (tagId !in selectedItemsIds)
+                                            deletedDayTag.add(dayTagCrossRef)
+                                    }
+                                }
+
+                                dao.insertEventTagCrossRefs(insertedEventTag)
+                                dao.insertDayTagCrossRefs(insertedDayTag)
+                                dao.deleteEventTagCrossRefs(deletedEventTag)
+                                dao.deleteDayTagCrossRefs(deletedDayTag)
+
+                                onDismissRequest()
+                            }
+                        },
+                        enabled = !isProcessing,
+                        modifier = Modifier.height(40.dp)
+                    ) {
+                        if (!isProcessing) {
+                            Text("Confirm")
+                        } else {
+                            Icon(
+                                Icons.Rounded.MoreVert,
+                                "Loading",
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .rotate(90f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            TagEditorDialog(
+                state = newTagDialogState,
+                onDismissRequest = { newTagDialogState = false }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TagPickerDialog_Old(
     state: Boolean,
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
@@ -578,9 +1140,350 @@ fun TagPickerDialog(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TagEditorDialog(
+    state: Boolean,
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    tagId: String? = null
+) {
+    val newUI = Config.appearanceNewUI.get(LocalContext.current)
+    if (newUI) {
+        TagEditorDialog_New(
+            state = state,
+            onDismissRequest = onDismissRequest,
+            modifier = modifier,
+            tagId = tagId
+        )
+    }
+    else {
+        TagEditorDialog_Old(
+            state = state,
+            onDismissRequest = onDismissRequest,
+            modifier = modifier,
+            tagId = tagId
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TagEditorDialog_New(
+    state: Boolean,
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    tagId: String? = null
+) {
+    if (state) BasicAlertDialog(
+        onDismissRequest = {},
+        modifier = modifier.fillMaxWidth(0.9f)
+    ) {
+        val context = LocalContext.current
+        val haptic = LocalHapticFeedback.current
+        val scope = rememberCoroutineScope()
+
+        val db = AppDatabase.getInstance(context)
+        val dao = db.appDao()
+
+        var tag by remember { mutableStateOf<TagEntity?>(null) }
+        var isLoading by remember { mutableStateOf(true) }
+
+        var name by remember { mutableStateOf("") }
+        var description by remember { mutableStateOf("") }
+        var tint by remember { mutableStateOf("#ffffff") }
+
+        val colorController = rememberColorPickerController()
+
+        if (tagId != null) {
+            LaunchedEffect(Unit) {
+                tag = dao.getTagById(tagId).first()
+                name = tag!!.name
+                description = tag!!.description
+                tint = "#" + tag!!.tint.toArgb().toUInt().toString(16)
+                isLoading = false
+            }
+        }
+        else {
+            isLoading = false
+        }
+
+        val strToColor = {
+            tint.removePrefix("#").toLongOrNull(16)?.let {
+                Color(0xff000000 + it)
+            }
+        }
+
+        val isColorValid = strToColor() != null
+
+        var isProcessing by rememberSaveable { mutableStateOf(false) }
+
+        var showColorPicker by remember { mutableStateOf(false) }
+
+        BackHandler {
+            onDismissRequest()
+        }
+
+        Surface(
+            Modifier
+                .clip(RoundedCornerShape(24.dp))
+                .fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = 8.dp
+        ) {
+            Column(
+                Modifier
+                    .fillMaxHeight(0.9f)
+                    .fillMaxWidth()
+            ) {
+                // Header
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp)
+                ) {
+                    Text(
+                        if (tagId == null) "Create Tag" else "Edit Tag",
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                    IconButton(
+                        onClick = onDismissRequest,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.Close,
+                            "Close",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // Divider
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+
+                // Content
+                Column(
+                    modifier = Modifier
+                        .padding(20.dp)
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    // Tag Preview
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(80.dp)
+                    ) {
+                        val dummyTag = HistoryTag(
+                            id = "dummy",
+                            name = name.ifBlank { "Tag name" },
+                            description = description,
+                            tint = strToColor() ?: Color.Transparent
+                        )
+                        TagPreview(
+                            tag = dummyTag,
+                            darkTheme = false,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TagPreview(
+                            tag = dummyTag,
+                            darkTheme = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    // Name Field
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Tag Name") },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isLoading,
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium
+                    )
+
+                    // Description Field
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("Description") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 60.dp),
+                        enabled = !isLoading,
+                        shape = RoundedCornerShape(12.dp),
+                        maxLines = 3,
+                        textStyle = MaterialTheme.typography.bodyMedium
+                    )
+
+                    // Color Field
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = tint,
+                            onValueChange = {
+                                tint = it.take(1).filter { c -> c == '#' } + it.removePrefix("#").take(6)
+                                strToColor()?.let { c ->
+                                    colorController.selectByColor(c, false)
+                                }
+                            },
+                            leadingIcon = {
+                                if (isColorValid) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(12.dp)
+                                            .background(
+                                                color = strToColor()!!,
+                                                shape = RoundedCornerShape(3.dp)
+                                            )
+                                    )
+                                } else {
+                                    Icon(
+                                        Icons.Rounded.Close,
+                                        "Invalid Color",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            },
+                            trailingIcon = {
+                                IconButton(
+                                    onClick = { showColorPicker = !showColorPicker },
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.ArrowDropDown,
+                                        contentDescription = "Color Picker",
+                                        modifier = Modifier.rotate(if (showColorPicker) 180f else 0f),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            },
+                            label = { Text("Color (Hex)") },
+                            supportingText = if (!isColorValid) ({
+                                Text(
+                                    "Invalid hex color",
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }) else null,
+                            isError = !isColorValid,
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isLoading && !showColorPicker,
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium
+                        )
+
+                        // Color Picker
+                        AnimatedVisibility(
+                            visible = showColorPicker,
+                            modifier = Modifier.fillMaxWidth(),
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
+                        ) {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .padding(16.dp)
+                                        .fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    HsvColorPicker(
+                                        controller = colorController,
+                                        modifier = Modifier.size(100.dp),
+                                        onColorChanged = {
+                                            if (showColorPicker) tint = "#" + it.hexCode.takeLast(6)
+                                        },
+                                        initialColor = strToColor()
+                                    )
+                                    BrightnessSlider(
+                                        controller = colorController,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(28.dp),
+                                        borderRadius = 100.dp,
+                                        borderSize = 0.dp,
+                                        initialColor = strToColor()
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Divider
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+
+                // Action Buttons
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismissRequest,
+                        enabled = !isProcessing,
+                        modifier = Modifier.height(40.dp)
+                    ) {
+                        Text("Cancel")
+                    }
+
+                    Button(
+                        enabled = (
+                                name.isNotBlank() &&
+                                        description.isNotBlank() &&
+                                        isColorValid &&
+                                        !isLoading &&
+                                        !isProcessing
+                                ),
+                        onClick = {
+                            isProcessing = true
+                            scope.launch(Dispatchers.IO) {
+                                val newTag = TagEntity(
+                                    id = tag?.id ?: generateTagId(),
+                                    name = name.trim(),
+                                    description = description.trim(),
+                                    created = ZonedDateTime.now(),
+                                    tint = strToColor()!!
+                                )
+                                dao.insertTag(newTag)
+                                onDismissRequest()
+                            }
+                        },
+                        modifier = Modifier.height(40.dp)
+                    ) {
+                        Text(if (tagId == null) "Create" else "Save")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TagEditorDialog_Old(
     state: Boolean,
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
@@ -843,58 +1746,43 @@ fun DataProcessDialog() {
     val dataProcessProgress by DataProcessService.ServiceState.progress.collectAsState()
     val dataProcessProgressMax by DataProcessService.ServiceState.progressMax.collectAsState()
 
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val primaryContainerColor = MaterialTheme.colorScheme.primaryContainer
+
     BasicAlertDialog(
-        // BasicAlertDialog(
         onDismissRequest = {},
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
         )
     ) {
         Surface(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .background(color = MaterialTheme.colorScheme.background.copy(alpha = 0.95f)),
+            color = MaterialTheme.colorScheme.background
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .requiredWidthIn(max = 296.dp)
-                    .padding(32.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.CenterVertically),
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 val context = LocalContext.current
-//                val infiniteTransition = rememberInfiniteTransition(label = "rotation")
-//
-                val title =
-                    if (dataProcessStage == ImportProgressStage.Migrate) {
-                        "Updating Data"
-                    }
-                    else if (dataProcessType == DataProcessService.OPERATION_IMPORT) {
-                        "Importing Data"
-                    }
-                    else {
-                        "Processing"
-                    }
 
-                val text =
-                    if (dataProcessStage == ImportProgressStage.Migrate) {
-                        "Migrating data: $migrationName"
-                    }
-                    else {
-                        if (dataProcessStage == ImportProgressStage.Init) "Initializing"
-                        else if (dataProcessStage == ImportProgressStage.Decrypt) "Decrypting"
-                        else if (dataProcessStage == ImportProgressStage.Extract) "Extracting"
-                        else "Importing"
-                    }
+                val title = when {
+                    dataProcessStage == ImportProgressStage.Migrate -> "Updating Data"
+                    dataProcessType == DataProcessService.OPERATION_IMPORT -> "Importing Data"
+                    else -> "Processing"
+                }
 
-//                val iconAlpha by infiniteTransition.animateFloat(
-//                    initialValue = 0.3f,
-//                    targetValue = 1f,
-//                    animationSpec = infiniteRepeatable(
-//                        animation = tween(durationMillis = 800, easing = LinearEasing),
-//                        repeatMode = RepeatMode.Reverse
-//                    ),
-//                    label = "iconAlpha"
-//                )
+                val text = when {
+                    dataProcessStage == ImportProgressStage.Migrate -> "Migrating: $migrationName"
+                    dataProcessStage == ImportProgressStage.Init -> "Initializing..."
+                    dataProcessStage == ImportProgressStage.Decrypt -> "Decrypting your backup..."
+                    dataProcessStage == ImportProgressStage.Extract -> "Extracting files..."
+                    else -> "Importing data..."
+                }
 
                 val infiniteTransition = rememberInfiniteTransition(label = "gradient")
 
@@ -904,7 +1792,7 @@ fun DataProcessDialog() {
                     label = "offset",
                     typeConverter = Dp.VectorConverter,
                     animationSpec = infiniteRepeatable(
-                        animation = tween(durationMillis = 800, easing = LinearEasing),
+                        animation = tween(durationMillis = 1200, easing = LinearEasing),
                         repeatMode = RepeatMode.Restart
                     )
                 )
@@ -913,92 +1801,175 @@ fun DataProcessDialog() {
                     64.dp.toPx()
                 }
 
-                val listColors = listOf(
-                    Color(0xFF707070),
-                    Color(0xFF909090)
+                val gradientColors = listOf(
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
                 )
 
                 val gradient = with(LocalDensity.current) {
                     Brush.horizontalGradient(
-                        colors = listColors,
+                        colors = gradientColors,
                         startX = 0f + offset.toPx(),
                         endX = tileSize + offset.toPx(),
                         tileMode = TileMode.Mirror
                     )
                 }
 
-                Icon(
-                    contentDescription = "Processing Data",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                // Animated Icon with Glow Effect
+                Box(
                     modifier = Modifier
-                        .size(88.dp)
-                        .graphicsLayer(alpha = 0.99f)
-                        .drawWithCache {
-                            onDrawWithContent {
-                                drawContent()
-                                drawRect(gradient, blendMode = BlendMode.SrcAtop)
-                            }
-                        },
-                        //.alpha(iconAlpha)
-                    painter = painterResource(R.drawable.ic_cloud_download),
-                )
+                        .size(96.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(28.dp)
+                        )
+                        .padding(12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        contentDescription = "Processing Data",
+                        painter = painterResource(R.drawable.ic_cloud_download),
+                        modifier = Modifier
+                            .size(72.dp)
+                            .graphicsLayer(alpha = 0.99f)
+                            .drawWithCache {
+                                onDrawWithContent {
+                                    drawContent()
+                                    drawRect(gradient, blendMode = BlendMode.SrcAtop)
+                                }
+                            },
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Box(modifier = Modifier.height(24.dp))
+
+                // Title
                 Text(
                     title,
-                    style = MaterialTheme.typography.titleMedium,
-                    textAlign = TextAlign.Center
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-                Text(text, textAlign = TextAlign.Center)
-                val primaryColor = MaterialTheme.colorScheme.primary
-                val primaryContainerColor = MaterialTheme.colorScheme.primaryContainer
-                Canvas(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(12.dp)
-                        .padding(vertical = 4.dp)
+
+                Box(modifier = Modifier.height(8.dp))
+
+                // Description
+                Text(
+                    text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Box(modifier = Modifier.height(24.dp))
+
+                // Progress Bar
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    drawLine(
-                        color = primaryContainerColor,
-                        start = Offset(0f, 0f),
-                        end = Offset(size.width, 0f),
-                        strokeWidth = size.height,
-                        cap = StrokeCap.Round
-                    )
-                    drawLine(
-                        color = primaryColor,
-                        start = Offset(0f, 0f),
-                        end = Offset(size.width * dataProcessProgress / dataProcessProgressMax, 0f),
-                        strokeWidth = size.height,
-                        cap = StrokeCap.Round
-                    )
-                }
-                if (dataProcessType == DataProcessService.OPERATION_IMPORT) Button(
-                    enabled = !(
-                        dataProcessStage == ImportProgressStage.Done ||
-                        dataProcessStage == ImportProgressStage.Extract ||
-                        dataProcessStage == ImportProgressStage.Migrate
-                    ),
-                    onClick = {
-                        val cancelIntent = Intent(context, DataProcessService::class.java).apply {
-                            action = DataProcessService.ACTION_CANCEL_SERVICE
+                    // Percentage Text
+                    val progressPercentage = if (dataProcessProgressMax > 0) {
+                        ((dataProcessProgress * 100f) / dataProcessProgressMax).toInt()
+                    } else {
+                        0
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            getProgressLabel(dataProcessStage),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            "$progressPercentage%",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    // Custom Progress Bar
+                    Canvas(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(10.dp)
+                    ) {
+
+                        // Background
+                        drawLine(
+                            color = primaryContainerColor,
+                            start = Offset(0f, size.height / 2),
+                            end = Offset(size.width, size.height / 2),
+                            strokeWidth = size.height,
+                            cap = StrokeCap.Round
+                        )
+
+                        // Progress
+                        if (dataProcessProgressMax > 0) {
+                            drawLine(
+                                color = primaryColor,
+                                start = Offset(0f, size.height / 2),
+                                end = Offset(size.width * (dataProcessProgress.toFloat() / dataProcessProgressMax), size.height / 2),
+                                strokeWidth = size.height,
+                                cap = StrokeCap.Round
+                            )
                         }
-                        context.startService(cancelIntent)
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                ) {
-                    Text("Cancel")
+                    }
                 }
-//                Row(
-//                    verticalAlignment = Alignment.CenterVertically,
-//                    horizontalArrangement = Arrangement.End
-//                ) {
-//                    Text("${round(migrationState.progress * 100)}%")
-//                }
+
+                Box(modifier = Modifier.height(24.dp))
+
+                // Cancel Button
+                if (dataProcessType == DataProcessService.OPERATION_IMPORT) {
+                    val isCancelDisabled = dataProcessStage == ImportProgressStage.Done ||
+                            dataProcessStage == ImportProgressStage.Extract ||
+                            dataProcessStage == ImportProgressStage.Migrate
+
+                    Button(
+                        enabled = !isCancelDisabled,
+                        onClick = {
+                            val cancelIntent = Intent(context, DataProcessService::class.java).apply {
+                                action = DataProcessService.ACTION_CANCEL_SERVICE
+                            }
+                            context.startService(cancelIntent)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Text(
+                            "Cancel",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
             }
         }
     }
+}
+
+private fun getProgressLabel(stage: ImportProgressStage?): String = when (stage) {
+    ImportProgressStage.Init -> "Initializing..."
+    ImportProgressStage.Decrypt -> "Decrypting backup..."
+    ImportProgressStage.Extract -> "Extracting files..."
+    ImportProgressStage.Migrate -> "Updating data..."
+    else -> "Processing..."
 }
 
 @Composable

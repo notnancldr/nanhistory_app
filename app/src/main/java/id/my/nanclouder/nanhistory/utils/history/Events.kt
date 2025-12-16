@@ -1,4 +1,4 @@
-package id.my.nanclouder.nanhistory.lib.history
+package id.my.nanclouder.nanhistory.utils.history
 
 import android.content.Context
 import android.util.Log
@@ -8,11 +8,11 @@ import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.toDayEntity
 import id.my.nanclouder.nanhistory.db.toEventEntity
-import id.my.nanclouder.nanhistory.lib.Coordinate
-import id.my.nanclouder.nanhistory.lib.FILE_VERSION
-import id.my.nanclouder.nanhistory.lib.matchOrNull
-import id.my.nanclouder.nanhistory.lib.toCoordinateOrNull
-import id.my.nanclouder.nanhistory.lib.toZonedDateTimeOrNull
+import id.my.nanclouder.nanhistory.utils.Coordinate
+import id.my.nanclouder.nanhistory.utils.FILE_VERSION
+import id.my.nanclouder.nanhistory.utils.matchOrNull
+import id.my.nanclouder.nanhistory.utils.toCoordinateOrNull
+import id.my.nanclouder.nanhistory.utils.toZonedDateTimeOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -345,6 +345,9 @@ class LocationFile(
     val file: File
 )
 
+fun File.toLocationPath(context: Context) =
+    this.absolutePath.removePrefix(File(context.filesDir, "locations").absolutePath + "/")
+
 fun generateEventId(instant: Instant = Instant.now()): String =
     "${instant.toEpochMilli().toString(16)}-${Random.nextLong().toString(16)}"
 
@@ -389,16 +392,18 @@ fun getLocationFile(path: String, context: Context): LocationFile {
 //        file.writeText(gson.toJson(mapOf<ZonedDateTime, Coordinate>()))
 //        return LocationFile(mutableMapOf(), file)
 //    }
-    val mapType = object : TypeToken<Map<String, String>>() {}.type
+    val mapType = object : TypeToken<Map<String, String?>>() {}.type
     val data = try {
-        gson.fromJson<Map<String, String>>(file.readText(), mapType)
+        gson.fromJson<Map<String, String?>>(file.readText(), mapType)
     } catch (_: Exception) {
         mapOf()
     }
     return LocationFile(
-        data.map {
-            (it.key.toZonedDateTimeOrNull() ?: ZonedDateTime.now()) to (it.value.toCoordinateOrNull() ?: Coordinate(0.0, 0.0))
-        }.toMap().toMutableMap(),
+        data.filter { it.value != null }
+            .map { (key, value) ->
+                (key.toZonedDateTimeOrNull() ?: ZonedDateTime.now()) to
+                (value!!.toCoordinateOrNull() ?: Coordinate(0.0, 0.0))
+            }.toMap().toMutableMap(),
         file
     )
 }

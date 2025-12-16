@@ -4,6 +4,7 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -35,7 +36,7 @@ import id.my.nanclouder.nanhistory.debug.DebugActivity
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.settings.SettingsActivity
-import id.my.nanclouder.nanhistory.lib.getPackageInfo
+import id.my.nanclouder.nanhistory.utils.getPackageInfo
 import kotlinx.coroutines.delay
 
 @Composable
@@ -126,7 +127,10 @@ fun DrawerContent() {
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier
-                        .clickable {
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
                             clickCount++
                             if (clickCount == 10) {
                                 Toast.makeText(context, "Developer mode enabled", Toast.LENGTH_SHORT).show()

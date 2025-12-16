@@ -1,4 +1,4 @@
-package id.my.nanclouder.nanhistory.lib
+package id.my.nanclouder.nanhistory.utils
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb

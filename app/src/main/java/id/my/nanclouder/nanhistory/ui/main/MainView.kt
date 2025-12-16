@@ -20,7 +20,10 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.EaseInOutCubic
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -28,15 +31,16 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -46,20 +50,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidthIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
-import androidx.compose.foundation.lazy.LazyListLayoutInfo
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -68,7 +68,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Warning
@@ -94,7 +97,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberDrawerState
@@ -103,7 +105,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -111,7 +112,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -119,10 +119,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalViewConfiguration
@@ -130,9 +129,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
@@ -149,12 +148,12 @@ import id.my.nanclouder.nanhistory.ListFilters
 import id.my.nanclouder.nanhistory.NanHistoryPages
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
-import id.my.nanclouder.nanhistory.lib.RecordStatus
-import id.my.nanclouder.nanhistory.lib.ServiceBroadcast
-import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
-import id.my.nanclouder.nanhistory.lib.history.HistoryFileData
-import id.my.nanclouder.nanhistory.lib.history.MigrationState
-import id.my.nanclouder.nanhistory.lib.history.getFilePathFromDate
+import id.my.nanclouder.nanhistory.utils.RecordStatus
+import id.my.nanclouder.nanhistory.utils.ServiceBroadcast
+import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
+import id.my.nanclouder.nanhistory.utils.history.HistoryFileData
+import id.my.nanclouder.nanhistory.utils.history.MigrationState
+import id.my.nanclouder.nanhistory.utils.history.getFilePathFromDate
 import id.my.nanclouder.nanhistory.service.RecordService
 import id.my.nanclouder.nanhistory.ui.SearchAppBar
 import id.my.nanclouder.nanhistory.ui.SelectionAppBar
@@ -176,22 +175,26 @@ import id.my.nanclouder.nanhistory.TagDetailActivity
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.toHistoryTag
 import id.my.nanclouder.nanhistory.db.toTagEntity
-import id.my.nanclouder.nanhistory.lib.DateFormatter
-import id.my.nanclouder.nanhistory.lib.history.HistoryTag
-import id.my.nanclouder.nanhistory.lib.withHaptic
+import id.my.nanclouder.nanhistory.getActivity
+import id.my.nanclouder.nanhistory.utils.DateFormatter
+import id.my.nanclouder.nanhistory.utils.history.HistoryTag
+import id.my.nanclouder.nanhistory.utils.withHaptic
 import id.my.nanclouder.nanhistory.service.RecordTileService
 import id.my.nanclouder.nanhistory.state.SelectionState
 import id.my.nanclouder.nanhistory.state.rememberSelectionState
 import id.my.nanclouder.nanhistory.ui.ColorIcon
 import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
+import id.my.nanclouder.nanhistory.ui.EventList
+import id.my.nanclouder.nanhistory.ui.MainAppBar
 import id.my.nanclouder.nanhistory.ui.SelectableButton
 import id.my.nanclouder.nanhistory.ui.TagDetailDialog
 import id.my.nanclouder.nanhistory.ui.TagEditorDialog
 import id.my.nanclouder.nanhistory.ui.TagPickerDialog
+import id.my.nanclouder.nanhistory.ui.list.TimelineEventItem
 import id.my.nanclouder.nanhistory.ui.rememberTagDetailDialogState
+import id.my.nanclouder.nanhistory.utils.QuickScroll
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.stream.consumeAsFlow
-import kotlin.math.roundToInt
 
 fun MutableList<HistoryFileData>.insertSorted(data: HistoryFileData) {
     val index = binarySearch(data, compareByDescending { it.date })
@@ -289,6 +292,53 @@ fun requestAddTile(context: Context, onResult: ((Int) -> Unit)? = null) {
     }
 }
 
+@Composable
+fun UISwitchButton() {
+    val newUI by Config.appearanceNewUI.getState()
+    val context = LocalContext.current
+
+    if (newUI) TextButton(
+        onClick = {
+            Config.appearanceNewUI.set(context, false)
+            context.getActivity()?.recreate()
+        }
+    ) {
+        Column(
+            horizontalAlignment = Alignment.End
+        ) {
+            Text(
+                "Switch to",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall
+            )
+            Text(
+                "Old UI",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+    else TextButton(
+        onClick = {
+            Config.appearanceNewUI.set(context, true)
+            context.getActivity()?.recreate()
+        }
+    ) {
+        Column(
+            horizontalAlignment = Alignment.End
+        ) {
+            Text(
+                "Switch to",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall
+            )
+            Text(
+                "New UI",
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
 @SuppressLint("BatteryLife")
 @OptIn(
     ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class,
@@ -327,6 +377,8 @@ fun MainView() {
     var permissionDialogTitle by remember { mutableStateOf("") }
     var permissionDialogText by remember { mutableStateOf("") }
     var permissionDialogOnConfirm by remember { mutableStateOf({ }) }
+
+    var showNewUIDialog by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
 
@@ -432,14 +484,16 @@ fun MainView() {
                     favoriteDaySelectionState.selectAll(favoriteDayViewModel.events.value)
                 }
             }
-            // NanHistoryPages.Tags -> tagListSelectionState.selectAll()
             else -> {}
         }
     }
 
     val selectedEvents by when (selectedPage) {
         NanHistoryPages.Events -> eventsSelectionState.selectedItems
-        NanHistoryPages.Favorite -> favoriteEventSelectionState.selectedItems
+        NanHistoryPages.Favorite -> {
+            if (selectedFavorite == 0) favoriteEventSelectionState.selectedItems
+            else favoriteDaySelectionState.selectedItems
+        }
         NanHistoryPages.Search -> searchSelectionState.selectedItems
         else -> listOf(emptyList<HistoryEvent>()).stream().consumeAsFlow()
     }.collectAsState(emptyList())
@@ -469,10 +523,8 @@ fun MainView() {
 
     val openDeleteDialog = {
         val size = selectedItemsSize
-        deleteDialogTitle =
-            "Move items to Trash"
-        deleteDialogText =
-            "Do you want to move $size item${(if (size < 2) "" else "s")} to Trash?"
+        deleteDialogTitle = "Move items to Trash"
+        deleteDialogText = "Do you want to move $size item${(if (size < 2) "" else "s")} to Trash?"
         deleteButtonState = true
         deleteDialogState = true
     }
@@ -500,6 +552,15 @@ fun MainView() {
         mutableStateOf(qsSharedPreferences.getBoolean("tileAdded", false))
     }
 
+    val topBarAnimationDuration = 300
+
+    val tryNewUI = {
+        val config = Config.appearanceNewUI
+        config.set(context, true)
+
+        context.getActivity()?.recreate()
+    }
+
     LaunchedEffect(Unit) {
         Log.d("NanHistoryDebug", "LaunchedEffect")
 
@@ -519,11 +580,6 @@ fun MainView() {
         else if (!recordPermissionState.allPermissionsGranted)
             recordPermissionState.launchMultiplePermissionRequest()
 
-        // migrateData(context) { state, name ->
-        //     migrationState = state
-        //     migrationName = name
-        // }
-
         val addTileRequested = qsSharedPreferences.getBoolean("addTileRequested", false)
         if (!addTileRequested) requestAddTile(context) {
             qsSharedPreferences.edit {
@@ -533,12 +589,17 @@ fun MainView() {
                 recordTileAdded = true
         }
 
-
-        // viewModels.forEach { it.value?.reload() }
+        // Show new UI dialog on first launch
+        val newUIDialogShown = qsSharedPreferences.getBoolean("newUIDialogShown", false)
+        if (!newUIDialogShown) {
+            showNewUIDialog = true
+            qsSharedPreferences.edit {
+                putBoolean("newUIDialogShown", true)
+            }
+        }
     }
 
     if (!migrationState.finish) BasicAlertDialog(
-    // BasicAlertDialog(
         onDismissRequest = {},
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
@@ -607,14 +668,85 @@ fun MainView() {
                         cap = StrokeCap.Round
                     )
                 }
-//                Row(
-//                    verticalAlignment = Alignment.CenterVertically,
-//                    horizontalArrangement = Arrangement.End
-//                ) {
-//                    Text("${round(migrationState.progress * 100)}%")
-//                }
             }
         }
+    }
+
+    // Try Out New UI Dialog
+    if (showNewUIDialog) {
+        AlertDialog(
+            icon = {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.Palette,
+                        "New UI",
+                        modifier = Modifier.size(28.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            },
+            onDismissRequest = {
+                showNewUIDialog = false
+            },
+            title = {
+                Text(
+                    "Try Out New UI",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "We've refreshed the interface with a modern, sleek design for a better experience. You can still use the old UI, but some new features won't be available.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp)),
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        tonalElevation = 2.dp
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            NewUIFeature("-", "New Features on New UI")
+                            NewUIFeature("-", "Improved Colors & Theming")
+                            NewUIFeature("-", "Better Interface & Modern Design")
+                        }
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showNewUIDialog = false
+                    }
+                ) {
+                    Text("Not Now")
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        tryNewUI()
+                        showNewUIDialog = false
+                    },
+                    modifier = Modifier.height(40.dp),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Try It Out", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        )
     }
 
     if (permissionDialogState) AlertDialog(
@@ -624,7 +756,7 @@ fun MainView() {
         title = { Text(permissionDialogTitle) },
         text = { Text(permissionDialogText) },
         confirmButton = {
-            Button({ permissionDialogOnConfirm(); permissionDialogState = false }) { Text("Continue") } // TODO
+            Button({ permissionDialogOnConfirm(); permissionDialogState = false }) { Text("Continue") }
         },
     )
 
@@ -659,7 +791,7 @@ fun MainView() {
                         val intent = Intent(context, RecordService::class.java)
                         val now = ZonedDateTime.now()
                         if (recordStatus == RecordStatus.RUNNING) {
-                            intent.setAction(RecordService.ACTION_RECORD_STOP)
+                            intent.action = RecordService.ACTION_RECORD_STOP
                             context.startService(intent)
                         } else {
                             if (recordPermissionState.allPermissionsGranted) {
@@ -669,7 +801,8 @@ fun MainView() {
                                 if (!eventPoint) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 else vibrator.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE))
 
-                                intent.setAction(RecordService.ACTION_RECORD_START)
+                                intent.action = RecordService.ACTION_RECORD_START
+                                intent.putExtra("includeAudio", Config.includeAudioRecord.get(context))
                                 context.startForegroundService(intent)
                             } else {
                                 recordPermissionState.launchMultiplePermissionRequest()
@@ -715,7 +848,7 @@ fun MainView() {
                     ) {
                         val color =
                             if (recordButtonDisabled) Color(0x80808080)
-                            else if (recordStatus == RecordStatus.RUNNING) MaterialTheme.colorScheme.error
+                            else if (recordStatus >= RecordStatus.IDLE) MaterialTheme.colorScheme.error
                             else LocalContentColor.current
                         if (recordStatus == RecordStatus.RUNNING)
                             Icon(
@@ -735,85 +868,96 @@ fun MainView() {
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             modifier = Modifier.fillMaxSize(),
             topBar = {
-                if (selectionMode) SelectionAppBar(
-                    selectedItemsSize, { resetSelectionMode() }
-                ) {
-                    if (selectedPage == NanHistoryPages.Tags && selectedItemsSize == 1) {
-                        IconButton(onClick = { tagEditorDialogState = true }) {
-                            Icon(Icons.Rounded.Edit, "Edit tag")
-                        }
-                    }
-                    if (selectedPage != NanHistoryPages.Tags) {
-                        IconButton(onClick = {
-                            selectAll()
-                        }) {
-                            Icon(painterResource(R.drawable.ic_select_all), "Select all")
-                        }
-                        IconButton(onClick = {
-                            tagPickerDialogState = true
-                        }) {
-                            Icon(painterResource(R.drawable.ic_tag), "Add tag")
-                        }
-                        IconButton(onClick = {
-                            // Log.d("NanHistoryDebug", "SELECTED ITEMS: ${selectedItems.toList()}")
-                            scope.launch {
-                                lock = true
-                                if (selectedPage == NanHistoryPages.Events) withContext(Dispatchers.IO) {
-                                    eventsSelectionState.selectedItems.value.forEach {
-                                        dao.toggleFavoriteEvent(it.id)
-                                    }
-                                }
-                                lock = false
-                                resetSelectionMode()
+                AnimatedContent(
+                    targetState = Pair(selectionMode, selectedPage),
+                    transitionSpec = {
+                        fadeIn(animationSpec = tween(durationMillis = 300)) togetherWith
+                        fadeOut(animationSpec = tween(durationMillis = 300))
+                    },
+                    label = "topBarAnimation"
+                ) { (isSelectionMode, page) ->
+                    if (isSelectionMode) SelectionAppBar(
+                        selectedItemsSize, { resetSelectionMode() }
+                    ) {
+                        if (page == NanHistoryPages.Tags && selectedItemsSize == 1) {
+                            IconButton(onClick = { tagEditorDialogState = true }) {
+                                Icon(Icons.Rounded.Edit, "Edit tag")
                             }
-                        }) {
-                            Icon(painterResource(R.drawable.ic_favorite), "Favorite")
                         }
-                    }
-                    IconButton(onClick = { openDeleteDialog() }) {
-                        Icon(painterResource(R.drawable.ic_delete), "Delete")
-                    }
-                }
-                else if (selectedPage == NanHistoryPages.Search) SearchAppBar(
-                    isLoading = isLoading,
-                    onSearch = {
-                        searchViewModel.search(it)
-                    },
-                    onChange = {
-                        searchViewModel.search(it)
-                    },
-                    onCancel = {
-                        searchViewModel.cancelLoading()
-                    }
-                )
-                else TopAppBar(
-                    title = { Text(selectedPage.name) },
-                    scrollBehavior = scrollBehavior,
-                    navigationIcon = {
-                        IconButton(
-                            onClick = {
-                                scope.launch { drawerState.open() }
-                            }
-                        ) { Icon(Icons.Rounded.Menu, "Open sidebar") }
-                    },
-                    actions = {
-                        if (selectedPage == NanHistoryPages.Tags) {
+                        if (page != NanHistoryPages.Tags) {
                             IconButton(onClick = {
-                                tagEditorDialogState = true
+                                selectAll()
                             }) {
-                                Icon(Icons.Rounded.Add, "Add tag")
+                                Icon(painterResource(R.drawable.ic_select_all), "Select all")
+                            }
+                            IconButton(onClick = {
+                                tagPickerDialogState = true
+                            }) {
+                                Icon(painterResource(R.drawable.ic_tag), "Add tag")
+                            }
+                            IconButton(onClick = {
+                                scope.launch {
+                                    lock = true
+                                    if (page == NanHistoryPages.Events) withContext(Dispatchers.IO) {
+                                        eventsSelectionState.selectedItems.value.forEach {
+                                            dao.toggleFavoriteEvent(it.id)
+                                        }
+                                    }
+                                    lock = false
+                                    resetSelectionMode()
+                                }
+                            }) {
+                                Icon(painterResource(R.drawable.ic_favorite), "Favorite")
                             }
                         }
-                        if (!recordTileAdded) IconButton(onClick = {
-                            requestAddTile(context) {
-                                if (it == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED)
-                                    recordTileAdded = true
-                            }
-                        }) {
-                            Icon(painterResource(R.drawable.ic_event_record), "Add record tile to quick settings")
+                        IconButton(onClick = { openDeleteDialog() }) {
+                            Icon(painterResource(R.drawable.ic_delete), "Delete")
                         }
                     }
-                )
+                    else if (page == NanHistoryPages.Search) SearchAppBar(
+                        viewModel = searchViewModel,
+                        isLoading = isLoading,
+                        showTags = !pagerState.isScrollInProgress,
+                        onSearch = { query, tagIds ->
+                            searchViewModel.search(query, tagIds)
+                        },
+                        onChange = { query, tagIds ->
+                            searchViewModel.search(query, tagIds)
+                        },
+                        onCancel = {
+                            searchViewModel.cancelLoading()
+                        }
+                    )
+                    else MainAppBar(
+                        title = page.name,
+                        scrollBehavior = scrollBehavior,
+                        navigationIcon = {
+                            IconButton(
+                                onClick = {
+                                    scope.launch { drawerState.open() }
+                                }
+                            ) { Icon(Icons.Rounded.Menu, "Open sidebar") }
+                        },
+                        actions = {
+                            UISwitchButton()
+                            if (page == NanHistoryPages.Tags) {
+                                IconButton(onClick = {
+                                    tagEditorDialogState = true
+                                }) {
+                                    Icon(Icons.Rounded.Add, "Add tag")
+                                }
+                            }
+                            if (!recordTileAdded) IconButton(onClick = {
+                                requestAddTile(context) {
+                                    if (it == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED)
+                                        recordTileAdded = true
+                                }
+                            }) {
+                                Icon(painterResource(R.drawable.ic_event_record), "Add record tile to quick settings")
+                            }
+                        }
+                    )
+                }
             },
             bottomBar = {
                 NavigationBar {
@@ -910,90 +1054,159 @@ fun MainView() {
                     Log.d("NanHistoryDebug", "PAGE: $page")
                     when (page) {
                         NanHistoryPages.Events.ordinal -> key(Unit) {
-                            EventList(
-                                viewModel = eventsViewModel,
-                                lazyListState = eventsLazyListState,
-                                selectionState = eventsSelectionState,
-                                onEmptyContent = {
-                                    Image(
-                                        painter = painterResource(
-                                            if (isSystemInDarkTheme()) R.drawable.hint_no_event_dark
-                                            else R.drawable.hint_no_event
-                                        ),
-                                        modifier = Modifier
-                                            .height(196.dp)
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .border(
-                                                width = 1.dp,
-                                                color = MaterialTheme.colorScheme.outline,
-                                                shape = RoundedCornerShape(16.dp)
+                            Column {
+                                EventList(
+                                    viewModel = eventsViewModel,
+                                    lazyListState = eventsLazyListState,
+                                    selectionState = eventsSelectionState,
+                                    onEmptyContent = {
+                                        Image(
+                                            painter = painterResource(
+                                                if (isSystemInDarkTheme()) R.drawable.hint_no_event_dark
+                                                else R.drawable.hint_no_event
                                             ),
-                                        contentDescription = null
-                                    )
+                                            modifier = Modifier
+                                                .height(196.dp)
+                                                .clip(RoundedCornerShape(16.dp))
+                                                .border(
+                                                    width = 1.dp,
+                                                    color = MaterialTheme.colorScheme.outline,
+                                                    shape = RoundedCornerShape(16.dp)
+                                                ),
+                                            contentDescription = null
+                                        )
 
-                                    Box(Modifier.height(8.dp))
+                                        Box(Modifier.height(8.dp))
 
-                                    Text(
-                                        text = "No events here",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                        Text(
+                                            text = "No events here",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
 
-                                    val addIconId = "addIcon"
-                                    val recordIconId = "recordIcon"
+                                        val addIconId = "addIcon"
+                                        val recordIconId = "recordIcon"
 
-                                    val text = buildAnnotatedString {
-                                        append("Record an event by pressing ")
-                                        appendInlineContent(recordIconId, "record icon.")
-                                        append(" or add new event by clicking ")
-                                        appendInlineContent(addIconId, "add icon")
-                                    }
-                                    val inlineContent = mapOf(
-                                        addIconId to InlineTextContent(
-                                            Placeholder(
-                                                width = 16.sp,
-                                                height = 16.sp,
-                                                placeholderVerticalAlign = PlaceholderVerticalAlign.Center
-                                            )
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Add,
-                                                contentDescription = "Add icon",
-                                                tint = Color.Gray,
-                                                modifier = Modifier.fillMaxSize()
-                                            )
-                                        },
-                                        recordIconId to InlineTextContent(
-                                            Placeholder(
-                                                width = 16.sp,
-                                                height = 16.sp,
-                                                placeholderVerticalAlign = PlaceholderVerticalAlign.Center
-                                            )
-                                        ) {
-                                            Icon(
-                                                painter = painterResource(R.drawable.ic_circle_filled),
-                                                contentDescription = "Record icon",
-                                                tint = Color.Gray,
-                                                modifier = Modifier.fillMaxSize()
-                                            )
+                                        val text = buildAnnotatedString {
+                                            append("Record an event by pressing ")
+                                            appendInlineContent(recordIconId, "record icon.")
+                                            append(" or add new event by clicking ")
+                                            appendInlineContent(addIconId, "add icon")
                                         }
-                                    )
+                                        val inlineContent = mapOf(
+                                            addIconId to InlineTextContent(
+                                                Placeholder(
+                                                    width = 16.sp,
+                                                    height = 16.sp,
+                                                    placeholderVerticalAlign = PlaceholderVerticalAlign.Center
+                                                )
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Add,
+                                                    contentDescription = "Add icon",
+                                                    tint = Color.Gray,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            },
+                                            recordIconId to InlineTextContent(
+                                                Placeholder(
+                                                    width = 16.sp,
+                                                    height = 16.sp,
+                                                    placeholderVerticalAlign = PlaceholderVerticalAlign.Center
+                                                )
+                                            ) {
+                                                Icon(
+                                                    painter = painterResource(R.drawable.ic_circle_filled),
+                                                    contentDescription = "Record icon",
+                                                    tint = Color.Gray,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            }
+                                        )
 
-                                    Text(
-                                        text = text,
-                                        inlineContent = inlineContent,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        textAlign = TextAlign.Center,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            )
+                                        Text(
+                                            text = text,
+                                            inlineContent = inlineContent,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            textAlign = TextAlign.Center,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                )
+                            }
                         }
                         NanHistoryPages.Favorite.ordinal -> {
                             val onClick = { index: Int ->
                                 if (selectedFavorite != index) selectedFavorite = index
                             }
-                            val selector = @Composable {
+                            val selector_new = @Composable {
+                                val tabs = listOf("Events", "Days")
+
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(4.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        tabs.forEachIndexed { index, label ->
+                                            val isSelected = selectedFavorite == index
+
+                                            val backgroundColor by animateColorAsState(
+                                                targetValue = if (isSelected)
+                                                    MaterialTheme.colorScheme.primary
+                                                else
+                                                    Color.Transparent,
+                                                animationSpec = tween(durationMillis = 300, easing = EaseInOutCubic),
+                                                label = "backgroundColor"
+                                            )
+
+                                            val textColor by animateColorAsState(
+                                                targetValue = if (isSelected)
+                                                    MaterialTheme.colorScheme.onPrimary
+                                                else
+                                                    MaterialTheme.colorScheme.onSurfaceVariant,
+                                                animationSpec = tween(durationMillis = 300, easing = EaseInOutCubic),
+                                                label = "textColor"
+                                            )
+
+                                            val fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
+
+                                            Surface(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(44.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .clickable { onClick(index) },
+                                                shape = RoundedCornerShape(10.dp),
+                                                color = backgroundColor,
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .padding(horizontal = 16.dp),
+                                                    horizontalArrangement = Arrangement.Center,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = label,
+                                                        style = MaterialTheme.typography.labelLarge,
+                                                        color = textColor,
+                                                        fontWeight = fontWeight
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            val selector_old = @Composable {
                                 val onClick1 = { onClick(0) }
                                 val onClick2 = { onClick(1) }
 
@@ -1021,6 +1234,12 @@ fun MainView() {
                                         Text("Days")
                                     }
                                 }
+                            }
+
+                            val selector = @Composable {
+                                val newUI = Config.appearanceNewUI.get(context)
+                                if (newUI) selector_new()
+                                else selector_old()
                             }
 
                             val onEmptyContent: @Composable (ColumnScope.() -> Unit) = {
@@ -1207,6 +1426,24 @@ fun MainView() {
     if (needUpdate) needUpdate = false
 }
 
+@Composable
+private fun NewUIFeature(icon: String, text: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(
+            icon,
+            style = MaterialTheme.typography.headlineSmall
+        )
+        Text(
+            text,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
 fun launchRequestBackgroundLocation(context: Context) {
     val granted = ContextCompat.checkSelfPermission(
         context, Manifest.permission.ACCESS_BACKGROUND_LOCATION
@@ -1220,376 +1457,254 @@ fun launchRequestBackgroundLocation(context: Context) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun EventList(
-    viewModel: EventListViewModel,
-    selectionState: SelectionState<HistoryEvent>,
-    loadHeaderData: Boolean = true,
+private fun TagList(
     lazyListState: LazyListState = rememberLazyListState(),
-    scrollBehavior: TopAppBarScrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(),
-    topItem: (@Composable LazyItemScope.() -> Unit)? = null,
-    onEmptyContent: (@Composable ColumnScope.() -> Unit)? = null
+    selectionState: SelectionState<HistoryTag>
+) {
+    val newUI = Config.appearanceNewUI.get(LocalContext.current)
+    if (newUI) {
+        ModernTagList(
+            lazyListState = lazyListState,
+            selectionState = selectionState
+        )
+    }
+    else {
+        TagList_Old(
+            lazyListState = lazyListState,
+            selectionState = selectionState
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ModernTagList(
+    lazyListState: LazyListState,
+    selectionState: SelectionState<HistoryTag>
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val expanded = remember { mutableStateListOf<LocalDate>() }
-
-    val tagDetailDialogState = rememberTagDetailDialogState()
-
-    val db = remember { AppDatabase.getInstance(context) }
-    val dao = remember { db.appDao() }
-
-    val dayList by viewModel.days.collectAsState(viewModel.currentDays)
-    val eventListState by viewModel.events.collectAsState(viewModel.currentEvents)
-
-    val dateList = dayList.map { it.date }
-
-    val eventList = eventListState.filter { event -> event.time.toLocalDate() in dateList }
 
     val haptic = LocalHapticFeedback.current
 
-    val selectionMode by selectionState.isSelectionMode.collectAsState()
-    val selectedItems by selectionState.selectedItems.collectAsState()
+    val db = AppDatabase.getInstance(context)
+    val dao = db.appDao()
 
-    var highlightedDay by remember { mutableStateOf<LocalDate?>(null) }
+    val selectionMode by selectionState.isSelectionMode.collectAsState(false)
+    val selectedItems by selectionState.selectedItems.collectAsState(emptyList())
 
-    var gotoDay by remember { mutableStateOf<LocalDate?>(null) }
+    val tags by dao.getAllTags().map {
+        it.map { tag -> tag.toHistoryTag() }
+    }.collectAsState(emptyList())
 
-    if (viewModel.mode == EventSelectMode.Default) viewModel.onGotoDay { date ->
-        gotoDay = date
-    }
-
-    LaunchedEffect(gotoDay, dayList, eventList) {
-        if (gotoDay != null && dayList.isNotEmpty() && eventList.isNotEmpty()) {
-
-            highlightedDay = gotoDay
-
-            val grouped = eventList.groupBy {
-                dayList.find { day -> day.date == it.time.toLocalDate() }!!
-            }
-
-            // Log.d("NanHistoryDebug", "GROUPED: $grouped")
-
-            var index = 0
-            for ((day, events) in grouped) {
-                if (day.date == gotoDay) {
-                    lazyListState.scrollToItem(index)
-                    break
-                }
-                index += events.size + 1
-            }
-        }
-        delay(200L)
-        gotoDay = null
-    }
-
-//    Log.d("NanHistoryDebug", "RECORDING: $isRecording, EVENT ID: $recordEventId")
-
-    if (!selectionMode) selectionState.clear()
-
-    if (eventList.isNotEmpty()) Box(Modifier.fillMaxSize()) {
+    if (tags.isNotEmpty()) Box(Modifier.fillMaxSize()) {
         LazyColumn(
-            modifier = Modifier
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .selectableGroup()
-                .fillMaxSize()
-                .zIndex(-1f),
             state = lazyListState,
+            modifier = Modifier
+                .fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            val expandedCurrent = expanded.toList()
+            items(tags.size, key = { tags[it].id }) { index ->
+                val tagData = tags[index]
+                val selected = selectedItems.contains(tagData)
 
-            if (topItem != null) {
-                item { Box(Modifier.height(16.dp)) }
-                item(content = topItem)
-            }
-
-            eventList.groupBy { it.time.toLocalDate() }.forEach { (date, events) ->
-                stickyHeader(key = "$date") {
-                    val day =
-                        if (loadHeaderData) dayList.find { it.date == date }
-                        else null
-
-                    val selected = selectedItems.containsAll(events)
-                    val highlighted = highlightedDay == date
-
-                    var fading by remember { mutableStateOf(false) }
-                    var isHighlighting by remember { mutableStateOf(highlighted) }
-
-                    val highlightedColor = MaterialTheme.colorScheme.primaryContainer
-
-                    val duration = if (fading) 1000 else 0
-                    val targetColor = if (fading && highlighted) Color.Transparent else highlightedColor
-
-                    val backgroundColor = if (isHighlighting)
-                        animateColorAsState(
-                            targetValue = targetColor,
-                            animationSpec = tween(durationMillis = duration),
-                            finishedListener = {
-                                if (!fading) {
-                                    fading = true
-                                }
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .combinedClickable(
+                            onLongClick = withHaptic(haptic) {
+                                selectionState.toggle(tagData)
+                            },
+                            onClick = {
+                                if (selectionMode)
+                                    selectionState.toggle(tagData)
                                 else {
-                                    isHighlighting = false
-                                    fading = false
+                                    val intent = Intent(context, TagDetailActivity::class.java)
+                                    intent.putExtra("tagId", tagData.id)
+                                    context.startActivity(intent)
                                 }
                             }
-                        )
-                        else null
-
-
-                    if (day != null) EventListHeader(
-                        historyDay = day,
+                        ),
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainer
+                    },
+                    shadowElevation = if (selected) 4.dp else 0.dp,
+                    tonalElevation = 0.dp
+                ) {
+                    Row(
                         modifier = Modifier
-                            .animateItem(
-                                fadeInSpec = null,
-                                fadeOutSpec = null
-                            )
-                            .combinedClickable(
-                                onLongClick = listItemOnLongClick@{
-                                    haptic.performHapticFeedback(
-                                        HapticFeedbackType.LongPress
-                                    )
-                                    if (selected) selectionState.deselectAll(events)
-                                    else selectionState.selectAll(events)
-                                },
-                                onClick = {
-                                    if (selectionMode) {
-                                        if (selected) selectionState.deselectAll(events)
-                                        else selectionState.selectAll(events)
-                                    }
-                                    else if (viewModel.mode != EventSelectMode.Default) {
-                                        viewModel.gotoDay(date)
-                                    }
-                                }
-                            )
-                            .zIndex(0f)
-                            .background(if (isHighlighting) backgroundColor!!.value else Color.Transparent),
-                        expanded = expandedCurrent.contains(date),
-                        eventCount = events.size,
-                        selected = selected,
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        scope.launch { dao.toggleFavoriteDay(date) }
-                    }
-                    else if (loadHeaderData) ListItem(
-                        headlineContent = {
-                            ComponentPlaceholder(Modifier
-                                .height(16.dp)
-                                .width(64.dp))
-                        }
-                    )
-                    else ListItem(
-                        headlineContent = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    date.format(DateFormatter),
-                                    style = MaterialTheme.typography.titleLarge
-                                )
-                                Box(Modifier.width(8.dp))
-                                Text(
-                                    "(${events.size})",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = Color.Gray
+                        // Selection indicator
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (selected) {
+                                Icon(
+                                    Icons.Rounded.Check,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(14.dp)
                                 )
                             }
                         }
-                    )
-                }
-                items(events, key = { "event-${it.id}-${it.hashCode()}" }) { event ->
-                    // val dayExpanded = expandedCurrent.contains(day.date)
-                    // val headerSelected = selectedItems.containsAll(day.events.map { it })
-                    val recordEventId by RecordService.RecordState.eventId.collectAsState()
 
-                    val selected = selectedItems.contains(event)
-                    val recording = recordEventId == event.id
-                    EventListItem(
-                        event,
-                        selected = selected,
-                        recording = recording,
-                        tagDetailDialogState = tagDetailDialogState,
-                        modifier = Modifier
-                            .animateItem(fadeInSpec = null, fadeOutSpec = null)
-                            .combinedClickable(
-                                onClick = listItemOnClick@{
-//                                            if (lock) return@listItemOnClick
-                                    if (!selectionMode) {
-                                        val intent =
-                                            Intent(
-                                                context,
-                                                EventDetailActivity::class.java
-                                            )
-                                        intent.putExtra("eventId", event.id)
-                                        intent.putExtra(
-                                            "path",
-                                            getFilePathFromDate(event.time.toLocalDate())
-                                        )
-                                        context.startActivity(intent)
-                                    } else {
-                                        if (recording) return@listItemOnClick
-                                        if (selected) selectionState.deselect(event)
-                                        else selectionState.select(event)
-                                    }
-                                },
-                                onLongClick = listItemOnLongClick@{
-                                    if (recording) return@listItemOnLongClick
-//                                            selectionMode = true
-                                    haptic.performHapticFeedback(
-                                        HapticFeedbackType.LongPress
-                                    )
-                                    if (selected) selectionState.deselect(event)
-                                    else selectionState.select(event)
+                        // Tag color indicator
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(tagData.tint)
+                        )
+
+                        // Tag content
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                tagData.name,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
                                 }
                             )
-                            .zIndex(-1f),
-                    )
+                            if (tagData.description.isNotEmpty()) {
+                                Text(
+                                    text = tagData.description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    overflow = TextOverflow.Ellipsis,
+                                    maxLines = 1,
+                                    color = if (selected) {
+                                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+                            }
+                        }
+
+                        // Trailing icon for non-selection mode
+                        if (!selectionMode) {
+                            Icon(
+                                Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
                 }
             }
+
             item {
                 Box(modifier = Modifier.height(136.dp))
             }
         }
 
-        QuickScroll(lazyListState)
-        TagDetailDialog(tagDetailDialogState)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(99f)
+        ) {
+            QuickScroll(listState = lazyListState)
+        }
     }
     else Column(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .fillMaxSize()
-            .padding(32.dp),
-        content = onEmptyContent ?: {}
-    )
-}
-
-@Composable
-private fun QuickScroll(
-    listState: LazyListState
-) {
-    var isDragging by remember { mutableStateOf(false) }
-    val isScrolling = listState.isScrollInProgress || isDragging
-
-    val haptic = LocalHapticFeedback.current
-
-    val targetAlpha = if (isDragging) 1f else if (isScrolling) 0.5f else 0f
-    val duration = if (isScrolling) 150 else 500
-    val delay = if (isScrolling) 0 else 1000
-
-    val alpha by animateFloatAsState(
-        targetValue = targetAlpha,
-        animationSpec = tween(delayMillis = delay, durationMillis = duration)
-    )
-
-    val scope = rememberCoroutineScope()
-    var dragOffsetY by remember { mutableFloatStateOf(0f) }
-
-    var containerHeight by remember { mutableIntStateOf(0) }
-    var handleHeight by remember { mutableIntStateOf(0) }
-
-    var previousIndex by remember { mutableIntStateOf(0) }
-
-    var layoutInfo by remember { mutableStateOf<LazyListLayoutInfo?>(null) }
-
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.layoutInfo }
-            .collect { layoutInfo = it }
-    }
-
-    val averageItemHeight = remember(layoutInfo) {
-        val viewPortHeight = listState.layoutInfo.viewportEndOffset - listState.layoutInfo.viewportStartOffset
-        if (viewPortHeight <= 0) {
-            1
-        } else {
-            viewPortHeight / listState.layoutInfo.totalItemsCount
-        }
-    }
-
-    val onPositionUpdated: (yPos: Int) -> Unit = {
-        val itemIndex = (it / averageItemHeight).coerceIn(0, listState.layoutInfo.totalItemsCount)
-
-        if (itemIndex != previousIndex) {
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-            previousIndex = itemIndex
-        }
-        scope.launch {
-            // TODO: or listState.animateScrollToItem(itemIndex)
-            listState.scrollToItem(itemIndex)
-        }
-    }
-
-    val maxOffset = remember(containerHeight, handleHeight) {
-        (containerHeight - handleHeight).toFloat()
-    }
-
-    val thumbHeight = 48.dp
-
-    val dragHandleShape = RoundedCornerShape(8.dp)
-    val needDrawScrollbar = isScrolling || alpha > 0.0f
-    val firstVisibleElementIndex = layoutInfo?.visibleItemsInfo?.firstOrNull()?.index
-
-
-    if (firstVisibleElementIndex != null) {
-        val scrollbarOffsetY = firstVisibleElementIndex * averageItemHeight
-
-        if (!isDragging) dragOffsetY = scrollbarOffsetY.toFloat()
-        Row(
+            .padding(32.dp)
+    ) {
+        Surface(
             modifier = Modifier
-                .fillMaxSize()
-                .onSizeChanged {
-                    containerHeight = it.height
-                }
-                .graphicsLayer { this.alpha = alpha }
-                .zIndex(99f),
-            horizontalArrangement = Arrangement.End
+                .height(196.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outline,
+                    shape = RoundedCornerShape(16.dp)
+                ),
+            color = MaterialTheme.colorScheme.surfaceContainer
         ) {
-            Box(
-                modifier = Modifier
-                    .padding(start = 12.dp)
-                    .offset {
-                        IntOffset(0, dragOffsetY.roundToInt())
-                    }
-                    .draggable(
-                        orientation = Orientation.Vertical,
-                        state = rememberDraggableState { delta ->
-                            dragOffsetY = (dragOffsetY + delta).coerceIn(0f, maxOffset)
-                            onPositionUpdated(dragOffsetY.roundToInt())
-                        },
-                        onDragStarted = { isDragging = true },
-                        onDragStopped = { isDragging = false }
-                    )
-                    .defaultMinSize(
-                        minWidth = 24.dp,
-                        minHeight = thumbHeight
-                    )
-                    .onSizeChanged {
-                        handleHeight = it.height
-                    }
-                    .padding(8.dp)
-                    .zIndex(99f),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                Box(
-                    Modifier
-                        .height(thumbHeight)
-                        .width(4.dp)
-                        .clip(dragHandleShape)
-                        .background(
-                            if (!isDragging) Color.Gray
-                            else MaterialTheme.colorScheme.primaryContainer
-                        )
-
-                        .zIndex(99f)
-                )
-            }
+            Image(
+                painter = painterResource(
+                    if (isSystemInDarkTheme()) R.drawable.hint_no_tag_dark
+                    else R.drawable.hint_no_tag
+                ),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
         }
+
+        Box(Modifier.height(16.dp))
+
+        Text(
+            text = "No tags here",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+
+        Box(Modifier.height(8.dp))
+
+        val addIcon = "addIcon"
+
+        val text = buildAnnotatedString {
+            append("Add tags by clicking ")
+            appendInlineContent(addIcon, "add icon")
+            append(" to organize your events.")
+        }
+        val inlineContent = mapOf(
+            addIcon to InlineTextContent(
+                Placeholder(
+                    width = 16.sp,
+                    height = 16.sp,
+                    placeholderVerticalAlign = PlaceholderVerticalAlign.Center
+                )
+            ) {
+                Icon(
+                    Icons.Rounded.Add,
+                    contentDescription = "Add icon",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.fillMaxSize()
+                )
+            },
+        )
+
+        Text(
+            text = text,
+            inlineContent = inlineContent,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TagList(
+private fun TagList_Old(
     lazyListState: LazyListState,
     selectionState: SelectionState<HistoryTag>
 ) {

@@ -10,8 +10,10 @@ import androidx.lifecycle.viewModelScope
 import id.my.nanclouder.nanhistory.db.AppDao
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.toHistoryEvent
-import id.my.nanclouder.nanhistory.lib.history.HistoryDay
-import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
+import id.my.nanclouder.nanhistory.db.toHistoryTag
+import id.my.nanclouder.nanhistory.utils.history.HistoryDay
+import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
+import id.my.nanclouder.nanhistory.utils.history.HistoryTag
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +39,9 @@ class EventListViewModel(
     private val _days = MutableStateFlow<List<HistoryDay>>(emptyList()) // Holds loaded data
     val days: StateFlow<List<HistoryDay>> = _days // Expose sorted list
 
+    private val _tags = MutableStateFlow<List<HistoryTag>>(emptyList()) // Holds loaded data
+    val tags: StateFlow<List<HistoryTag>> = _tags
+
     private val _isLoading = MutableStateFlow(false) // Loading state
     val isLoading: StateFlow<Boolean> = _isLoading // Expose as immutable
 
@@ -47,6 +52,10 @@ class EventListViewModel(
     private var _currentDays = emptyList<HistoryDay>()
     val currentDays
         get() = _currentDays
+
+    private var _currentTags = emptyList<HistoryTag>()
+    val currentTags
+        get() = _currentTags
 
     private var _onGotoDay: ((LocalDate) -> Unit)? = null
     private var _onGotoEvent: ((String) -> Unit)? = null
@@ -65,6 +74,11 @@ class EventListViewModel(
         viewModelScope.launch {
             _days.collect {
                 _currentDays = it
+            }
+        }
+        viewModelScope.launch {
+            _tags.collect {
+                _currentTags = it
             }
         }
     }
@@ -86,13 +100,24 @@ class EventListViewModel(
         _onGotoEvent?.invoke(eventId)
     }
 
-    fun search(query: String) {
-        viewModelScope.launch {
-            if (query.isNotBlank()) AppDatabase.search(dao, query).collect {
+    fun search(query: String, tags: List<String> = emptyList(), matchWholeWord: Boolean = false) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (tags.isNotEmpty()) AppDatabase.searchWithTagIds(dao, query, tags).collect{
+                _events.value = it
+            }
+            else if (matchWholeWord) AppDatabase.searchMatchWholeWord(dao, query).collect {
+                _events.value = it
+            }
+            else if (query.isNotBlank()) AppDatabase.search(dao, query).collect {
                 if (query.isNotBlank())
                     _events.value = it
             }
             else _events.value = emptyList()
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.getAllTags().collect {
+                _tags.value = it.map { tag -> tag.toHistoryTag() }
+            }
         }
     }
 
@@ -114,6 +139,9 @@ class EventListViewModel(
                 _events.value = events
                 Log.d("NanHistoryDebug", "Loaded ${events.size} events")
             }
+        }
+        else viewModelScope.launch(Dispatchers.IO) {
+            search("")
         }
         viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = false

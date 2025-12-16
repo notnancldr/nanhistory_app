@@ -1,72 +1,16 @@
-//plugins {
-//    alias(libs.plugins.androidApplication)
-//    alias(libs.plugins.jetbrainsKotlinAndroid)
-//}
-//
-//android {
-//    namespace = "id.my.nanclouder.nanhistory"
-//    compileSdk = 34
-//
-//    defaultConfig {
-//        applicationId = "id.my.nanclouder.nanhistory"
-//        minSdk = 30
-//        targetSdk = 34
-//        versionCode = 1
-//        versionName = "1.0"
-//
-//        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-//        vectorDrawables {
-//            useSupportLibrary = true
-//        }
-//    }
-//
-//    buildTypes {
-//        release {
-//            isMinifyEnabled = false
-//            proguardFiles(
-//                getDefaultProguardFile("proguard-android-optimize.txt"),
-//                "proguard-rules.pro"
-//            )
-//        }
-//    }
-//    compileOptions {
-//        sourceCompatibility = JavaVersion.VERSION_1_8
-//        targetCompatibility = JavaVersion.VERSION_1_8
-//    }
-//    kotlinOptions {
-//        jvmTarget = "1.8"
-//    }
-//    buildFeatures {
-//        compose = true
-//    }
-//    composeOptions {
-//        kotlinCompilerExtensionVersion = "1.5.1"
-//    }
-//    packaging {
-//        resources {
-//            excludes += "/META-INF/{AL2.0,LGPL2.1}"
-//        }
-//    }
-//}
-//
-//dependencies {
-//
-//    implementation(libs.androidx.core.ktx)
-//    implementation(libs.androidx.lifecycle.runtime.ktx)
-//    implementation(libs.androidx.activity.compose)
-//    implementation(platform(libs.androidx.compose.bom))
-//    implementation(libs.androidx.ui)
-//    implementation(libs.androidx.ui.graphics)
-//    implementation(libs.androidx.ui.tooling.preview)
-//    implementation(libs.androidx.material3)
-//    testImplementation(libs.junit)
-//    androidTestImplementation(libs.androidx.junit)
-//    androidTestImplementation(libs.androidx.espresso.core)
-//    androidTestImplementation(platform(libs.androidx.compose.bom))
-//    androidTestImplementation(libs.androidx.ui.test.junit4)
-//    debugImplementation(libs.androidx.ui.tooling)
-//    debugImplementation(libs.androidx.ui.test.manifest)
-//}
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Properties
+
+val dotenv = Properties().apply {
+    val envFile = rootProject.file(".env")
+    if (envFile.exists()) {
+        load(envFile.inputStream())
+    }
+}
+
+fun env(key: String, defaultValue: String = ""): String =
+    "\"${dotenv.getProperty(key, defaultValue)}\""
 
 plugins {
     alias(libs.plugins.androidApplication)
@@ -88,7 +32,7 @@ android {
     versionCodeFile.writeText(fileVersionCode.toString())
     incrementFile.writeText("")
     namespace = "id.my.nanclouder.nanhistory"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "id.my.nanclouder.nanhistory"
@@ -96,6 +40,19 @@ android {
         targetSdk = 35
         versionCode = fileVersionCode
         versionName = "1.2.0"
+
+        val now = ZonedDateTime.now()
+        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ssXXX")
+        val buildTime = now.format(formatter)
+
+        buildConfigField("String", "ENCRYPTION_KEY", env("ENCRYPTION_KEY", "6VaEaqHzAzptmbdLYFWF5fnWFoBr4Raf"))
+        buildConfigField("String", "LEGACY_ENCRYPTION_KEY", env("LEGACY_ENCRYPTION_KEY", "gWn88Iezr1ZwPqxLYkQ3Zv2w4uTI0Eu5"))
+
+        buildConfigField(
+            "String",
+            "BUILD_TIME",
+            "\"$buildTime\""
+        )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -115,6 +72,7 @@ android {
         }
         debug {
             versionNameSuffix = "d"
+            applicationIdSuffix = ".dev"
         }
     }
 
@@ -127,6 +85,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.1"
@@ -147,7 +106,11 @@ android {
 //}
 
 dependencies {
+    implementation("androidx.documentfile:documentfile:1.0.1")
+    implementation(libs.capturable)
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.compose.foundation.layout)
+    implementation(libs.androidx.compose.foundation)
     // implementation(libs.kotlin.stdlib)
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.room.runtime)
@@ -174,4 +137,6 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+
+    implementation(libs.androidx.material.icons.extended)
 }

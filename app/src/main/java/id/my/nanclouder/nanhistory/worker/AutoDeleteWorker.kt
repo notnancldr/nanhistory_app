@@ -12,7 +12,7 @@ import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.toHistoryEvent
-import id.my.nanclouder.nanhistory.lib.history.safeDelete
+import id.my.nanclouder.nanhistory.utils.history.safeDelete
 import java.time.Instant
 
 class AutoDeleteWorker(

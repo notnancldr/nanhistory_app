@@ -10,8 +10,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.EaseInOutCubic
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +32,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -36,6 +45,8 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -43,6 +54,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -63,6 +75,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -84,22 +97,26 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.toHistoryEvent
-import id.my.nanclouder.nanhistory.lib.Coordinate
-import id.my.nanclouder.nanhistory.lib.DateFormatter
-import id.my.nanclouder.nanhistory.lib.HistoryLocationData
-import id.my.nanclouder.nanhistory.lib.TimeFormatter
-import id.my.nanclouder.nanhistory.lib.getLocationData
-import id.my.nanclouder.nanhistory.lib.history.EventPoint
-import id.my.nanclouder.nanhistory.lib.history.EventRange
-import id.my.nanclouder.nanhistory.lib.history.generateEventId
-import id.my.nanclouder.nanhistory.lib.history.getFilePathFromDate
-import id.my.nanclouder.nanhistory.lib.history.validateSignature
-import id.my.nanclouder.nanhistory.lib.shareFile
+import id.my.nanclouder.nanhistory.utils.Coordinate
+import id.my.nanclouder.nanhistory.utils.DateFormatter
+import id.my.nanclouder.nanhistory.utils.HistoryLocationData
+import id.my.nanclouder.nanhistory.utils.TimeFormatter
+import id.my.nanclouder.nanhistory.utils.getLocationData
+import id.my.nanclouder.nanhistory.utils.history.EventPoint
+import id.my.nanclouder.nanhistory.utils.history.EventRange
+import id.my.nanclouder.nanhistory.utils.history.generateEventId
+import id.my.nanclouder.nanhistory.utils.history.getFilePathFromDate
+import id.my.nanclouder.nanhistory.utils.history.validateSignature
+import id.my.nanclouder.nanhistory.utils.shareFile
 import id.my.nanclouder.nanhistory.service.RecordService
 import id.my.nanclouder.nanhistory.ui.AudioPlayer
 import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
+import id.my.nanclouder.nanhistory.ui.CountdownTimerDialog
+import id.my.nanclouder.nanhistory.ui.MentionModalHandler
+import id.my.nanclouder.nanhistory.ui.MentionModalState
 import id.my.nanclouder.nanhistory.ui.TagDetailDialog
 import id.my.nanclouder.nanhistory.ui.TagPickerDialog
 import id.my.nanclouder.nanhistory.ui.rememberTagDetailDialogState
@@ -117,9 +134,27 @@ import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 import java.time.Duration
 import java.time.ZonedDateTime
-import kotlin.math.max
 import kotlin.math.round
 import kotlin.math.roundToInt
+import id.my.nanclouder.nanhistory.utils.FormattedText
+import id.my.nanclouder.nanhistory.utils.MapShareDialog
+import id.my.nanclouder.nanhistory.utils.history.TransportationType
+import id.my.nanclouder.nanhistory.utils.transportModel.detectTransportMode
+import id.my.nanclouder.nanhistory.utils.simplifyPoints
+import id.my.nanclouder.nanhistory.utils.toGeoPoint
+import id.my.nanclouder.nanhistory.utils.transportModel.CalibrationModel
+import id.my.nanclouder.nanhistory.utils.transportModel.CalibrationParamsPreview
+import id.my.nanclouder.nanhistory.utils.transportModel.TrainingResult
+import id.my.nanclouder.nanhistory.utils.transportModel.TransportMode
+import id.my.nanclouder.nanhistory.utils.transportModel.getScore
+import id.my.nanclouder.nanhistory.utils.transportModel.loadCalibrationModels
+import id.my.nanclouder.nanhistory.utils.transportModel.recalibrateModels
+import id.my.nanclouder.nanhistory.utils.transportModel.resetModels
+import id.my.nanclouder.nanhistory.utils.transportModel.saveCalibrationModels
+import id.my.nanclouder.nanhistory.utils.transportModel.toTransportMode
+import id.my.nanclouder.nanhistory.utils.transportModel.train
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 
 class EventDetailActivity : ComponentActivity() {
     var update: () -> Unit = {}
@@ -149,9 +184,17 @@ fun Context.getActivity(): ComponentActivity? = when (this) {
     else -> null
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+
 @Composable
 fun DetailContent(eventId: String, path: String) {
+    val newUI = Config.appearanceNewUI.getCache()
+    if (newUI) DetailContent_New(eventId, path)
+    else DetailContent_Old(eventId, path)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DetailContent_Old(eventId: String, path: String) {
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     val snackbarHostState = remember { SnackbarHostState() }
     val scrollState = rememberScrollState()
@@ -174,7 +217,7 @@ fun DetailContent(eventId: String, path: String) {
     var eventNotFound by remember { mutableStateOf(false) }
 
     val recordEventId by RecordService.RecordState.eventId.collectAsState()
-    val recordRunning by RecordService.RecordState.isRunning.collectAsState()
+    val recordRunning by RecordService.RecordState.isRecording.collectAsState()
     val recording = recordEventId == eventData?.id && recordRunning
 
     var tagDialogState by remember { mutableStateOf(false) }
@@ -463,7 +506,9 @@ fun DetailContent(eventId: String, path: String) {
                         val maxSpeed = round(locationData.maxOf { it.speed } * 10) / 10
                         val distance = locationData.sumOf { item -> item.distance.toDouble() }
                         // In Km/h
-                        val avgSpeed = (distance / 100f / (duration / 3600f)).roundToInt() / 10f
+                        val avgSpeed =
+                            try { (distance / 100f / (duration / 3600f)).roundToInt() / 10f }
+                            catch (e: Exception) { 0f }
 
                         ListItem(
                             headlineContent = {
@@ -835,6 +880,1092 @@ fun DetailContent(eventId: String, path: String) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DetailContent_New(eventId: String, path: String) {
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scrollState = rememberScrollState()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    val tagDetailDialogState = rememberTagDetailDialogState()
+
+    var showSignatureInfo by rememberSaveable { mutableStateOf(false) }
+    var deleteDialogState by rememberSaveable { mutableStateOf(false) }
+    var showShareMapDialog by rememberSaveable { mutableStateOf(false) }
+
+    var showInfo by remember { mutableStateOf(false) }
+
+    val db = AppDatabase.getInstance(context)
+    val dao = db.appDao()
+
+    val eventState by dao.getEventFlowById(eventId).collectAsState(null)
+    val eventData = eventState?.toHistoryEvent()
+
+    var eventNotFound by remember { mutableStateOf(false) }
+
+    val recordEventId by RecordService.RecordState.eventId.collectAsState()
+    val recordRunning by RecordService.RecordState.isRecording.collectAsState()
+    val recording = recordEventId == eventData?.id && recordRunning
+
+    var tagDialogState by remember { mutableStateOf(false) }
+
+    val duration = when (eventData) {
+        is EventPoint -> null
+        is EventRange -> eventData.end.toEpochSecond() - eventData.time.toEpochSecond()
+        else -> null
+    } ?: 0
+
+    val favorite = eventData?.favorite ?: false
+
+    var eventLocations by remember {
+        mutableStateOf<Map<ZonedDateTime, Coordinate>>(mapOf())
+    }
+    val locationAvailable = eventData?.locationPath != null
+
+    var locationData by remember {
+        mutableStateOf<List<HistoryLocationData>>(listOf())
+    }
+
+    val mentionModalState = remember { mutableStateOf(MentionModalState()) }
+
+    LaunchedEffect(eventData) {
+        eventLocations = eventData?.getLocations(context) ?: mapOf()
+        locationData = eventLocations.getLocationData()
+    }
+
+    TagDetailDialog(tagDetailDialogState)
+
+    if (!eventNotFound) Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            LargeTopAppBar(
+                scrollBehavior = scrollBehavior,
+                title = {
+                    if (eventData != null) Column {
+                        FormattedText(
+                            eventData.title,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.headlineSmall,
+                            mentionModalState = mentionModalState
+                        )
+                    }
+                    else Column {
+                        ComponentPlaceholder(
+                            Modifier
+                                .width(196.dp)
+                                .height(24.dp)
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(
+                        onClick = {
+                            context.getActivity()!!.finish()
+                        }
+                    ) {
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
+                    }
+                },
+                actions = {
+                    if (eventData != null) {
+                        IconButton(
+                            onClick = {
+                                scope.launch { dao.toggleFavoriteEvent(eventId) }
+                            },
+                            enabled = !recording
+                        ) {
+                            if (favorite) Icon(
+                                painterResource(R.drawable.ic_favorite_filled), "",
+                                tint = Color(0xFFFF7070)
+                            )
+                            else Icon(
+                                painterResource(R.drawable.ic_favorite), ""
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                val intent = Intent(context, EditEventActivity::class.java)
+                                intent.putExtra("eventId", eventId)
+                                context.startActivity(intent)
+                            },
+                            enabled = !recording
+                        ) {
+                            Icon(Icons.Rounded.Edit, "Edit")
+                        }
+
+                        var menuExpanded by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { menuExpanded = !menuExpanded }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                            }
+                            DropdownMenu(
+                                expanded = menuExpanded,
+                                onDismissRequest = { menuExpanded = false }
+                            ) {
+                                DropdownMenuItem(
+                                    leadingIcon = {
+                                        Icon(Icons.Outlined.Info, "Info", tint = MaterialTheme.colorScheme.primary)
+                                    },
+                                    text = { Text("Info") },
+                                    onClick = { showInfo = true; menuExpanded = false }
+                                )
+                                if (eventData.audio != null) DropdownMenuItem(
+                                    leadingIcon = {
+                                        Icon(Icons.Outlined.Share, "Share audio", tint = MaterialTheme.colorScheme.primary)
+                                    },
+                                    text = { Text("Share Audio") },
+                                    onClick = {
+                                        shareFile(
+                                            context,
+                                            "audio/" + eventData.audio!!.removePrefix(context.filesDir.absolutePath)
+                                        )
+                                        menuExpanded = false
+                                    }
+                                )
+                                if (eventData is EventRange) DropdownMenuItem(
+                                    leadingIcon = {
+                                        Icon(
+                                            painterResource(R.drawable.ic_content_cut),
+                                            contentDescription = "Cut Event",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    },
+                                    text = { Text("Cut Event") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        val intent =
+                                            Intent(context, EventLocationActivity::class.java)
+                                                .apply {
+                                                    putExtra("eventId", eventId)
+                                                    putExtra("cutMode", true)
+                                                }
+                                        context.startActivity(intent)
+                                    },
+                                    enabled = !recording
+                                )
+                                DropdownMenuItem(
+                                    leadingIcon = {
+                                        Icon(
+                                            painterResource(R.drawable.ic_delete), "Delete",
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    },
+                                    text = {
+                                        Text("Delete", color = MaterialTheme.colorScheme.error)
+                                    },
+                                    onClick = { deleteDialogState = true; menuExpanded = false },
+                                    enabled = !recording
+                                )
+                            }
+                        }
+                    } else ComponentPlaceholder(
+                        Modifier
+                            .size(40.dp)
+                            .padding(8.dp)
+                    )
+                },
+                colors = if (recording) TopAppBarDefaults.largeTopAppBarColors(
+                    scrolledContainerColor = MaterialTheme.colorScheme.errorContainer,
+                    titleContentColor = MaterialTheme.colorScheme.error
+                ) else TopAppBarDefaults.largeTopAppBarColors()
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                .padding(paddingValues)
+                .verticalScroll(scrollState)
+        ) {
+
+            if (recording) {
+                RecordingIndicatorBar()
+            }
+
+            if (eventData != null) Row(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(12.dp)
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                var showCountdownDialog by rememberSaveable { mutableStateOf(false) }
+                if (eventData is EventRange && eventLocations.isNotEmpty()) {
+
+                    Button(
+                        onClick = {
+                            showShareMapDialog = true
+                        },
+                        modifier = Modifier
+                            .weight(1f),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.Share,
+                            "Share",
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                        Text("Share")
+                    }
+                }
+
+                Button(
+                    onClick = {
+                        showCountdownDialog = true
+                    },
+                    modifier = Modifier
+                        .weight(1f),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                ) {
+                    Icon(
+                        Icons.Rounded.Schedule,
+                        "Timer",
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Text("Timer")
+                }
+
+                CountdownTimerDialog(
+                    eventStart = eventData.time,
+                    eventEnd = (eventData as? EventRange)?.end,
+                    showDialog = showCountdownDialog,
+                    onDismiss = { showCountdownDialog = false }
+                )
+            }
+
+            // Tags Section
+            if (eventData != null && !recording) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp)
+                        .clip(RoundedCornerShape(16.dp)),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    tonalElevation = 2.dp
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        if (eventData.tags.isNotEmpty()) {
+                            val isTagMoreThanOne = eventData.tags.size > 1
+                            Text(
+                                "${eventData.tags.size} tag${if (isTagMoreThanOne) "s" else ""}",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Surface(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(10.dp)),
+                                color = MaterialTheme.colorScheme.primary,
+                                tonalElevation = 4.dp
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        tagDialogState = true
+                                    },
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    Icon(
+                                        if (eventData.tags.isNotEmpty()) Icons.Rounded.Edit else Icons.Rounded.Add,
+                                        if (eventData.tags.isNotEmpty()) "Edit tag" else "Add tag",
+                                        tint = MaterialTheme.colorScheme.onPrimary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            if (eventData.tags.isNotEmpty()) TagsView(
+                                eventData.tags,
+                                limit = Int.MAX_VALUE,
+                                wrap = true,
+                                tagDetailDialogState = tagDetailDialogState,
+                            )
+                            else Text(
+                                "No tags yet",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Map Section
+            if (locationAvailable) {
+                Box(
+                    modifier = Modifier
+                        .height(220.dp)
+                        .fillMaxWidth()
+                        .padding(12.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                ) {
+                    if (eventLocations.isNotEmpty()) {
+                        MapHistoryPreview(
+                            locations = eventLocations,
+                            modifier = Modifier.height(220.dp)
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clickable {
+                                    val intent = Intent(context, EventLocationActivity::class.java)
+                                    intent.putExtra("eventId", eventData!!.id)
+                                    intent.putExtra(
+                                        "path",
+                                        getFilePathFromDate(eventData.time.toLocalDate())
+                                    )
+                                    context.startActivity(intent)
+                                }
+                        )
+                    } else ComponentPlaceholder(
+                        Modifier.fillMaxSize()
+                    )
+                }
+            }
+
+            // Event Details Section
+            if (eventData != null) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp)
+                ) {
+                    // Location Stats
+                    if (eventData is EventRange && eventLocations.size > 1) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp)),
+                            color = MaterialTheme.colorScheme.surfaceContainer,
+                            tonalElevation = 2.dp
+                        ) {
+                            val maxSpeed = round(locationData.maxOf { it.speed } * 10) / 10
+                            val distance = locationData.sumOf { item -> item.distance.toDouble() }
+                            val avgSpeed = try { round((distance / 100f / (duration / 3600f)).roundToInt() / 10f) } catch(_: Exception) { 0 }
+
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text(
+                                    "Trip Stats",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    StatCard("Avg Speed", "$avgSpeed Km/h")
+                                    StatCard("Max Speed", "$maxSpeed Km/h")
+                                    StatCard(
+                                        "Distance",
+                                        if (distance < 1000) "${round(distance).toInt()} m"
+                                        else "${round(distance / 100) / 10} Km"
+                                    )
+                                }
+                            }
+                        }
+                        Box(Modifier.height(12.dp))
+                    }
+
+
+                    /////////////////////////
+                    /* DEVELOPER MODE ONLY */
+                    /////////////////////////
+
+                    val showDetectedTransport by Config.developerShowDetectedTransport.getState()
+
+                    if (showDetectedTransport && eventData is EventRange) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp)),
+                            color = MaterialTheme.colorScheme.surfaceContainer,
+                            tonalElevation = 2.dp
+                        ) {
+                            val showDetectedTransport by Config.developerShowDetectedTransport.getState()
+
+                            var modelParams by remember { mutableStateOf(mapOf<TransportMode, CalibrationModel>()) }
+
+                            var originalParams by remember { mutableStateOf(loadCalibrationModels(context)) }
+                            var calibrationJob by remember { mutableStateOf<Job?>(null) }
+                            val detected = detectTransportMode(locationData, modelParams)
+
+                            var trainingJob by remember { mutableStateOf<Job?>(null) }
+                            var trainingResult by remember { mutableStateOf<TrainingResult?>(null) }
+
+                            LaunchedEffect(originalParams) {
+                                modelParams = originalParams
+                            }
+
+                            if (showDetectedTransport) Column(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                Text(
+                                    "TransportDetectionModel (DEV OPTION)",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Column {
+                                    for (modelKey in modelParams.keys) {
+                                        Text(
+                                            text = "${modelKey.name} (${getScore(locationData, modelKey, modelParams)})",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = if (detected == modelKey) {
+                                                if (eventData.transportationType == TransportationType.Unspecified) Color.Yellow
+                                                else if (detected == eventData.transportationType.toTransportMode()) Color.Green
+                                                else Color.Red
+                                            } else Color.Unspecified
+                                        )
+                                        CalibrationParamsPreview(
+                                            original = originalParams[modelKey],
+                                            current = modelParams.getOrDefault(
+                                                modelKey,
+                                                CalibrationModel(
+                                                    0f,0f,0f,0f,0f,0f,
+                                                    0f, 0f, 0f, 0f, 0f, 0f,
+                                                    0f, 0f, 0f, 0f,
+                                                    0f, 0f, 0f, 0f,
+                                                    0f, 0f, 0f, 0f
+                                                )
+                                            )
+                                        )
+                                        Box(Modifier.height(8.dp))
+                                    }
+
+                                    if (trainingResult != null) {
+                                        Text(
+                                            text = "Training Result",
+                                            style = MaterialTheme.typography.labelLarge
+                                        )
+                                        Text(
+                                            text = "Accuracy: ${trainingResult?.accuracy?.let { round(it * 1000)/10 }}%",
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                        Text(
+                                            text = "Total samples: ${trainingResult?.totalSamples}",
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                        Text(
+                                            text = "Correct samples: ${trainingResult?.correctSamples}",
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+                                }
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+                                ) {
+                                    StatCard(
+                                        "DetectedTransport",
+                                        detected.name
+                                    )
+                                    StatCard(
+                                        "ExpectedTransport",
+                                        eventData.transportationType.toTransportMode().name
+                                    )
+                                }
+                                if (eventData.transportationType != TransportationType.Unspecified) Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            calibrationJob = calibrationJob?.let {
+                                                it.cancel()
+                                                scope.launch {
+                                                    delay(100)
+                                                    calibrationJob = null
+                                                }
+                                                it
+                                            } ?: scope.launch {
+                                                while (detectTransportMode(locationData, modelParams) != eventData.transportationType.toTransportMode()) {
+                                                    delay(10)
+                                                    modelParams = recalibrateModels(
+                                                        locationData,
+                                                        modelParams,
+                                                        eventData.transportationType.toTransportMode(),
+                                                    )
+                                                    saveCalibrationModels(context, modelParams)
+                                                }
+                                                calibrationJob = null
+                                            }
+                                        }
+                                    ) {
+                                        Text(
+                                            if (calibrationJob == null) "Recalibrate"
+                                            else "Recalibrating..."
+                                        )
+                                    }
+                                    Button(
+                                        onClick = {
+                                            resetModels(context)
+                                            originalParams = emptyMap()
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                                            containerColor = MaterialTheme.colorScheme.errorContainer
+                                        )
+                                    ) {
+                                        Text("Reset")
+                                    }
+                                }
+
+                                TextButton(
+                                    onClick = {
+                                        trainingJob = scope.launch {
+                                            trainingResult = train(context, modelParams)
+                                            modelParams = trainingResult!!.models
+
+                                            trainingJob = null
+                                        }
+                                    }
+                                ) {
+                                    Text(
+                                        if (trainingJob == null) "Train"
+                                        else "Training..."
+                                    )
+                                }
+                            }
+                        }
+                        Box(Modifier.height(12.dp))
+                    }
+
+
+                    // Signature Section
+                    if (eventData.signature.isNotBlank()) {
+                        val valid = remember { eventData.validateSignature(context = context) }
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .clickable {
+                                    showSignatureInfo = !showSignatureInfo
+                                },
+                            color = MaterialTheme.colorScheme.surfaceContainer,
+                            tonalElevation = 2.dp
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clip(RoundedCornerShape(8.dp)),
+                                        color = if (valid) Color(0xFF008000).copy(alpha = 0.2f) else Color(0xFF808000).copy(alpha = 0.2f)
+                                    ) {
+                                        Icon(
+                                            if (valid) Icons.Rounded.CheckCircle else Icons.Rounded.Warning,
+                                            contentDescription = if (valid) "Signed" else "Invalid signature",
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(4.dp),
+                                            tint = if (valid) Color(0xFF008000) else Color(0xFF808000)
+                                        )
+                                    }
+                                    Text(
+                                        text = if (valid) "Event is digitally signed" else "Signature invalid",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                AnimatedVisibility(visible = showSignatureInfo) {
+                                    Text(
+                                        "Signature: ${eventData.signature}\nValid: $valid",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(start = 12.dp)
+                                    )
+                                }
+                            }
+                        }
+                        Box(Modifier.height(12.dp))
+                    }
+
+                    // Audio Player
+                    if (eventData.audio != null) {
+                        AudioPlayer("${context.filesDir.absolutePath}/audio/${eventData.audio}")
+                        Box(Modifier.height(12.dp))
+                    }
+
+                    // Details Cards
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp)),
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        tonalElevation = 2.dp
+                    ) {
+                        Column {
+                            DetailCard(
+                                icon = painterResource(R.drawable.ic_title),
+                                label = "Title",
+                                value = eventData.title,
+                                isFirst = true,
+                                format = true,
+                                mentionModalState = mentionModalState
+                            )
+                            HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                            DetailCard(
+                                icon = painterResource(R.drawable.ic_info),
+                                label = "Description",
+                                value = if (eventData.description.isNotBlank()) eventData.description else "No description",
+                                isEmpty = eventData.description.isBlank(),
+                                format = true,
+                                mentionModalState = mentionModalState
+                            )
+                            HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                            DetailCard(
+                                icon = painterResource(R.drawable.ic_schedule),
+                                label = if (eventData !is EventRange) "Time" else "Start",
+                                value = eventData.time.format(DateFormatter) + " " +
+                                        eventData.time.format(TimeFormatter) +
+                                        if (eventData.time.second != 0) ":${
+                                            eventData.time.second.toString().padStart(2, '0')
+                                        }" else "",
+                                isLast = eventData !is EventRange
+                            )
+                            if (eventData is EventRange) {
+                                HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                                DetailCard(
+                                    icon = painterResource(R.drawable.ic_arrow_range),
+                                    label = "Duration"
+                                ) {
+                                    val durationObj = Duration.ofSeconds(duration)
+                                    val days = durationObj.toDays()
+                                    val hours = durationObj.toHoursPart()
+                                    val minutes = durationObj.toMinutesPart()
+                                    val seconds = durationObj.toSecondsPart()
+
+                                    var text = ""
+                                    if (days > 0) text += "${days}d "
+                                    if (hours > 0) text += "${hours}h "
+                                    if (minutes > 0) text += "${minutes}m "
+                                    if (seconds > 0) text += "${seconds}s"
+
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        if (eventData.transportationType.iconId != null) {
+                                            Icon(
+                                                painterResource(eventData.transportationType.iconId!!),
+                                                eventData.transportationType.name,
+                                                modifier = Modifier.size(16.dp),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Text(text)
+                                    }
+                                }
+                                HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                                DetailCard(
+                                    icon = painterResource(R.drawable.ic_schedule),
+                                    label = "End",
+                                    value = eventData.end.format(DateFormatter) + " " +
+                                            eventData.end.format(TimeFormatter) +
+                                            if (eventData.end.second != 0) ":${
+                                                eventData.end.second.toString().padStart(2, '0')
+                                            }" else "",
+                                    isLast = true
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Box(Modifier.height(16.dp))
+        }
+    }
+    else Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            LargeTopAppBar(
+                title = {
+                    Text("Event not found")
+                },
+                navigationIcon = {
+                    IconButton(
+                        onClick = {
+                            context.getActivity()?.finish()
+                        }
+                    ) {
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .padding(paddingValues)
+                .padding(PaddingValues(16.dp))
+        ) {
+            Text("Event not found")
+        }
+    }
+    if (showInfo && eventData != null) {
+        ModalBottomSheet(
+            modifier = Modifier.fillMaxHeight(),
+            containerColor = MaterialTheme.colorScheme.surface,
+            scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f),
+            onDismissRequest = { showInfo = false }
+        ) {
+            Column(
+                Modifier
+                    .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                    .padding(horizontal = 16.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    "Event Information",
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 12.dp)
+                )
+
+                val timeFormat = { time: ZonedDateTime ->
+                    "${time.format(DateFormatter)} ${time.format(TimeFormatter)}"
+                }
+
+                InfoCard("Created", eventData.created.let(timeFormat))
+                InfoCard("Last Modified", eventData.modified.let(timeFormat))
+                InfoCard("Event ID", eventData.id)
+                InfoCard("Audio", eventData.audio ?: "—")
+                InfoCard("Location Data", eventData.locationPath ?: "—")
+                if (eventData is EventRange) {
+                    InfoCard("Location Points", eventLocations.size.toString())
+                }
+
+                if (eventData.metadata.isNotEmpty()) {
+                    Box(Modifier.height(12.dp))
+                    Text(
+                        "Metadata",
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                    for ((name, value) in eventData.metadata) {
+                        InfoCard(name,
+                            when {
+                                value !is Double -> value.toString()
+                                value % 1.0 == 0.0 -> value.toInt().toString()
+                                else -> value.toString()
+                            }
+                        )
+                    }
+                }
+
+                Box(Modifier.height(24.dp))
+            }
+        }
+    }
+
+    MentionModalHandler(mentionModalState.value)
+
+    // Tag Picker Dialog
+    if (eventData != null) TagPickerDialog(
+        state = tagDialogState,
+        eventIds = listOf(eventData.id),
+        onDismissRequest = {
+            tagDialogState = false
+        }
+    )
+
+    if (showShareMapDialog && eventData != null) MapShareDialog(
+        eventData = eventData,
+        onDismiss = {
+            showShareMapDialog = false
+        },
+        eventLocations = eventLocations,
+        locationData = locationData
+    )
+
+
+    // Delete Dialog
+    if (deleteDialogState && eventData != null) {
+        AlertDialog(
+            icon = {
+                Icon(Icons.Rounded.Warning, "Warning", tint = MaterialTheme.colorScheme.error)
+            },
+            onDismissRequest = {
+                deleteDialogState = false
+            },
+            title = {
+                Text("Delete event?")
+            },
+            text = {
+                Text("'${eventData.title.replace("\n", " ")}' will be moved to trash and permanently deleted after 30 days.")
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        deleteDialogState = false
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        scope.launch { AppDatabase.moveToTrash(dao, context, listOf(eventData.id)) }
+                        context.getActivity()?.run {
+                            finish()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    ),
+                ) {
+                    Text("Delete")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun RecordingIndicatorBar() {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)),
+        color = MaterialTheme.colorScheme.error.copy(alpha = 0.95f),
+        tonalElevation = 8.dp,
+        shadowElevation = 4.dp
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Animated recording pulse
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(RoundedCornerShape(percent = 50))
+                        .background(MaterialTheme.colorScheme.onError),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+                    val scale by infiniteTransition.animateFloat(
+                        initialValue = 1f,
+                        targetValue = 1.3f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(durationMillis = 600, easing = EaseInOutCubic),
+                            repeatMode = RepeatMode.Reverse
+                        ),
+                        label = "pulseScale"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp * scale)
+                            .clip(RoundedCornerShape(percent = 50))
+                            .background(
+                                MaterialTheme.colorScheme.onError.copy(alpha = 0.3f)
+                            )
+                    )
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Recording in progress",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onError,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                    )
+                    Text(
+                        "This event is currently being recorded",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onError.copy(alpha = 0.8f)
+                    )
+                }
+
+                Icon(
+                    Icons.Rounded.Info,
+                    "Recording",
+                    tint = MaterialTheme.colorScheme.onError,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            // Animated progress bar
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(3.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .background(MaterialTheme.colorScheme.onError.copy(alpha = 0.2f))
+                )
+
+                val infiniteTransition = rememberInfiniteTransition(label = "progress")
+                val progress by infiniteTransition.animateFloat(
+                    initialValue = 0f,
+                    targetValue = 1f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(durationMillis = 1500, easing = LinearEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "progressFloat"
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(progress)
+                        .height(3.dp)
+                        .background(MaterialTheme.colorScheme.onError)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailCard(
+    icon: androidx.compose.ui.graphics.painter.Painter,
+    label: String,
+    value: String? = null,
+    isEmpty: Boolean = false,
+    isFirst: Boolean = false,
+    isLast: Boolean = false,
+    format: Boolean = false,
+    mentionModalState: MutableState<MentionModalState>? = null,
+    content: (@Composable () -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Icon(
+            icon,
+            label,
+            modifier = Modifier
+                .size(24.dp)
+                .padding(top = 2.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (value != null) {
+                if (!format) Text(
+                    value,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (isEmpty) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+                )
+                else FormattedText(
+                    value,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (isEmpty) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                    mentionModalState = mentionModalState
+                )
+            } else {
+                content?.invoke()
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatCard(label: String, value: String) {
+    Surface(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .widthIn(min = 100.dp),
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+        tonalElevation = 1.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                value,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun InfoCard(label: String, value: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    MaterialTheme.colorScheme.surfaceContainerLow,
+                    RoundedCornerShape(8.dp)
+                )
+                .padding(12.dp)
+        )
+    }
+}
+
 @Composable
 fun MapHistoryPreview(locations: Map<ZonedDateTime, Coordinate>, modifier: Modifier = Modifier) {
     val geoPoints = locations.keys.sorted().map {
@@ -861,16 +1992,19 @@ fun MapHistoryPreview(locations: Map<ZonedDateTime, Coordinate>, modifier: Modif
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
-            shownPoints =
-                if (geoPoints.size > 2) {
-                    val coordinates =
-                        geoPoints.dropLast(1).mapIndexed { a, b -> a to b }.filter {
-                            // it.first % (2.0.pow((15 - zoomLevelDouble.roundToInt()))) == 0.0
-                            it.first % max((locations.size / 100), 1) == 0
-                        }.map { it.second }.toMutableList()
-                    coordinates.add(geoPoints.last())
-                    coordinates.toList()
-                } else geoPoints
+//            shownPoints =
+//                if (geoPoints.size > 2) {
+//                    val coordinates =
+//                        geoPoints.dropLast(1).mapIndexed { a, b -> a to b }.filter {
+//                            // it.first % (2.0.pow((15 - zoomLevelDouble.roundToInt()))) == 0.0
+//                            it.first % max((locations.size / 100), 1) == 0
+//                        }.map { it.second }.toMutableList()
+//                    coordinates.add(geoPoints.last())
+//                    coordinates.toList()
+//                } else geoPoints
+            shownPoints = simplifyPoints(locations.values.toList()).map {
+                it.toGeoPoint()
+            }
         }
     }
 

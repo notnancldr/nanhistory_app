@@ -16,11 +16,12 @@ import id.my.nanclouder.nanhistory.BackupProgressStage
 import id.my.nanclouder.nanhistory.ImportProgressStage
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.db.AppDatabase
-import id.my.nanclouder.nanhistory.lib.LogData
-import id.my.nanclouder.nanhistory.lib.ServiceBroadcast
-import id.my.nanclouder.nanhistory.lib.history.migrateData
-import id.my.nanclouder.nanhistory.lib.readableSize
+import id.my.nanclouder.nanhistory.utils.LogData
+import id.my.nanclouder.nanhistory.utils.ServiceBroadcast
+import id.my.nanclouder.nanhistory.utils.history.migrateData
+import id.my.nanclouder.nanhistory.utils.readableSize
 import id.my.nanclouder.nanhistory.ENCRYPTION_KEY
+import id.my.nanclouder.nanhistory.utils.LegacyImport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -53,6 +54,7 @@ class DataProcessService : Service() {
 
         const val OPERATION_TYPE_EXTRA = "operationType"
         const val FILE_URI_EXTRA = "fileUri"
+        const val LEGACY_IMPORT_EXTRA = "legacyImport"
 
         private const val CURRENT_MIGRATION_CODE = 1
 
@@ -81,6 +83,7 @@ class DataProcessService : Service() {
         val errorMessage = MutableStateFlow<String?>(null)
         val isRunning = MutableStateFlow(false)
         val operationType = MutableStateFlow(-1)
+        val isLegacyImport = MutableStateFlow(false)
     }
 
     object BackupState {
@@ -139,7 +142,10 @@ class DataProcessService : Service() {
         val notification = getNotification()
 
         val fileUri = intent?.getStringExtra(FILE_URI_EXTRA)?.toUri()
+        val isLegacyImport = intent?.getBooleanExtra(LEGACY_IMPORT_EXTRA, false) ?: false
         operationType = intent?.getIntExtra(OPERATION_TYPE_EXTRA, -1) ?: -1
+
+        ServiceState.isLegacyImport.value = isLegacyImport
 
         if (operationType == OPERATION_MIGRATE) {
             ServiceState.operationType.value = operationType
@@ -165,7 +171,8 @@ class DataProcessService : Service() {
             }
             else if (operationType == OPERATION_IMPORT) {
                 updateProgress(importStage = ImportProgressStage.Init)
-                processImport(fileUri)
+                if (!isLegacyImport) processImport(fileUri)
+                else processLegacyImport(fileUri)
             }
             startForeground(2, notification)
             ServiceState.isRunning.value = true
@@ -215,7 +222,10 @@ class DataProcessService : Service() {
                 val percentage = (50 * ServiceState.progress.value / ServiceState.progressMax.value + adder).toInt()
                 // Log.d("NanHistoryDebug", "Percentage: $percentage%, $adder")
                 setContentTitle(
-                    if (operationType == OPERATION_BACKUP) {
+                    if (ServiceState.isLegacyImport.value) {
+                        "Importing Legacy Data"
+                    }
+                    else if (operationType == OPERATION_BACKUP) {
                         if (BackupState.stage.value != BackupProgressStage.Error) "Backup Data ($percentage%)"
                         else "Backup Failed"
                     }
@@ -270,7 +280,10 @@ class DataProcessService : Service() {
                     setOngoing(true)
 
                     // Only show progress bar if backup or import is in progress
-                    if (
+                    if (ServiceState.isLegacyImport.value) {
+                        setProgress(100, ServiceState.progress.value.toInt(), false)
+                    }
+                    else if (
                         BackupState.stage.value == BackupProgressStage.Init ||
                         ImportState.stage.value == ImportProgressStage.Init ||
                         ImportState.stage.value == ImportProgressStage.Migrate
@@ -317,6 +330,46 @@ class DataProcessService : Service() {
         if (importStage != null) ImportState.stage.value = importStage
 
         updateNotification()
+    }
+
+    private fun processLegacyImport(uri: Uri) {
+        serviceScope.launch {
+            ServiceState.progressMax.value = 100
+            ServiceState.progress.value = 0
+            ServiceState.isRunning.value = true
+            ImportState.stage.value = ImportProgressStage.Extract
+
+            val progressSyncJob = serviceScope.launch {
+                LegacyImport.State.progress.collect {
+                    if (!ServiceState.isRunning.value) return@collect
+                    ServiceState.progress.value = (it * 100).toLong()
+                    updateNotification()
+                }
+            }
+
+            LegacyImport.import(
+                context = applicationContext,
+                uri = uri,
+                onError = {
+                    progressSyncJob.cancel()
+                    ServiceState.progressMax.value = 1
+                    ServiceState.progress.value = 0
+                    ImportState.stage.value = ImportProgressStage.Error
+                    ServiceState.isRunning.value = false
+                }
+            )
+
+            ServiceState.progressMax.value = 1
+            ServiceState.progress.value = 0
+            ServiceState.isLegacyImport.value = false
+
+            if (ImportState.stage.value != ImportProgressStage.Error)
+                ImportState.stage.value = ImportProgressStage.Done
+
+            ServiceState.isRunning.value = false
+
+            stopSelf()
+        }
     }
 
     private fun processBackup(fileUri: Uri) {

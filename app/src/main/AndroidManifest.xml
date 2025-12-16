@@ -16,6 +16,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.BODY_SENSORS" />
+    <uses-permission android:name="android.permission.BODY_SENSORS_BACKGROUND" />
 
     <queries>
         <intent>
@@ -55,6 +57,11 @@
             android:label="@string/title_activity_settings"
             android:theme="@style/Theme.NanHistory" />
         <activity
+            android:name=".settings.AppearanceSettingsActivity"
+            android:exported="false"
+            android:label="@string/title_activity_settings_appearance"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
             android:name=".settings.RecordSettingsActivity"
             android:exported="false"
             android:label="@string/title_activity_settings_record"
@@ -78,6 +85,11 @@
             android:name=".settings.DeveloperOptionsActivity"
             android:exported="false"
             android:label="@string/title_activity_settings_developer"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
+            android:name=".settings.AboutActivity"
+            android:exported="false"
+            android:label="@string/title_activity_about"
             android:theme="@style/Theme.NanHistory" />
         <activity
             android:name=".debug.DebugActivity"
@@ -129,7 +141,7 @@
             android:name=".service.DataProcessService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+        android:foregroundServiceType="dataSync" />
         <service
             android:name=".service.RecordTileService"
             android:label="Record Event"

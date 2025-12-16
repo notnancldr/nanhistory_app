@@ -8,7 +8,8 @@ import android.service.quicksettings.TileService
 import android.util.Log
 import androidx.core.content.edit
 import id.my.nanclouder.nanhistory.R
-import id.my.nanclouder.nanhistory.lib.RecordStatus
+import id.my.nanclouder.nanhistory.config.Config
+import id.my.nanclouder.nanhistory.utils.RecordStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -39,7 +40,7 @@ class RecordTileService : TileService() {
                 Log.d("RecordTileService", "status: $status")
                 qsTile?.apply {
                     state = when (status) {
-                        RecordStatus.RUNNING -> Tile.STATE_ACTIVE
+                        RecordStatus.RUNNING, RecordStatus.IDLE -> Tile.STATE_ACTIVE
                         RecordStatus.READY -> Tile.STATE_INACTIVE
                         else -> Tile.STATE_UNAVAILABLE
                     }
@@ -73,13 +74,21 @@ class RecordTileService : TileService() {
         val tile = qsTile ?: return
 
         if (tile.state == Tile.STATE_INACTIVE) {
+            val shakeDetectionEnabled = Config.recordShakeEnabled.get(this)
+            val shakeToStart = Config.recordShakeToStart.get(this) && shakeDetectionEnabled
+
             val intent = Intent(this, RecordService::class.java)
             intent.putExtra("includeAudio", false)
-            intent.setAction(RecordService.ACTION_RECORD_START)
+
+            // Start as idle when shake to start is enabled
+            intent.action =
+                if (shakeToStart) RecordService.ACTION_SERVICE_IDLE
+                else RecordService.ACTION_RECORD_START
+
             startForegroundService(intent)
         } else {
             val intent = Intent(this, RecordService::class.java)
-            intent.setAction(RecordService.ACTION_RECORD_STOP)
+            intent.action = RecordService.ACTION_SERVICE_STOP
             startService(intent)
         }
     }

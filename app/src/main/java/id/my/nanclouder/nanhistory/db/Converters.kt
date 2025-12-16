@@ -5,9 +5,9 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.room.TypeConverter
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import id.my.nanclouder.nanhistory.lib.Coordinate
-import id.my.nanclouder.nanhistory.lib.history.EventTypes
-import id.my.nanclouder.nanhistory.lib.history.TransportationType
+import id.my.nanclouder.nanhistory.utils.Coordinate
+import id.my.nanclouder.nanhistory.utils.history.EventTypes
+import id.my.nanclouder.nanhistory.utils.history.TransportationType
 import java.time.LocalDate
 import java.time.ZonedDateTime
 

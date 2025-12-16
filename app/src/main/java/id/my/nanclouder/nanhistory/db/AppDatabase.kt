@@ -7,8 +7,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import id.my.nanclouder.nanhistory.config.Config
-import id.my.nanclouder.nanhistory.lib.history.HistoryDay
-import id.my.nanclouder.nanhistory.lib.history.HistoryEvent
+import id.my.nanclouder.nanhistory.utils.history.HistoryDay
+import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
 import id.my.nanclouder.nanhistory.ui.main.EventSelectMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -25,7 +25,10 @@ import java.time.LocalDate
         EventTagCrossRef::class,
         DayTagCrossRef::class
     ],
-    version = 1
+    views = [
+        EventsTimeWithTag::class
+    ],
+    version = 2
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -38,11 +41,15 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
+                val migrations = Migrations(context)
+
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     DATABASE_NAME
-                ).build()
+                )
+                    .addMigrations(migrations.migrations1to2)
+                    .build()
                 INSTANCE = instance
                 instance
             }
@@ -91,9 +98,19 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun search(dao: AppDao, query: String): Flow<List<HistoryEvent>> {
             return dao.searchEvents(query).map { events ->
-                events.map {
-                    it.toHistoryEvent()
-                }
+                events.map { it.toHistoryEvent() }
+            }
+        }
+
+        fun searchMatchWholeWord(dao: AppDao, query: String): Flow<List<HistoryEvent>> {
+            return dao.searchEventsMatchWholeWord(query).map { events ->
+                events.map { it.toHistoryEvent() }
+            }
+        }
+
+        fun searchWithTagIds(dao: AppDao, query: String, tags: List<String>): Flow<List<HistoryEvent>> {
+            return dao.searchEventsWithTagIds(query, tags).map { events ->
+                events.map { it.toHistoryEvent() }
             }
         }
 
