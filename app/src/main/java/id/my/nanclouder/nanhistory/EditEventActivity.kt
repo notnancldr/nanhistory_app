@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -42,13 +41,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextFieldColors
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
@@ -90,8 +87,10 @@ import id.my.nanclouder.nanhistory.utils.withHaptic
 import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
 import id.my.nanclouder.nanhistory.ui.style.DangerButtonColors
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
-import id.my.nanclouder.nanhistory.utils.FormattedOutlinedTextField
+import id.my.nanclouder.nanhistory.utils.AccelerometerChange
+import id.my.nanclouder.nanhistory.utils.transportModel.toTransportMode
 import kotlinx.coroutines.launch
+import java.io.File
 import java.time.Instant
 import java.time.ZonedDateTime
 import java.util.Calendar
@@ -574,7 +573,40 @@ fun EditEventView_New(eventId: String?) {
     }
 
     val saveEvent = {
+        if (oldEvent != null) {
+            val newEventRange = newEvent as? EventRange
+            (oldEvent.metadata["accel_data"] as? String)?.let { paths ->
+                paths.split(",").forEach a@{ path ->
+                    File(path).let { file ->
+                        if (!file.exists()) {
+                            Log.w("NanHistoryDebug", "File doesn't exist: $path")
+                            return@a
+                        }
+
+                        val fileData = file.readText().let { data ->
+                            val lines = data.split("\n")
+                            lines.dropLastWhile {
+                                try {
+                                    AccelerometerChange.fromString(it)
+                                    false
+                                }
+                                catch (_: Throwable) {
+                                    true
+                                }
+                            } + (newEventRange?.transportationType?.toTransportMode()?.name ?: "")
+                        }.joinToString("\n")
+
+                        file.writeText(
+                            fileData
+                        )
+                    }
+                }
+            }
+        }
+
         if (newEvent != null) {
+            newEvent!!.metadata.remove("transport_detection_unconfirmed")
+
             scope.launch {
                 AppDatabase.ensureDayExists(dao, newEvent!!.time.toLocalDate())
                 dao.insertEvent(newEvent!!.toEventEntity())

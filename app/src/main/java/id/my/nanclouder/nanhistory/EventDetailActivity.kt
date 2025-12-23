@@ -138,6 +138,7 @@ import kotlin.math.round
 import kotlin.math.roundToInt
 import id.my.nanclouder.nanhistory.utils.FormattedText
 import id.my.nanclouder.nanhistory.utils.MapShareDialog
+import id.my.nanclouder.nanhistory.utils.history.LocationData
 import id.my.nanclouder.nanhistory.utils.history.TransportationType
 import id.my.nanclouder.nanhistory.utils.transportModel.detectTransportMode
 import id.my.nanclouder.nanhistory.utils.simplifyPoints
@@ -232,7 +233,7 @@ fun DetailContent_Old(eventId: String, path: String) {
     val favorite = eventData?.favorite ?: false
 
     var eventLocations by remember {
-        mutableStateOf<Map<ZonedDateTime, Coordinate>>(mapOf())
+        mutableStateOf<List<LocationData>>(emptyList())
     }
     val locationAvailable = eventData?.locationPath != null
 
@@ -241,7 +242,7 @@ fun DetailContent_Old(eventId: String, path: String) {
     }
 
     LaunchedEffect(eventData) {
-        eventLocations = eventData?.getLocations(context) ?: mapOf()
+        eventLocations = eventData?.getLocations(context) ?: emptyList()
         locationData = eventLocations.getLocationData()
     }
 
@@ -920,7 +921,7 @@ fun DetailContent_New(eventId: String, path: String) {
     val favorite = eventData?.favorite ?: false
 
     var eventLocations by remember {
-        mutableStateOf<Map<ZonedDateTime, Coordinate>>(mapOf())
+        mutableStateOf<List<LocationData>>(emptyList())
     }
     val locationAvailable = eventData?.locationPath != null
 
@@ -931,7 +932,7 @@ fun DetailContent_New(eventId: String, path: String) {
     val mentionModalState = remember { mutableStateOf(MentionModalState()) }
 
     LaunchedEffect(eventData) {
-        eventLocations = eventData?.getLocations(context) ?: mapOf()
+        eventLocations = eventData?.getLocations(context) ?: emptyList()
         locationData = eventLocations.getLocationData()
     }
 
@@ -1662,6 +1663,7 @@ fun DetailContent_New(eventId: String, path: String) {
                 if (eventData is EventRange) {
                     InfoCard("Location Points", eventLocations.size.toString())
                 }
+                InfoCard("Event Version", eventData.versionNumber.toString())
 
                 if (eventData.metadata.isNotEmpty()) {
                     Box(Modifier.height(12.dp))
@@ -1697,12 +1699,13 @@ fun DetailContent_New(eventId: String, path: String) {
         }
     )
 
+    // TODO: Update MapShareDialog to adapt new LocationData
     if (showShareMapDialog && eventData != null) MapShareDialog(
         eventData = eventData,
         onDismiss = {
             showShareMapDialog = false
         },
-        eventLocations = eventLocations,
+        eventLocations = eventLocations.associate { it.time to it.location },
         locationData = locationData
     )
 
@@ -1967,9 +1970,9 @@ private fun InfoCard(label: String, value: String) {
 }
 
 @Composable
-fun MapHistoryPreview(locations: Map<ZonedDateTime, Coordinate>, modifier: Modifier = Modifier) {
-    val geoPoints = locations.keys.sorted().map {
-        GeoPoint(locations[it]!!.latitude, locations[it]!!.longitude)
+fun MapHistoryPreview(locations: List<LocationData>, modifier: Modifier = Modifier) {
+    val geoPoints = locations.sortedBy { it.time }.map {
+        GeoPoint(it.location.latitude, it.location.longitude)
     }
 
     val context = LocalContext.current
@@ -2002,7 +2005,7 @@ fun MapHistoryPreview(locations: Map<ZonedDateTime, Coordinate>, modifier: Modif
 //                    coordinates.add(geoPoints.last())
 //                    coordinates.toList()
 //                } else geoPoints
-            shownPoints = simplifyPoints(locations.values.toList()).map {
+            shownPoints = simplifyPoints(locations.map { it.location }).map {
                 it.toGeoPoint()
             }
         }

@@ -141,7 +141,7 @@
             android:name=".service.DataProcessService"
             android:enabled="true"
             android:exported="false"
-        android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="dataSync" />
         <service
             android:name=".service.RecordTileService"
             android:label="Record Event"

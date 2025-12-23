@@ -11,7 +11,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -83,11 +82,12 @@ import id.my.nanclouder.nanhistory.utils.history.generateEventId
 import id.my.nanclouder.nanhistory.utils.history.generateSignature
 import id.my.nanclouder.nanhistory.utils.history.getFilePathFromDate
 import id.my.nanclouder.nanhistory.utils.history.validateSignature
-import id.my.nanclouder.nanhistory.utils.history.writeToLocationFile
 import id.my.nanclouder.nanhistory.utils.matchOrNull
 import id.my.nanclouder.nanhistory.utils.toGeoPoint
 import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
+import id.my.nanclouder.nanhistory.utils.history.LocationData
+import id.my.nanclouder.nanhistory.utils.history.appendToLocationFile
 import kotlinx.coroutines.launch
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
@@ -178,7 +178,7 @@ fun EventLocationView_Old(eventId: String, startAsCutMode: Boolean = false) {
 
     val recording = matchOrNull<Boolean>(eventData?.metadata?.get("recording")) ?: false
 
-    val eventLocations = eventData?.getLocations(context) ?: mapOf()
+    val eventLocations = eventData?.getLocations(context) ?: emptyList()
     val locationAvailable = eventLocations.isNotEmpty()
 
     var cutMode by rememberSaveable { mutableStateOf(startAsCutMode) }
@@ -225,6 +225,7 @@ fun EventLocationView_Old(eventId: String, startAsCutMode: Boolean = false) {
                                     it.key >= cutStart!! && it.key <= cutEnd!!
                                 }.toMutableMap(),
                                 metadata = eventData.metadata,
+                                versionNumber = eventData.versionNumber
                             ).apply {
                                 metadata["original_event_id"] = eventData.id
                                 metadata["original_event_time"] = eventData.time.toOffsetDateTime().toString()
@@ -238,9 +239,10 @@ fun EventLocationView_Old(eventId: String, startAsCutMode: Boolean = false) {
                             }
                             val locationFile = createLocationFile(context, event.time)
                             val locationsData = eventLocations.filter {
-                                it.key >= cutStart!! && it.key <= cutEnd!!
+                                it.time >= cutStart!! && it.time <= cutEnd!!
                             }
-                            locationsData.writeToLocationFile(locationFile)
+                            locationFile.delete()
+                            locationsData.appendToLocationFile(locationFile)
                             event.locationPath = locationFile.absolutePath.removePrefix(File(context.filesDir, "locations").absolutePath + "/")
 
                             if (eventData.audio != null) {
@@ -255,7 +257,7 @@ fun EventLocationView_Old(eventId: String, startAsCutMode: Boolean = false) {
                                     event.audio = targetPath
                                 }
                             }
-                            if (eventData.validateSignature(context = context)) event.generateSignature(true, context)
+                            if (eventData.validateSignature(context = context)) event.generateSignature(context, true)
 
                             val db = AppDatabase.getInstance(context)
                             val dao = db.appDao()
@@ -302,7 +304,7 @@ fun EventLocationView_Old(eventId: String, startAsCutMode: Boolean = false) {
         ) {
             if (locationAvailable) {
                 MapHistoryView_Old(
-                    locations = eventLocations,
+                    locations = eventLocations.associate { it.time to it.location },
                     onPointsSelected = { time1, time2 ->
                         if (time1 != null && time2 != null) {
                             cutStart = if (time1 < time2) time1 else time2
@@ -480,7 +482,7 @@ fun MapHistoryView_Old(
                 .getLocationData()
                 .forEach {
                     val coloredPolyline = Polyline(mapViewObj).apply {
-                        setPoints(it.points.map { it.toGeoPoint() } )
+                        setPoints(it.points.map { point -> point.toGeoPoint() } )
                         outlinePaint.color = calculateColor(it.speed.roundToInt()).toArgb()
                         outlinePaint.strokeWidth = 3f * screenDpi
                         outlinePaint.strokeCap = Paint.Cap.ROUND
@@ -867,12 +869,12 @@ fun EventLocationView_New(eventId: String, startAsCutMode: Boolean = false) {
 
     val recording = matchOrNull<Boolean>(eventData?.metadata?.get("recording")) ?: false
 
-    val eventLocations = eventData?.getLocations(context) ?: mapOf()
+    val eventLocations = eventData?.getLocations(context) ?: emptyList()
     val locationAvailable = eventLocations.isNotEmpty()
 
     var cutMode by rememberSaveable { mutableStateOf(startAsCutMode) }
-    var cutStart by rememberSaveable { mutableStateOf<ZonedDateTime?>(null) }
-    var cutEnd by rememberSaveable { mutableStateOf<ZonedDateTime?>(null) }
+    var cutStart by rememberSaveable { mutableStateOf<Int?>(null) }
+    var cutEnd by rememberSaveable { mutableStateOf<Int?>(null) }
 
     Log.d("NanHistoryDebug", "eventData: $eventData")
 
@@ -909,13 +911,18 @@ fun EventLocationView_New(eventId: String, startAsCutMode: Boolean = false) {
                                 description = eventData.description +
                                         if (eventData.description.isBlank()) "" else "\n" +
                                                 "Cut of ${eventData.title}",
-                                time = cutStart!!,
+                                time = eventLocations[cutStart!!].time,
                                 favorite = eventData.favorite,
                                 tags = eventData.tags,
-                                end = cutEnd!!,
-                                locationDescriptions = eventData.locationDescriptions.filter {
-                                    it.key >= cutStart!! && it.key <= cutEnd!!
-                                }.toMutableMap(),
+                                end = eventLocations[cutEnd!!].time,
+                                locationDescriptions = eventData.locationDescriptions.keys
+                                    .mapIndexed { a, b -> a to b }
+                                    .associate { (idx, key) -> idx to (key to eventData.locationDescriptions[key]!!) }
+                                    .filter {
+                                        it.key >= cutStart!! && it.key <= cutEnd!!
+                                    }
+                                    .map { it.value }.toMap()
+                                    .toMutableMap(),
                                 metadata = eventData.metadata,
                             ).apply {
                                 metadata["original_event_id"] = eventData.id
@@ -929,10 +936,11 @@ fun EventLocationView_New(eventId: String, startAsCutMode: Boolean = false) {
                                     metadata["root_event_end"] = eventData.end.toOffsetDateTime().toString()
                             }
                             val locationFile = createLocationFile(context, event.time)
-                            val locationsData = eventLocations.filter {
-                                it.key >= cutStart!! && it.key <= cutEnd!!
-                            }
-                            locationsData.writeToLocationFile(locationFile)
+                            val locationsData = eventLocations.withIndex().filter {
+                                it.index >= cutStart!! && it.index <= cutEnd!!
+                            }.map { it.value }
+                            locationFile.delete()
+                            locationsData.appendToLocationFile(locationFile)
                             event.locationPath = locationFile.absolutePath.removePrefix(File(context.filesDir, "locations").absolutePath + "/")
 
                             if (eventData.audio != null) {
@@ -947,7 +955,7 @@ fun EventLocationView_New(eventId: String, startAsCutMode: Boolean = false) {
                                     event.audio = targetPath
                                 }
                             }
-                            if (eventData.validateSignature(context = context)) event.generateSignature(true, context)
+                            if (eventData.validateSignature(context = context)) event.generateSignature(context, true)
 
                             val db = AppDatabase.getInstance(context)
                             val dao = db.appDao()
@@ -1024,22 +1032,21 @@ fun EventLocationView_New(eventId: String, startAsCutMode: Boolean = false) {
 
 @Composable
 fun MapHistoryView_New(
-    locations: Map<ZonedDateTime, Coordinate>,
-    onPointsSelected: (ZonedDateTime?, ZonedDateTime?) -> Unit,
+    locations: List<LocationData>,
+    onPointsSelected: (Int?, Int?) -> Unit,
     modifier: Modifier = Modifier,
     cutMode: Boolean = false,
 ) {
     val context = LocalContext.current
 
-    val mapKeys = locations.keys.sorted()
-    val geoPoints = mapKeys.sorted().map {
-        GeoPoint(locations[it]!!.latitude, locations[it]!!.longitude)
+    val geoPoints = locations.map {
+        GeoPoint(it.location.latitude, it.location.longitude)
     }
 
     val bottomBarScrollState = rememberScrollState()
 
-    var cutTime1 by rememberSaveable { mutableStateOf<ZonedDateTime?>(null) }
-    var cutTime2 by rememberSaveable { mutableStateOf<ZonedDateTime?>(null) }
+    var cutIndex1 by rememberSaveable { mutableStateOf<Int?>(null) }
+    var cutIndex2 by rememberSaveable { mutableStateOf<Int?>(null) }
     var cutModeCheck by remember { mutableStateOf(cutMode) }
 
     var selectedCutPoint by rememberSaveable { mutableStateOf<ZonedDateTime?>(null) }
@@ -1063,8 +1070,8 @@ fun MapHistoryView_New(
 
     var selectedSpeed by remember { mutableIntStateOf(0) }
     var selectedTime by remember { mutableStateOf("") }
-    var selectedFirstKey by remember { mutableStateOf(ZonedDateTime.now()) }
-    var selectedSecondKey by remember { mutableStateOf(ZonedDateTime.now()) }
+    var selectedFirstKey by remember { mutableIntStateOf(0) }
+    var selectedSecondKey by remember { mutableIntStateOf(0) }
 
     var updateRemaining by remember { mutableIntStateOf(0) }
 
@@ -1074,21 +1081,21 @@ fun MapHistoryView_New(
         if (geoPoints.size > 2) {
             val coordinates = geoPoints.dropLast(1).mapIndexed { a, b -> a to b }.filter {
                 it.first % (2.0.pow((15 - zoomLevel.roundToInt()))) == 0.0
-            }.map { it.second }.toMutableList()
-            coordinates.add(geoPoints.last())
-            coordinates.toList()
+            }.toMap().toMutableMap()
+            coordinates[locations.size - 1] = geoPoints.last()
+            coordinates
         }
-        else geoPoints
+        else geoPoints.withIndex().associate { it.index to it.value }
 
-    val shownKeys =
+    val shownLocations =
         if (geoPoints.size > 2) {
-            val coordinates = mapKeys.dropLast(1).mapIndexed { a, b -> a to b }.filter {
+            val coordinates = locations.dropLast(1).mapIndexed { a, b -> a to b }.filter {
                 it.first % (2.0.pow((15 - zoomLevel.roundToInt()))) == 0.0
-            }.map { it.second }.toMutableList()
-            coordinates.add(mapKeys.last())
-            coordinates.toList()
+            }.toMap().toMutableMap()
+            coordinates[locations.size - 1] = locations.last()
+            coordinates
         }
-        else mapKeys
+        else locations.withIndex().associate { it.index to it.value }
 
     var inMaxDetail by remember { mutableStateOf(false) }
     val maxDetail = shownCoordinates.size == geoPoints.size
@@ -1098,24 +1105,24 @@ fun MapHistoryView_New(
     var updateMap = { }
 
     val updateCutSelection = {
-        onPointsSelected(cutTime1, cutTime2)
-        if (cutTime1 == null || cutTime2 == null) updateMap()
+        onPointsSelected(cutIndex1, cutIndex2)
+        if (cutIndex1 == null || cutIndex2 == null) updateMap()
         else needUpdate = true
     }
 
-    val setCutPoint = cutPointSetter@{ time: ZonedDateTime ->
-        if (time == cutTime1 || time == cutTime2) return@cutPointSetter
+    val setCutPoint = cutPointSetter@{ index: Int ->
+        if (index == cutIndex1 || index == cutIndex2) return@cutPointSetter
 
-        if (cutTime1 == null) cutTime1 = time
-        else if (cutTime2 == null) cutTime2 = time
+        if (cutIndex1 == null) cutIndex1 = index
+        else if (cutIndex2 == null) cutIndex2 = index
         else return@cutPointSetter
 
         updateCutSelection()
     }
 
     val undoCutSelection = undo@{
-        if (cutTime2 != null) cutTime2 = null
-        else if (cutTime1 != null) cutTime1 = null
+        if (cutIndex2 != null) cutIndex2 = null
+        else if (cutIndex1 != null) cutIndex1 = null
         else return@undo
 
         updateCutSelection()
@@ -1123,8 +1130,8 @@ fun MapHistoryView_New(
 
     if (cutMode != cutModeCheck) {
         cutModeCheck = cutMode
-        cutTime1 = null
-        cutTime2 = null
+        cutIndex1 = null
+        cutIndex2 = null
         needUpdate = true
     }
 
@@ -1134,13 +1141,13 @@ fun MapHistoryView_New(
         mapViewObj?.overlays?.clear()
 
         val polyline = Polyline(mapViewObj).apply {
-            setPoints(shownCoordinates)
+            setPoints(shownCoordinates.values.toList())
             outlinePaint.color = if (!cutMode) android.graphics.Color.BLUE else android.graphics.Color.GRAY
             outlinePaint.strokeWidth = 3f * screenDpi
             outlinePaint.strokeCap = Paint.Cap.ROUND
         }
         val polylineBorder = Polyline(mapViewObj).apply {
-            setPoints(shownCoordinates)
+            setPoints(shownCoordinates.values.toList())
             outlinePaint.color = android.graphics.Color.rgb(0, 0, 20)
             outlinePaint.strokeWidth = 4f * screenDpi
             outlinePaint.strokeCap = Paint.Cap.ROUND
@@ -1149,7 +1156,7 @@ fun MapHistoryView_New(
             position = geoPoints.first()
             icon = context.getDrawable(R.drawable.ic_location_start)
             setOnMarkerClickListener { _, _ ->
-                if (cutMode) setCutPoint(locations.keys.first())
+                if (cutMode) setCutPoint(0)
                 true
             }
         }
@@ -1157,7 +1164,7 @@ fun MapHistoryView_New(
             position = geoPoints.last()
             icon = context.getDrawable(R.drawable.ic_location_end)
             setOnMarkerClickListener { _, _ ->
-                setCutPoint(locations.keys.last())
+                setCutPoint(locations.size - 1)
                 true
             }
         }
@@ -1167,16 +1174,23 @@ fun MapHistoryView_New(
             mapViewObj?.overlays?.add(polyline)
         }
         else {
-            shownKeys
-                .associateWith { locations[it]!! }
+            shownLocations.map { it.value }
                 .getLocationData()
                 .forEach {
+                    val indices = shownLocations.filter { location ->
+                        location.value.time == it.start || location.value.time == it.end
+                    }.map { location -> location.key }
+
                     val coloredPolyline = Polyline(mapViewObj).apply {
                         setPoints(it.points.map { point -> point.toGeoPoint() } )
                         outlinePaint.color = when (dataMode) {
                             "speed" -> calculateColor(it.speed.roundToInt()).toArgb()
                             "acceleration" -> calculateAccelerationColor(it.acceleration.roundToInt()).toArgb()
-                            "time" -> calculateTimeColor(it.start, it.end, locations.keys.first(), locations.keys.last()).toArgb()
+                            "time" -> calculateTimeColor(
+                                it.start,
+                                it.end,
+                                locations.first().time,
+                                locations.last().time).toArgb()
                             else -> calculateColor(it.speed.roundToInt()).toArgb()
                         }
                         outlinePaint.strokeWidth = 3f * screenDpi
@@ -1185,8 +1199,8 @@ fun MapHistoryView_New(
                         setOnClickListener { _, _, _ ->
                             selectedTime = "${TimeFormatterWithSecond.format(it.start)} - ${TimeFormatterWithSecond.format(it.end)}"
                             selectedSpeed = it.speed.roundToInt()
-                            selectedFirstKey = it.start
-                            selectedSecondKey = it.end
+                            selectedFirstKey = indices.first()
+                            selectedSecondKey = indices.last()
                             isSelected = true
                             updateRemaining = 1000000
                             updateMap()
@@ -1202,9 +1216,9 @@ fun MapHistoryView_New(
                 val secondKey = selectedSecondKey
 
                 val polylinePoints = listOf(
-                    locations[firstKey]!!,
-                    locations[secondKey]!!
-                ).map { GeoPoint(it.latitude, it.longitude) }
+                    locations[firstKey],
+                    locations[secondKey]
+                ).map { GeoPoint(it.location.latitude, it.location.longitude) }
 
                 mapViewObj?.overlays?.add(
                     Polyline(mapViewObj).apply {
@@ -1221,7 +1235,12 @@ fun MapHistoryView_New(
                         outlinePaint.color = when (dataMode) {
                             "speed" -> calculateColor(selectedSpeed).toArgb()
                             "acceleration" -> calculateAccelerationColor(selectedSpeed).toArgb()
-                            "time" -> calculateTimeColor(selectedFirstKey, selectedSecondKey, locations.keys.first(), locations.keys.last()).toArgb()
+                            "time" -> calculateTimeColor(
+                                locations[selectedFirstKey].time,
+                                locations[selectedSecondKey].time,
+                                locations.first().time,
+                                locations.last().time
+                            ).toArgb()
                             else -> calculateColor(selectedSpeed).toArgb()
                         }
                         outlinePaint.strokeWidth = 3.5f * screenDpi
@@ -1232,22 +1251,22 @@ fun MapHistoryView_New(
             }
         }
 
-        val currentCutTime1 = cutTime1
-        val currentCutTime2 = cutTime2
-        if (cutMode && currentCutTime1 != null && currentCutTime2 != null) {
-            val startTime =
-                if (currentCutTime1 < currentCutTime2) currentCutTime1 else currentCutTime2
-            val endTime =
-                if (currentCutTime1 > currentCutTime2) currentCutTime1 else currentCutTime2
-            val selectedArea = mutableListOf<ZonedDateTime>()
-            shownKeys
-                .forEach selectionIterator@{
-                    if (it !in startTime..endTime)
+        val currentCutIndex1 = cutIndex1
+        val currentCutIndex2 = cutIndex2
+        if (cutMode && currentCutIndex1 != null && currentCutIndex2 != null) {
+            val startIndex =
+                if (currentCutIndex1 < currentCutIndex2) currentCutIndex1 else currentCutIndex2
+            val endIndex =
+                if (currentCutIndex1 > currentCutIndex2) currentCutIndex1 else currentCutIndex2
+            val selectedArea = mutableListOf<Int>()
+            shownLocations
+                .forEach selectionIterator@{ (index, _) ->
+                    if (index !in startIndex..endIndex)
                         return@selectionIterator
-                    selectedArea.add(it)
+                    selectedArea.add(index)
                 }
             val selectedPolyline = Polyline(mapViewObj).apply {
-                setPoints(selectedArea.map { locations[it]!!.toGeoPoint() })
+                setPoints(selectedArea.map { locations[it].location.toGeoPoint() })
                 outlinePaint.color = android.graphics.Color.BLUE
                 outlinePaint.strokeWidth = 3f * screenDpi
                 outlinePaint.strokeCap = Paint.Cap.ROUND
@@ -1256,8 +1275,8 @@ fun MapHistoryView_New(
         }
 
         if (showPoints || cutMode) {
-            if (cutTime1 == null || cutTime2 == null)
-                for ((shownKey, shownCoordinate) in shownCoordinates.mapIndexed { idx, it -> shownKeys[idx] to it }) {
+            if (cutIndex1 == null || cutIndex2 == null)
+                for ((shownKey, shownCoordinate) in shownCoordinates) {
                     mapViewObj?.overlays?.add(Marker(mapViewObj).apply {
                         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                         position = shownCoordinate
@@ -1269,14 +1288,14 @@ fun MapHistoryView_New(
                         }
                     })
                 }
-            if (cutTime1 != null) mapViewObj?.overlays?.add(Marker(mapViewObj).apply {
+            if (cutIndex1 != null) mapViewObj?.overlays?.add(Marker(mapViewObj).apply {
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                position = locations[cutTime1]!!.toGeoPoint()
+                position = locations[cutIndex1!!].location.toGeoPoint()
                 icon = context.getDrawable(R.drawable.ic_map_stop_point)
             })
-            if (cutTime2 != null) mapViewObj?.overlays?.add(Marker(mapViewObj).apply {
+            if (cutIndex2 != null) mapViewObj?.overlays?.add(Marker(mapViewObj).apply {
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                position = locations[cutTime2]!!.toGeoPoint()
+                position = locations[cutIndex2!!].location.toGeoPoint()
                 icon = context.getDrawable(R.drawable.ic_map_stop_point)
             })
         }
@@ -1320,7 +1339,7 @@ fun MapHistoryView_New(
                         setTileSource(TileSourceFactory.DEFAULT_TILE_SOURCE)
 
                         post {
-                            zoomToBoundingBox(shownCoordinates.toBoundingBox(), false)
+                            zoomToBoundingBox(shownCoordinates.map { it.value }.toBoundingBox(), false)
                         }
                         firstLoad = false
                     }
@@ -1632,8 +1651,8 @@ fun MapHistoryView_New(
                                 modifier = Modifier
                                     .height(40.dp)
                                     .clip(RoundedCornerShape(10.dp)),
-                                color = if (cutTime1 != null || cutTime2 != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surfaceContainerHigh,
-                                tonalElevation = if (cutTime1 != null || cutTime2 != null) 2.dp else 0.dp
+                                color = if (cutIndex1 != null || cutIndex2 != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                tonalElevation = if (cutIndex1 != null || cutIndex2 != null) 2.dp else 0.dp
                             ) {
                                 Button(
                                     onClick = undoCutSelection,
@@ -1643,13 +1662,13 @@ fun MapHistoryView_New(
                                     contentPadding = PaddingValues(horizontal = 14.dp),
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = Color.Transparent,
-                                        contentColor = if (cutTime1 != null || cutTime2 != null) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onSurface
+                                        contentColor = if (cutIndex1 != null || cutIndex2 != null) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onSurface
                                     ),
                                     elevation = ButtonDefaults.buttonElevation(
                                         defaultElevation = 0.dp,
                                         pressedElevation = 0.dp
                                     ),
-                                    enabled = cutTime1 != null || cutTime2 != null
+                                    enabled = cutIndex1 != null || cutIndex2 != null
                                 ) {
                                     Icon(
                                         Icons.Rounded.Close,

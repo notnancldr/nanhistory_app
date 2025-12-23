@@ -2,6 +2,7 @@ package id.my.nanclouder.nanhistory.utils
 
 import id.my.nanclouder.nanhistory.calculateDistance
 import id.my.nanclouder.nanhistory.calculateSpeed
+import id.my.nanclouder.nanhistory.utils.history.LocationData
 import org.osmdroid.util.GeoPoint
 import java.time.ZonedDateTime
 
@@ -9,44 +10,52 @@ data class HistoryLocationData(
     val speed: Float,
     val acceleration: Float,
     val points: List<Coordinate>,
+    val locationData: List<LocationData>,
     val start: ZonedDateTime,
     val end: ZonedDateTime,
     val distance: Float,
 )
 
-fun Map<ZonedDateTime, Coordinate>.getLocationData(): List<HistoryLocationData> {
-    val keys = this.keys.sorted()
-    if (keys.size < 2) return emptyList()
+@Deprecated(
+    "Use function with List of LocationData as the receiver instead",
+    ReplaceWith("fun List<LocationData>.getLocationData(): List<HistoryLocationData>")
+)
+fun Map<ZonedDateTime, Coordinate>.getLocationData() =
+    map { LocationData(time = it.key, location = it.value) }.getLocationData()
+
+fun List<LocationData>.getLocationData(): List<HistoryLocationData> {
+    val sorted = sortedBy { it.time }
+    if (size < 2) return emptyList()
 
     // Calculate speeds and times for all segments in one pass
     val segments = mutableListOf<Triple<Float, Float, ZonedDateTime>>() // speed, timeHours, endTime
 
-    for (i in 1 until keys.size) {
-        val prevKey = keys[i - 1]
-        val currKey = keys[i]
+    for (i in 1 until sorted.size) {
+        val prevItem = sorted[i - 1]
+        val currItem = sorted[i]
 
-        val firstPoint = this[prevKey]!!
-        val secondPoint = this[currKey]!!
+        val firstPoint = prevItem.location
+        val secondPoint = currItem.location
 
-        val timeMillis = currKey.toInstant().toEpochMilli() - prevKey.toInstant().toEpochMilli()
+        val timeMillis = currItem.time.toInstant().toEpochMilli() - prevItem.time.toInstant().toEpochMilli()
         val timeHours = timeMillis / 3600000f
 
         val geoPointA = GeoPoint(firstPoint.latitude, firstPoint.longitude)
         val geoPointB = GeoPoint(secondPoint.latitude, secondPoint.longitude)
 
         val speed = calculateSpeed(geoPointA, geoPointB, timeHours)
-        segments.add(Triple(speed, timeHours, currKey))
+        segments.add(Triple(speed, timeHours, currItem.time))
     }
 
     // Build result with acceleration calculation
     val result = mutableListOf<HistoryLocationData>()
 
-    for (i in 1 until keys.size) {
-        val prevKey = keys[i - 1]
-        val currKey = keys[i]
+    for (i in 1 until sorted.size) {
+        val prevItem = sorted[i - 1]
+        val currItem = sorted[i]
 
-        val firstPoint = this[prevKey]!!
-        val secondPoint = this[currKey]!!
+        val firstPoint = prevItem.location
+        val secondPoint = currItem.location
 
         val (speed, timeHours, _) = segments[i - 1]
         val distance = calculateDistance(
@@ -80,9 +89,13 @@ fun Map<ZonedDateTime, Coordinate>.getLocationData(): List<HistoryLocationData> 
                 speed = speed,
                 acceleration = acceleration,
                 points = listOf(firstPoint, secondPoint),
-                start = prevKey,
-                end = currKey,
-                distance = distance
+                start = prevItem.time,
+                end = currItem.time,
+                distance = distance,
+                locationData = listOf(
+                    prevItem,
+                    currItem
+                )
             )
         )
     }

@@ -185,7 +185,7 @@ fun FileListView(
                             }
                         },
                         trailingContent = {
-                            if (deleteButton) IconButton(
+                            if (deleteButton || item.extension == "accel") IconButton(
                                 onClick = {
                                     item.delete()
                                     files = files.drop(index)

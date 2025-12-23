@@ -28,7 +28,7 @@ import java.time.LocalDate
     views = [
         EventsTimeWithTag::class
     ],
-    version = 2
+    version = 3
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -49,7 +49,9 @@ abstract class AppDatabase : RoomDatabase() {
                     DATABASE_NAME
                 )
                     .addMigrations(migrations.migrations1to2)
+                    .addMigrations(migrations.migrations2to3)
                     .build()
+
                 INSTANCE = instance
                 instance
             }
