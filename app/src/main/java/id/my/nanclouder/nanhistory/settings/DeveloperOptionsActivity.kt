@@ -73,6 +73,18 @@ class DeveloperOptionsActivity : SubSettingsActivity("Developer Options") {
             )
             TransportModelTrainingModal()
 
+            CategoryHeader(
+                icon = painterResource(R.drawable.ic_code),
+                iconDescription = "Dev Tools",
+                title = "Dev Tools"
+            )
+            SettingsSwitch(
+                title = "Collect accelerometer data",
+                description = "Collect and store accelerometer data while recording event.",
+                configValue = Config.developerCollectAccelerometer,
+                enabled = developerModeEnabled
+            )
+
             // SettingsSwitch(
             //     title = "Always ask before auto-delete",
             //     description = "Always ask user before auto deletion happens.",

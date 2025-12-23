@@ -10,24 +10,35 @@ import id.my.nanclouder.nanhistory.db.toDayEntity
 import id.my.nanclouder.nanhistory.db.toEventEntity
 import id.my.nanclouder.nanhistory.utils.Coordinate
 import id.my.nanclouder.nanhistory.utils.FILE_VERSION
+import id.my.nanclouder.nanhistory.utils.LogData
+import id.my.nanclouder.nanhistory.utils.StreamDigest
 import id.my.nanclouder.nanhistory.utils.matchOrNull
+import id.my.nanclouder.nanhistory.utils.toCoordinate
 import id.my.nanclouder.nanhistory.utils.toCoordinateOrNull
 import id.my.nanclouder.nanhistory.utils.toZonedDateTimeOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.math.BigInteger
+import java.math.RoundingMode
 import java.security.MessageDigest
+import java.text.DecimalFormat
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import kotlin.collections.component1
+import kotlin.collections.component2
+import kotlin.collections.joinToString
+import kotlin.collections.toMap
 import kotlin.random.Random
 
 enum class EventTypes {
     Point, Range
 }
+
+const val LOCATION_FORMAT_VERSION = 1
+const val EVENT_VERSION_NUMBER = 1
 
 enum class TransportationType(val iconId: Int? = null) {
     Unspecified,
@@ -164,20 +175,21 @@ abstract class HistoryEvent (
     open var metadata: MutableMap<String, Any> = mutableMapOf(),
     open var unknownProperties: MutableMap<String, Any> = mutableMapOf(),
     open var audio: String? = null,
-    open var locationPath: String? = null
+    open var locationPath: String? = null,
+    open var versionNumber: Int = EVENT_VERSION_NUMBER,
 ) {
-    private var locationsData: Map<ZonedDateTime, Coordinate>? = null
+    private var locationsData: List<LocationData>? = null
 
-    fun getLocations(context: Context): Map<ZonedDateTime, Coordinate> {
+    fun getLocations(context: Context): List<LocationData> {
         return (locationPath?.let {
             val locationFile = getLocationFile(it, context)
             locationsData = locationFile.locations.ifEmpty {
                 File(it).delete()
                 locationPath = null
                 null
-            } ?: mapOf()
+            } ?: listOf()
             locationsData
-        })?: mapOf()
+        })?: listOf()
     }
 }
 
@@ -194,12 +206,14 @@ data class EventPoint(
     override var unknownProperties: MutableMap<String, Any> = mutableMapOf(),
     override var audio: String? = null,
     override var locationPath: String? = null,
+    override var versionNumber: Int = EVENT_VERSION_NUMBER,
 //    val location: Coordinate? = null
 ) : HistoryEvent(id, title, description, time, favorite,
     created = created,
     modified = modified,
     type = "point",
-    locationPath = locationPath
+    locationPath = locationPath,
+    versionNumber = versionNumber
 )
 
 data class EventRange(
@@ -217,13 +231,15 @@ data class EventRange(
     override var audio: String? = null,
     var end: ZonedDateTime,
     var transportationType: TransportationType = TransportationType.Unspecified,
-    var locationDescriptions: MutableMap<ZonedDateTime, String> = mutableMapOf()
+    var locationDescriptions: MutableMap<ZonedDateTime, String> = mutableMapOf(),
+    override var versionNumber: Int = EVENT_VERSION_NUMBER,
     // var locations: MutableMap<ZonedDateTime, Coordinate> = mutableMapOf(),
 ) : HistoryEvent(id, title, description, time, favorite,
     created = created,
     modified = modified,
     type = "range",
-    locationPath = locationPath
+    locationPath = locationPath,
+    versionNumber = versionNumber
 )
 
 data class HistoryFileData(
@@ -309,41 +325,88 @@ class HistoryFileDataStream(private var list: List<String>, val context: Context
             }
         }
     }
-//    suspend fun forEachAsync(block: (HistoryFileData) -> Unit) {
-//        forEachAsync { block(it) }
-//    }
+    // suspend fun forEachAsync(block: (HistoryFileData) -> Unit) {
+    //     forEachAsync { block(it) }
+    // }
 }
 
-/*
-  int id = 0;
-  String name = "";
-  String description = "";
-  DateTime time = DateTime(0);
-  bool isFavorite = false;
-  String? geotag;
-
-  * * * * * * * * * * * * *
-  Map<String, dynamic> toMap() {
-    Map<String, dynamic> mapped = <String, dynamic>{
-      'id': id,
-      'name': name,
-      'description': description,
-      'time': time.millisecondsSinceEpoch,
-      // "until": event.until.millisecondsSinceEpoch,
-      'type': type.name,
-      'geotag': geotag,
-      'signature': signature,
-    };
-
-    return mapped;
-  }
-
-* */
-
 class LocationFile(
-    val locations: MutableMap<ZonedDateTime, Coordinate>,
-    val file: File
+    val locations: List<LocationData>,
+    val file: File,
+    val formatVersion: Int,
 )
+
+data class LocationData(
+    val time: ZonedDateTime,
+    val location: Coordinate,
+
+    // New fields
+    val speed: Float? = null,
+    val bearing: Float? = null,
+    val altitude: Double? = null,
+
+    // Accuracy fields
+    val accuracy: Float? = null,
+    val speedAccuracy: Float? = null,
+    val bearingAccuracy: Float? = null,
+    val verticalAccuracy: Float? = null,
+) {
+    override fun toString(): String {
+        val formatter = DecimalFormat("#.####").apply {
+            roundingMode = RoundingMode.HALF_UP
+        }
+
+        fun formatNumber(value: Number?): String {
+            return value?.let { formatter.format(it.toDouble()) } ?: ""
+        }
+
+        return listOf(
+            time.toOffsetDateTime().toString(),
+
+            // Location
+            location.toString(),
+            formatNumber(accuracy),
+
+            // Speed
+            formatNumber(speed),
+            formatNumber(speedAccuracy),
+
+            // Bearing
+            formatNumber(bearing),
+            formatNumber(bearingAccuracy),
+
+            // Altitude
+            formatNumber(altitude),
+            formatNumber(verticalAccuracy),
+        ).joinToString("|")
+    }
+
+    companion object {
+        fun fromString(data: String): LocationData {
+            val split = data.split("|")
+
+            return LocationData(
+                time = ZonedDateTime.parse(split[0]),
+
+                // Location
+                location = split[1].toCoordinate(),
+                accuracy = split.getOrNull(2)?.toFloatOrNull(),
+
+                // Speed
+                speed = split.getOrNull(3)?.toFloatOrNull(),
+                speedAccuracy = split.getOrNull(4)?.toFloatOrNull(),
+
+                // Bearing
+                bearing = split.getOrNull(5)?.toFloatOrNull(),
+                bearingAccuracy = split.getOrNull(6)?.toFloatOrNull(),
+
+                // Altitude
+                altitude = split.getOrNull(7)?.toDoubleOrNull(),
+                verticalAccuracy = split.getOrNull(8)?.toFloatOrNull(),
+            )
+        }
+    }
+}
 
 fun File.toLocationPath(context: Context) =
     this.absolutePath.removePrefix(File(context.filesDir, "locations").absolutePath + "/")
@@ -370,6 +433,15 @@ fun createLocationFile(context: Context, time: ZonedDateTime = ZonedDateTime.now
     return File(locationSubdir, time.format(formatter) + "-" + Random.nextInt().toString(16))
 }
 
+/**
+ * Write time-coordinate mapping into location file. Write into new file or overwrite existing file.
+ *
+ * @param file A location file, can be existing file or a new one.
+ */
+@Deprecated(
+    "Use fun List<LocationData>.appendToLocationFile(file: File) instead",
+    ReplaceWith("fun List<LocationData>.appendToLocationFile(file: File)")
+)
 fun Map<ZonedDateTime, Coordinate>.writeToLocationFile(file: File) {
     if (!file.exists()) file.createNewFile()
     val gson = Gson()
@@ -382,29 +454,127 @@ fun Map<ZonedDateTime, Coordinate>.writeToLocationFile(file: File) {
     )
 }
 
-fun getLocationFile(path: String, context: Context): LocationFile {
-    val locationsDir = makeSureLocationsDir(context)
-    val file = File(locationsDir, path)
+/**
+ * Convert time-coordinate mapping into list of [LocationData]
+ *
+ * @return [List] of [LocationData]
+ */
+fun Map<ZonedDateTime, Coordinate>.toLocationData() =
+    this.map { LocationData(
+        time = it.key,
+        location = it.value
+    ) }
+
+/**
+ * Append list of [LocationData] into an existing location file
+ *
+ * @param file Existing location file
+ * @return Appended data in [String]
+ */
+fun List<LocationData>.appendToLocationFile(file: File): String {
+    var data = ""
+    if (!file.exists()) {
+        file.createNewFile()
+
+        // Format version stored at line index 0
+        // Double line break to reserve line index 1
+        data += "$LOCATION_FORMAT_VERSION\n\n"
+    }
+
+    // Location data starts at line index 2
+    data += this.joinToString("") { locationData ->
+        locationData.toString() + "\n"
+    }
+    file.appendText(
+        data
+    )
+
+    return data // return written data
+}
+
+private fun getLocationFileDataJson(fileData: String): Pair<List<LocationData>, Int> {
     val gson = Gson()
 
-//    if (!file.exists()) {
-//        file.createNewFile()
-//        file.writeText(gson.toJson(mapOf<ZonedDateTime, Coordinate>()))
-//        return LocationFile(mutableMapOf(), file)
-//    }
+    // if (!file.exists()) {
+    //     file.createNewFile()
+    //     file.writeText(gson.toJson(mapOf<ZonedDateTime, Coordinate>()))
+    //     return LocationFile(mutableMapOf(), file)
+    // }
     val mapType = object : TypeToken<Map<String, String?>>() {}.type
     val data = try {
-        gson.fromJson<Map<String, String?>>(file.readText(), mapType)
+        gson.fromJson<Map<String, String?>>(fileData, mapType)
     } catch (_: Exception) {
         mapOf()
     }
-    return LocationFile(
+    return Pair(
         data.filter { it.value != null }
-            .map { (key, value) ->
-                (key.toZonedDateTimeOrNull() ?: ZonedDateTime.now()) to
-                (value!!.toCoordinateOrNull() ?: Coordinate(0.0, 0.0))
-            }.toMap().toMutableMap(),
-        file
+        .map { (key, value) ->
+            LocationData(
+                time = (key.toZonedDateTimeOrNull() ?: ZonedDateTime.now()),
+                location = (value!!.toCoordinateOrNull() ?: Coordinate(0.0, 0.0))
+            )
+        },
+        0
+    )
+}
+
+private fun getLocationFileDataNew(fileData: String): Pair<List<LocationData>, Int> {
+    val lines = fileData.split("\n")
+
+    val formatVersion = lines[0].toIntOrNull() ?: 1
+
+    // lines[1] is reserved
+    val locationData = lines.drop(2).mapNotNull { line ->
+        // Parse per line using fromString()
+        try {
+            LocationData.fromString(line)
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    return Pair(locationData, formatVersion)
+}
+
+fun getLocationFilePath(path: String, context: Context): String {
+    val locationsDir = makeSureLocationsDir(context)
+    return File(locationsDir, path).absolutePath
+}
+
+fun getLocationFile(path: String, context: Context): LocationFile {
+    val file = File(getLocationFilePath(path, context))
+
+    val rawData = try {
+        file.readText().ifBlank { "{}" }.trim()
+    } catch (_: java.io.FileNotFoundException) {
+        "{}"
+    }
+
+    val locationData = try {
+        // If started with curly brace (recognized as JSON, legacy support)
+        if (rawData.getOrNull(0) == '{') {
+            getLocationFileDataJson(rawData)
+        }
+        // New format import
+        else {
+            getLocationFileDataNew(rawData)
+        }
+    } catch (e: Throwable) {
+        // Handle invalid format or TODO: repair invalid format (if possible)
+        val logData = LogData.inCommonPath("getLocationFile()")
+
+        logData.appendWithTimestamp("Unable to parse location file: ${e.message ?: "Unknown error"}")
+        logData.appendWithTimestamp(e.stackTraceToString())
+        logData.save(context)
+
+        // Throw caught error
+        throw e
+    }
+
+    return LocationFile(
+        locations = locationData.first,
+        file = file,
+        formatVersion = locationData.second
     )
 }
 
@@ -555,14 +725,18 @@ fun generateOldSignature(eventData: Map<String, Any?>): String {
         Gson().toJson(data)
     }
     Log.d("NanHistoryDebug", stringData)
-    val result = messageDigest.digest(stringData.toByteArray()).let {
-        BigInteger(1, it).toString(16)
-    }
+    val result = messageDigest.digest(stringData.toByteArray())
+        .joinToString("") { "%02x".format(it) }
     return result
 }
 
-fun HistoryEvent.generateSignature(apply: Boolean = false, context: Context): String {
-//    Log.d("NanHistoryDebug" , this.toMap().toString())
+class EventDataDigest : StreamDigest("SHA-512")
+class EventLocationDigest : StreamDigest("SHA-512")
+
+fun HistoryEvent.generateSignatureV0(
+    context: Context
+): ByteArray {
+    // Log.d("NanHistoryDebug" , this.toMap().toString())
     val messageDigest = MessageDigest.getInstance("SHA-512")
     val stringData = this.let {
         val data = this.toMap().toMutableMap()
@@ -574,15 +748,80 @@ fun HistoryEvent.generateSignature(apply: Boolean = false, context: Context): St
 
         if (data[HistoryEventProperty.LOCATION_PATH] is String)
             data[HistoryEventProperty.LOCATIONS] =
-                getLocations(context).map { it.key.toOffsetDateTime().toString() to it.value.toString() }.toMap()
+                getLocations(context).associate {
+                    it.time.toOffsetDateTime().toString() to it.location.toString()
+                }
         Gson().toJson(data)
     }
-//    Log.d("NanHistoryDebug", stringData)
-    val result = messageDigest.digest(stringData.toByteArray()).let {
-        BigInteger(1, it).toString(16)
+    // Log.d("NanHistoryDebug", stringData)
+    val result = messageDigest.digest(stringData.toByteArray())
+
+    // Log.d("NanHistoryDebug", "Generated: $result")
+    return result
+}
+
+fun HistoryEvent.dataDigestV1(): ByteArray {
+    val messageDigest = MessageDigest.getInstance("SHA-512")
+    val stringData = this.let {
+        val data = this.toMap().toMutableMap()
+        for (excluded in HistoryEventSignatureExcluded) {
+            data.remove(excluded)
+        }
+        if (this.audio == null)
+            data.remove(HistoryEventProperty.AUDIO)
+
+        Gson().toJson(data)
     }
+    // Log.d("NanHistoryDebug", stringData)
+    val result = messageDigest.digest(stringData.toByteArray())
+
+    //     .joinToString("") { "%02x".format(it) }
+    // Log.d("NanHistoryDebug", "Generated: $result")
+    return result
+}
+
+fun HistoryEvent.locationDigestV1(context: Context): ByteArray? {
+    val relativePath = locationPath
+    val absolutePath = if (relativePath != null) getLocationFilePath(relativePath, context) else return null
+    val file = File(absolutePath)
+
+    if (!file.exists()) return null
+
+    val locationDigest = EventLocationDigest()
+    locationDigest.update(file.readText().toByteArray())
+
+    return locationDigest.finalizeDigest()
+}
+
+fun HistoryEvent.generateSignatureV1(
+    context: Context,
+    locationDigest: EventLocationDigest? = null,
+    eventDigest: EventDataDigest? = null,
+): ByteArray {
+    // Get current digest state from location digest or digest current location
+    val locationDigested = locationDigest?.getDigestState() ?: locationDigestV1(context) ?: ByteArray(1) { 0 }
+
+    // Get current digest state from data digest or digest current event data
+    val eventDataDigested = eventDigest?.getDigestState() ?: dataDigestV1()
+
+    val messageDigest = MessageDigest.getInstance("SHA-512")
+
+    return messageDigest.digest(eventDataDigested + locationDigested)
+}
+
+fun HistoryEvent.generateSignature(
+    context: Context,
+    apply: Boolean = false
+): String {
+    val digested = if (versionNumber >= 1) {
+        generateSignatureV1(context)
+    } else {
+        generateSignatureV0(context)
+    }
+
+    val result = digested.joinToString("") { "%02x".format(it) }
     if (apply) this.signature = result
-//    Log.d("NanHistoryDebug", "Generated: $result")
+
     return result
 }
 

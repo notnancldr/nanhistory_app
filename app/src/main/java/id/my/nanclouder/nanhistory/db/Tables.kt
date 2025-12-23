@@ -1,6 +1,7 @@
 package id.my.nanclouder.nanhistory.db
 
 import androidx.compose.ui.graphics.Color
+import androidx.room.ColumnInfo
 import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
@@ -8,6 +9,7 @@ import androidx.room.Index
 import androidx.room.Junction
 import androidx.room.PrimaryKey
 import androidx.room.Relation
+import id.my.nanclouder.nanhistory.utils.history.EVENT_VERSION_NUMBER
 import id.my.nanclouder.nanhistory.utils.history.EventPoint
 import id.my.nanclouder.nanhistory.utils.history.EventRange
 import id.my.nanclouder.nanhistory.utils.history.EventTypes
@@ -58,7 +60,11 @@ data class EventEntity(
     val locationDescriptions: Map<String, Any>?,
 
     // Soft-deletion tracking
-    val deletePermanently: Long?
+    val deletePermanently: Long?,
+
+    // version number
+    @ColumnInfo(defaultValue = "0")
+    val versionNumber: Int = EVENT_VERSION_NUMBER // Since v3
 )
 
 @Entity(tableName = "days")
@@ -182,6 +188,7 @@ fun EventWithTags.toHistoryEvent(): HistoryEvent {
     historyEvent.metadata = event.metadata.toMutableMap()
     historyEvent.audio = event.audio
     historyEvent.locationPath = event.locationPath
+    historyEvent.versionNumber = event.versionNumber
 
     return historyEvent
 }
@@ -210,17 +217,19 @@ fun HistoryEvent.toEventEntity() = EventEntity(
     locationPath = locationPath,
     audio = audio,
 
-    end = if (this is EventRange) end else null,
-    endTimestamp = if (this is EventRange) end.toInstant().toEpochMilli() else null,
-    locationDescriptions = if (this is EventRange) locationDescriptions.map {
+    end = (this as? EventRange)?.end,
+    endTimestamp = (this as? EventRange)?.end?.toInstant()?.toEpochMilli(),
+    locationDescriptions = (this as? EventRange)?.locationDescriptions?.map {
         it.key.toString() to it.value
-    }.toMap() else null,
-    transportationType = if (this is EventRange) transportationType else TransportationType.Unspecified,
+    }?.toMap(),
+    transportationType = (this as? EventRange)?.transportationType ?: TransportationType.Unspecified,
 
     signature = signature.ifBlank { null },
 
     type = if (this is EventPoint) EventTypes.Point else EventTypes.Range,
-    deletePermanently = null
+    deletePermanently = null,
+
+    versionNumber = this.versionNumber
 )
 
 fun HistoryDay.toDayEntity() = DayEntity(

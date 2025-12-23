@@ -81,11 +81,13 @@ import id.my.nanclouder.nanhistory.ui.tags.TagsView
 import id.my.nanclouder.nanhistory.utils.FormattedText
 import id.my.nanclouder.nanhistory.utils.history.TransportationType
 import id.my.nanclouder.nanhistory.utils.parseFormattedText
+import id.my.nanclouder.nanhistory.utils.transportModel.toTransportMode
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.File
 import java.time.Instant
 import java.time.ZonedDateTime
 import java.time.Duration
@@ -605,9 +607,27 @@ fun TimelineEventItem(
                                         IconButton(
                                             onClick = {
                                                 eventData.metadata.remove("transport_detection_unconfirmed")
+
+                                                val eventRange = eventData as? EventRange
+
                                                 scope.launch {
                                                     val db = AppDatabase.getInstance(context)
                                                     val dao = db.appDao()
+
+                                                    (eventData.metadata["accel_data"] as? String)?.let { paths ->
+                                                        paths.split(",").forEach a@{ path ->
+                                                            File(path).let { file ->
+                                                                if (!file.exists()) {
+                                                                    Log.w("NanHistoryDebug", "File doesn't exist: $path")
+                                                                    return@a
+                                                                }
+
+                                                                file.appendText(
+                                                                    (eventRange?.transportationType?.toTransportMode()?.name ?: "")
+                                                                )
+                                                            }
+                                                        }
+                                                    }
 
                                                     dao.updateEvent(eventData.toEventEntity())
                                                     needTransportConfirmation = false
@@ -631,8 +651,9 @@ fun TimelineEventItem(
                                                     val db = AppDatabase.getInstance(context)
                                                     val dao = db.appDao()
 
-                                                    dao.updateEvent(eventData.toEventEntity())
                                                     needTransportConfirmation = false
+
+                                                    dao.updateEvent(eventData.toEventEntity())
                                                 }
                                             }
                                         ) {

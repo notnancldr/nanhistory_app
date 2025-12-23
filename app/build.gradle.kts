@@ -39,7 +39,7 @@ android {
         minSdk = 31
         targetSdk = 35
         versionCode = fileVersionCode
-        versionName = "2.0.1"
+        versionName = "2.0.2"
 
         val now = ZonedDateTime.now()
         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ssXXX")

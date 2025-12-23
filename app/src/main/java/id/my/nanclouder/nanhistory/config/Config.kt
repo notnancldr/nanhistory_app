@@ -27,6 +27,7 @@ object Config {
         const val DEVELOPER_1HOUR_AUTO_DELETE = false
         const val DEVELOPER_SERVICE_DEBUG = false
         const val DEVELOPER_SHOW_DETECTED_TRANSPORT = false
+        const val DEVELOPER_COLLECT_ACCELEROMETER = false
 
         const val SERVICE_MAX_DURATION = 900
         const val SERVICE_RESTART_ENABLED = true
@@ -179,6 +180,9 @@ object Config {
     )
     val developerShowDetectedTransport = BooleanValue(
         "developerShowDetectedTransport", Default.DEVELOPER_SHOW_DETECTED_TRANSPORT
+    )
+    val developerCollectAccelerometer = BooleanValue(
+        "developerCollectAccelerometer", Default.DEVELOPER_COLLECT_ACCELEROMETER
     )
 
     val serviceRestartEnabled = BooleanValue(

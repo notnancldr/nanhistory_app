@@ -1,5 +1,6 @@
 package id.my.nanclouder.nanhistory.settings
 
+import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -1038,7 +1039,7 @@ private fun StorageLegendItem(
 @Composable
 private fun UnlinkedFileItem(
     file: File,
-    context: android.content.Context,
+    context: Context,
     onDelete: () -> Unit
 ) {
     Row(

@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -59,10 +58,10 @@ import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.toHistoryEvent
-import id.my.nanclouder.nanhistory.utils.Coordinate
 import id.my.nanclouder.nanhistory.utils.DateFormatter
 import id.my.nanclouder.nanhistory.utils.history.HistoryDay
 import id.my.nanclouder.nanhistory.ui.tags.TagsView
+import id.my.nanclouder.nanhistory.utils.history.LocationData
 import id.my.nanclouder.nanhistory.utils.simplifyPoints
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -71,8 +70,6 @@ import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Polyline
-import java.time.ZonedDateTime
-import kotlin.math.pow
 
 @Composable
 fun EventListHeader(
@@ -217,7 +214,7 @@ fun EventListHeader_New(
     val dao = db.appDao()
 
     var isExpanded by remember { mutableStateOf(false) }
-    var tripLocations by remember { mutableStateOf<Map<ZonedDateTime, Coordinate>>(mapOf()) }
+    var tripLocations by remember { mutableStateOf<List<LocationData>>(emptyList()) }
     var isLoadingMap by remember { mutableStateOf(false) }
     var mapLoadError by remember { mutableStateOf(false) }
 
@@ -229,8 +226,8 @@ fun EventListHeader_New(
             mapLoadError = false
             try {
                 withContext(Dispatchers.IO) {
-                    tripLocations = allEvents.fold(mapOf<ZonedDateTime, Coordinate>()) { map, event ->
-                        map + event.toHistoryEvent().getLocations(context)
+                    tripLocations = allEvents.fold(emptyList()) { list, event ->
+                        list + event.toHistoryEvent().getLocations(context)
                     }
                 }
             } catch (e: Exception) {
@@ -542,13 +539,13 @@ fun EventListHeader_New(
 
 @Composable
 private fun TripMapView(
-    locations: Map<ZonedDateTime, Coordinate>,
+    locations: List<LocationData>,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
 
-    val sortedCoordinates = locations.keys.sorted().map { locations[it]!! }
-    val simplifiedPoints = simplifyPoints(sortedCoordinates, epsilon = 0.00003)
+    val sortedLocationData = locations.sortedBy { it.time }
+    val simplifiedPoints = simplifyPoints(sortedLocationData.map { it.location }, epsilon = 0.00003)
 
     if (simplifiedPoints.isEmpty()) return
 

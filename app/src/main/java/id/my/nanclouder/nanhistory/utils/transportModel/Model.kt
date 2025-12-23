@@ -17,6 +17,7 @@ import id.my.nanclouder.nanhistory.db.toHistoryEvent
 import id.my.nanclouder.nanhistory.utils.Coordinate
 import id.my.nanclouder.nanhistory.utils.HistoryLocationData
 import id.my.nanclouder.nanhistory.utils.getLocationData
+import id.my.nanclouder.nanhistory.utils.history.LocationData
 import java.io.File
 import kotlin.math.abs
 import kotlin.math.max
@@ -25,6 +26,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.time.Duration
+import java.time.ZonedDateTime
 
 fun saveCalibrationModels(
     context: Context,
@@ -289,13 +291,27 @@ suspend fun getTrainingDataFromCache(context: Context): List<Pair<TransportMode,
 
             cachedData.map { cache ->
                 TransportMode.valueOf(cache.mode) to cache.locations.map { loc ->
+                    val start = ZonedDateTime.parse(loc.start)
+                    val end = ZonedDateTime.parse(loc.end)
+
+                    val points = loc.points.map { Coordinate(it.latitude, it.longitude) }
                     HistoryLocationData(
                         speed = loc.speed,
                         acceleration = loc.acceleration,
                         distance = loc.distance,
-                        start = java.time.ZonedDateTime.parse(loc.start),
-                        end = java.time.ZonedDateTime.parse(loc.end),
-                        points = loc.points.map { Coordinate(it.latitude, it.longitude) }
+                        start = start,
+                        end = end,
+                        points = points,
+                        locationData = listOf(
+                            LocationData(
+                                time = start,
+                                location = points.first()
+                            ),
+                            LocationData(
+                                time = end,
+                                location = points.last()
+                            )
+                        )
                     )
                 }
             }

@@ -5,9 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.util.Log
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.net.toFile
 import androidx.documentfile.provider.DocumentFile
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -18,11 +15,9 @@ import id.my.nanclouder.nanhistory.db.toDayEntity
 import id.my.nanclouder.nanhistory.db.toEventEntity
 import id.my.nanclouder.nanhistory.db.toHistoryDay
 import id.my.nanclouder.nanhistory.db.toHistoryEvent
-import id.my.nanclouder.nanhistory.getActivity
 import id.my.nanclouder.nanhistory.utils.history.EventPoint
 import id.my.nanclouder.nanhistory.utils.history.EventRange
 import id.my.nanclouder.nanhistory.utils.history.HistoryDay
-import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
 import id.my.nanclouder.nanhistory.utils.history.createLocationFile
 import id.my.nanclouder.nanhistory.utils.history.generateSignature
 import id.my.nanclouder.nanhistory.utils.history.safeDelete
@@ -30,10 +25,7 @@ import id.my.nanclouder.nanhistory.utils.history.toLocationPath
 import id.my.nanclouder.nanhistory.utils.history.writeToLocationFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import java.io.File
 import java.io.IOException
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
@@ -45,7 +37,6 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
-import kotlin.coroutines.resume
 
 object LegacyImport {
     private const val LEGACY_ENCRYPTION_KEY = BuildConfig.LEGACY_ENCRYPTION_KEY
@@ -200,7 +191,7 @@ object LegacyImport {
                         val check = getLegacySignature(legacyMapped)
                         if (check == legacySignature) {
                             // Log.d("LegacyImport", "Valid old signature, generating new signature")
-                            generateSignature(true, context)
+                            generateSignature(context, true)
                         }
                         else {
                             Log.w("LegacyImport", "Invalid signature (old: $legacySignature, check: $check), continuing to use old signature")
@@ -292,7 +283,7 @@ object LegacyImport {
                         val check = getLegacySignature(legacyMapped)
                         if (check == legacySignature) {
                             // Log.d("LegacyImport", "Valid old signature, generating new signature")
-                            generateSignature(true, context)
+                            generateSignature(context, true)
                         }
                         else {
                             Log.i("LegacyImport", "Invalid signature (old: $legacySignature, check: $check), continuing to use old signature")
