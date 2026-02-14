@@ -74,10 +74,15 @@ import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.toEventEntity
 import id.my.nanclouder.nanhistory.db.toHistoryEvent
+import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
+import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import id.my.nanclouder.nanhistory.utils.Coordinate
 import id.my.nanclouder.nanhistory.utils.TimeFormatterWithSecond
+import id.my.nanclouder.nanhistory.utils.copyWith
 import id.my.nanclouder.nanhistory.utils.getLocationData
 import id.my.nanclouder.nanhistory.utils.history.EventRange
+import id.my.nanclouder.nanhistory.utils.history.LocationData
+import id.my.nanclouder.nanhistory.utils.history.appendToLocationFile
 import id.my.nanclouder.nanhistory.utils.history.createLocationFile
 import id.my.nanclouder.nanhistory.utils.history.generateEventId
 import id.my.nanclouder.nanhistory.utils.history.generateSignature
@@ -85,11 +90,15 @@ import id.my.nanclouder.nanhistory.utils.history.getFilePathFromDate
 import id.my.nanclouder.nanhistory.utils.history.validateSignature
 import id.my.nanclouder.nanhistory.utils.matchOrNull
 import id.my.nanclouder.nanhistory.utils.toGeoPoint
-import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
-import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
-import id.my.nanclouder.nanhistory.utils.copyWith
-import id.my.nanclouder.nanhistory.utils.history.LocationData
-import id.my.nanclouder.nanhistory.utils.history.appendToLocationFile
+import java.io.File
+import java.time.Duration
+import java.time.ZonedDateTime
+import kotlin.math.absoluteValue
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.pow
+import kotlin.math.round
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
@@ -101,15 +110,6 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.Polyline
-import java.io.File
-import java.time.Duration
-import java.time.ZonedDateTime
-import kotlin.math.absoluteValue
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.pow
-import kotlin.math.round
-import kotlin.math.roundToInt
 
 class EventLocationActivity : ComponentActivity() {
     var update: () -> Unit = {}
@@ -123,8 +123,8 @@ class EventLocationActivity : ComponentActivity() {
             var setUpdate by remember { mutableStateOf(false) }
             update = { setUpdate = !setUpdate }
             NanHistoryTheme {
-//                Log.d("NanHistoryDebug", "data (eventId) : $eventId")
-//                Log.d("NanHistoryDebug", "data (path)    : $path")
+                //                Log.d("NanHistoryDebug", "data (eventId) : $eventId")
+                //                Log.d("NanHistoryDebug", "data (path)    : $path")
                 key(setUpdate) { EventLocationView(eventId, startAsCutMode) }
             }
         }
@@ -137,15 +137,17 @@ class EventLocationActivity : ComponentActivity() {
 }
 
 fun calculateDistance(startPoint: GeoPoint, endPoint: GeoPoint): Float =
-    Location("map").apply {
-        latitude = startPoint.latitude
-        longitude = startPoint.longitude
-    }.distanceTo(
-        Location("map").apply {
-            latitude = endPoint.latitude
-            longitude = endPoint.longitude
+    Location("map")
+        .apply {
+            latitude = startPoint.latitude
+            longitude = startPoint.longitude
         }
-    )
+        .distanceTo(
+            Location("map").apply {
+                latitude = endPoint.latitude
+                longitude = endPoint.longitude
+            }
+        )
 
 fun calculateSpeed(startPoint: GeoPoint, endPoint: GeoPoint, timeHours: Float): Float =
     calculateDistance(startPoint, endPoint) / 1000 / timeHours
@@ -191,23 +193,26 @@ fun calculateAccuracyColor(accuracy: Float?): Color {
     val normalized = (clampedAccuracy - 5f) / (1000f - 5f)
 
     // Color mapping: Green (5m) -> Yellow -> Orange -> Red (1000m)
-    val hue = when {
-        normalized < 0.33f -> {
-            // Green to Yellow (5-335m)
-            val t = normalized / 0.33f
-            120f - (t * 60f)  // 120° to 60°
+    val hue =
+        when {
+            normalized < 0.33f -> {
+                // Green to Yellow (5-335m)
+                val t = normalized / 0.33f
+                120f - (t * 60f) // 120° to 60°
+            }
+
+            normalized < 0.66f -> {
+                // Yellow to Orange (335-668m)
+                val t = (normalized - 0.33f) / 0.33f
+                60f - (t * 30f) // 60° to 30°
+            }
+
+            else -> {
+                // Orange to Red (668-1000m)
+                val t = (normalized - 0.66f) / 0.34f
+                30f - (t * 30f) // 30° to 0°
+            }
         }
-        normalized < 0.66f -> {
-            // Yellow to Orange (335-668m)
-            val t = (normalized - 0.33f) / 0.33f
-            60f - (t * 30f)  // 60° to 30°
-        }
-        else -> {
-            // Orange to Red (668-1000m)
-            val t = (normalized - 0.66f) / 0.34f
-            30f - (t * 30f)  // 30° to 0°
-        }
-    }
 
     // Saturation increases with worse accuracy (more vibrant at extremes)
     val saturation = (0.5f + normalized * 0.5f).coerceIn(0.5f, 1f)
@@ -229,7 +234,7 @@ fun EventLocationView(eventId: String, startAsCutMode: Boolean = false) {
 @Composable
 fun EventLocationView_Old(eventId: String, startAsCutMode: Boolean = false) {
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
-//    val scope = rememberCoroutineScope()
+    //    val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
     val context = LocalContext.current
@@ -258,115 +263,190 @@ fun EventLocationView_Old(eventId: String, startAsCutMode: Boolean = false) {
         topBar = {
             TopAppBar(
                 title = {
-                    if (eventData != null)
-                        Text(if (cutMode) "Cut Event" else "Event Map")
-                    else
-                        ComponentPlaceholder(Modifier.size(128.dp, 16.dp))
+                    if (eventData != null) Text(if (cutMode) "Cut Event" else "Event Map")
+                    else ComponentPlaceholder(Modifier.size(128.dp, 16.dp))
                 },
                 navigationIcon = {
-                    IconButton(
-                        onClick = {
-                            context.getActivity()!!.finish()
-                        }
-                    ) {
+                    IconButton(onClick = { context.getActivity()!!.finish() }) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
                     }
                 },
                 actions = {
-                    if (eventData == null) ComponentPlaceholder(Modifier.size(24.dp).padding(8.dp))
-                    if (cutMode && eventData is EventRange) IconButton(
-                        onClick = {
-                            // TODO
-                            val event = EventRange(
-                                title = "Cut of ${eventData.title}",
-                                description = eventData.description +
-                                        if (eventData.description.isBlank()) "" else "\n" +
-                                                "Cut of ${eventData.title}",
-                                time = cutStart!!,
-                                favorite = eventData.favorite,
-                                tags = eventData.tags,
-                                end = cutEnd!!,
-                                locationDescriptions = eventData.locationDescriptions.filter {
-                                    it.key >= cutStart!! && it.key <= cutEnd!!
-                                }.toMutableMap(),
-                                metadata = eventData.metadata,
-                                versionNumber = eventData.versionNumber
-                            ).apply {
-                                metadata["original_event_id"] = eventData.id
-                                metadata["original_event_time"] = eventData.time.toOffsetDateTime().toString()
-                                metadata["original_event_end"] = eventData.end.toOffsetDateTime().toString()
-                                if (metadata["root_event_id"] == null)
-                                    metadata["root_event_id"] = eventData.id
-                                if (metadata["root_event_time"] == null)
-                                    metadata["root_event_time"] = eventData.time.toOffsetDateTime().toString()
-                                if (metadata["root_event_end"] == null)
-                                    metadata["root_event_end"] = eventData.end.toOffsetDateTime().toString()
-                            }
-                            val locationFile = createLocationFile(context, event.time)
-                            val locationsData = eventLocations.filter {
-                                it.time >= cutStart!! && it.time <= cutEnd!!
-                            }
-                            locationFile.delete()
-                            locationsData.appendToLocationFile(locationFile)
-                            event.locationPath = locationFile.absolutePath.removePrefix(File(context.filesDir, "locations").absolutePath + "/")
+                    if (eventData == null)
+                        ComponentPlaceholder(Modifier
+                            .size(24.dp)
+                            .padding(8.dp))
+                    if (cutMode && eventData is EventRange)
+                        IconButton(
+                            onClick = {
+                                // TODO
+                                val event =
+                                    EventRange(
+                                        title =
+                                            "Cut of ${eventData.title}",
+                                        description =
+                                            eventData
+                                                .description +
+                                                    if (eventData
+                                                            .description
+                                                            .isBlank()
+                                                    )
+                                                        ""
+                                                    else
+                                                        "\n" +
+                                                                "Cut of ${eventData.title}",
+                                        time = cutStart!!,
+                                        favorite =
+                                            eventData.favorite,
+                                        tags = eventData.tags,
+                                        end = cutEnd!!,
+                                        locationDescriptions =
+                                            eventData
+                                                .locationDescriptions
+                                                .filter {
+                                                    it.key >=
+                                                            cutStart!! &&
+                                                            it.key <=
+                                                            cutEnd!!
+                                                }
+                                                .toMutableMap(),
+                                        metadata =
+                                            eventData.metadata,
+                                        versionNumber =
+                                            eventData
+                                                .versionNumber
+                                    )
+                                        .apply {
+                                            metadata["original_event_id"] =
+                                                eventData.id
+                                            metadata[
+                                                "original_event_time"] =
+                                                eventData
+                                                    .time
+                                                    .toOffsetDateTime()
+                                                    .toString()
+                                            metadata["original_event_end"] =
+                                                eventData
+                                                    .end
+                                                    .toOffsetDateTime()
+                                                    .toString()
+                                            if (metadata["root_event_id"] ==
+                                                null
+                                            )
+                                                metadata[
+                                                    "root_event_id"] =
+                                                    eventData.id
+                                            if (metadata[
+                                                    "root_event_time"] ==
+                                                null
+                                            )
+                                                metadata[
+                                                    "root_event_time"] =
+                                                    eventData
+                                                        .time
+                                                        .toOffsetDateTime()
+                                                        .toString()
+                                            if (metadata[
+                                                    "root_event_end"] ==
+                                                null
+                                            )
+                                                metadata[
+                                                    "root_event_end"] =
+                                                    eventData
+                                                        .end
+                                                        .toOffsetDateTime()
+                                                        .toString()
+                                        }
+                                val locationFile =
+                                    createLocationFile(context, event.time)
+                                val locationsData =
+                                    eventLocations.filter {
+                                        it.time >= cutStart!! &&
+                                                it.time <= cutEnd!!
+                                    }
+                                locationFile.delete()
+                                locationsData.appendToLocationFile(locationFile)
+                                event.locationPath =
+                                    locationFile.absolutePath.removePrefix(
+                                        File(context.filesDir, "locations")
+                                            .absolutePath + "/"
+                                    )
 
-                            if (eventData.audio != null) {
-                                val audioFile = File(context.filesDir, "audio/${eventData.audio}")
-                                audioFile.parentFile?.let {
-                                    val id = generateEventId()
-                                    val targetPath = "${it.name}/$id.m4a"
-                                    val targetFile = File(it, "/$id.m4a")
-                                    Log.d("NanHistoryDebug", "AUDIO COPY | FROM: ${audioFile.absolutePath} | TO: ${targetFile.absolutePath}")
-                                    audioFile.copyTo(targetFile)
+                                if (eventData.audio != null) {
+                                    val audioFile =
+                                        File(
+                                            context.filesDir,
+                                            "audio/${eventData.audio}"
+                                        )
+                                    audioFile.parentFile?.let {
+                                        val id = generateEventId()
+                                        val targetPath = "${it.name}/$id.m4a"
+                                        val targetFile = File(it, "/$id.m4a")
+                                        Log.d(
+                                            "NanHistoryDebug",
+                                            "AUDIO COPY | FROM: ${audioFile.absolutePath} | TO: ${targetFile.absolutePath}"
+                                        )
+                                        audioFile.copyTo(targetFile)
 
-                                    event.audio = targetPath
+                                        event.audio = targetPath
+                                    }
                                 }
-                            }
-                            if (eventData.validateSignature(context = context)) event.generateSignature(context, true)
+                                if (eventData.validateSignature(context = context))
+                                    event.generateSignature(context, true)
 
-                            val db = AppDatabase.getInstance(context)
-                            val dao = db.appDao()
+                                val db = AppDatabase.getInstance(context)
+                                val dao = db.appDao()
 
-                            scope.launch { dao.insertEvent(event.toEventEntity()) }
+                                scope.launch {
+                                    dao.insertEvent(event.toEventEntity())
+                                }
 
-                            cutMode = false
-                            Toast.makeText(context, "${event.title} has been saved", Toast.LENGTH_SHORT).show()
+                                cutMode = false
+                                Toast.makeText(
+                                    context,
+                                    "${event.title} has been saved",
+                                    Toast.LENGTH_SHORT
+                                )
+                                    .show()
 
-                            val resultIntent = Intent().apply {
-                                putExtra("path", getFilePathFromDate(event.time.toLocalDate()))
-                            }
+                                val resultIntent =
+                                    Intent().apply {
+                                        putExtra(
+                                            "path",
+                                            getFilePathFromDate(
+                                                event.time.toLocalDate()
+                                            )
+                                        )
+                                    }
 
-                            context.getActivity()?.setResult(2, resultIntent)
-                            if (startAsCutMode) context.getActivity()?.finish()
+                                context.getActivity()?.setResult(2, resultIntent)
+                                if (startAsCutMode) context.getActivity()?.finish()
 
-                            // TODO
-                        },
-                        enabled = cutStart != null && cutEnd != null
-                    ) {
-                        Icon(
-                            Icons.Rounded.Check,
-                            contentDescription = "Confirm",
-                        )
-                    }
-                    if (eventData is EventRange) IconButton({ cutMode = !cutMode }, enabled = !recording) {
-                        if (!cutMode) Icon(
-                            painterResource(R.drawable.ic_content_cut),
-                            "Cut Mode"
-                        )
-                        else Icon(
-                            Icons.Rounded.Close,
-                            "Exit Cut Mode"
-                        )
-                    }
+                                // TODO
+                            },
+                            enabled = cutStart != null && cutEnd != null
+                        ) {
+                            Icon(
+                                Icons.Rounded.Check,
+                                contentDescription = "Confirm",
+                            )
+                        }
+                    if (eventData is EventRange)
+                        IconButton({ cutMode = !cutMode }, enabled = !recording) {
+                            if (!cutMode)
+                                Icon(
+                                    painterResource(R.drawable.ic_content_cut),
+                                    "Cut Mode"
+                                )
+                            else Icon(Icons.Rounded.Close, "Exit Cut Mode")
+                        }
                 }
             )
         }
     ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .padding(paddingValues)
-                .fillMaxSize()
-        ) {
+        Column(modifier = Modifier
+            .padding(paddingValues)
+            .fillMaxSize()) {
             if (locationAvailable) {
                 MapHistoryView_Old(
                     locations = eventLocations.associate { it.time to it.location },
@@ -381,12 +461,9 @@ fun EventLocationView_Old(eventId: String, startAsCutMode: Boolean = false) {
                     },
                     cutMode = cutMode
                 )
-            }
-            else ComponentPlaceholder(
-                Modifier
-                    .weight(1f)
-                    .padding(8.dp)
-            )
+            } else ComponentPlaceholder(Modifier
+                .weight(1f)
+                .padding(8.dp))
         }
     }
 }
@@ -402,9 +479,8 @@ fun MapHistoryView_Old(
 
     val mapKeys = locations.keys.sorted()
 
-    val geoPoints = mapKeys.sorted().map {
-        GeoPoint(locations[it]!!.latitude, locations[it]!!.longitude)
-    }
+    val geoPoints =
+        mapKeys.sorted().map { GeoPoint(locations[it]!!.latitude, locations[it]!!.longitude) }
 
     val bottomBarScrollState = rememberScrollState()
 
@@ -445,54 +521,62 @@ fun MapHistoryView_Old(
 
     val shownCoordinates =
         if (geoPoints.size > 2) {
-            val coordinates = geoPoints.dropLast(1).mapIndexed { a, b -> a to b }.filter {
-                it.first % (2.0.pow((15 - zoomLevel.roundToInt()))) == 0.0
-            }.map { it.second }.toMutableList()
+            val coordinates =
+                geoPoints
+                    .dropLast(1)
+                    .mapIndexed { a, b -> a to b }
+                    .filter {
+                        it.first % (2.0.pow((15 - zoomLevel.roundToInt()))) == 0.0
+                    }
+                    .map { it.second }
+                    .toMutableList()
             coordinates.add(geoPoints.last())
             coordinates.toList()
-        }
-        else geoPoints
+        } else geoPoints
 
     val shownKeys =
         if (geoPoints.size > 2) {
-            val coordinates = mapKeys.dropLast(1).mapIndexed { a, b -> a to b }.filter {
-                it.first % (2.0.pow((15 - zoomLevel.roundToInt()))) == 0.0
-            }.map { it.second }.toMutableList()
+            val coordinates =
+                mapKeys.dropLast(1)
+                    .mapIndexed { a, b -> a to b }
+                    .filter {
+                        it.first % (2.0.pow((15 - zoomLevel.roundToInt()))) == 0.0
+                    }
+                    .map { it.second }
+                    .toMutableList()
             coordinates.add(mapKeys.last())
             coordinates.toList()
-        }
-        else mapKeys
+        } else mapKeys
 
     var inMaxDetail by remember { mutableStateOf(false) }
     val maxDetail = shownCoordinates.size == geoPoints.size
 
     val screenDpi = LocalDensity.current.run { 1.dp.toPx() }
 
-    var updateMap = { }
+    var updateMap = {}
 
     val updateCutSelection = {
         onPointsSelected(cutTime1, cutTime2)
-        if (cutTime1 == null || cutTime2 == null) updateMap()
-        else needUpdate = true
+        if (cutTime1 == null || cutTime2 == null) updateMap() else needUpdate = true
     }
 
-    val setCutPoint = cutPointSetter@{ time: ZonedDateTime ->
-        if (time == cutTime1 || time == cutTime2) return@cutPointSetter
+    val setCutPoint =
+        cutPointSetter@{ time: ZonedDateTime ->
+            if (time == cutTime1 || time == cutTime2) return@cutPointSetter
 
-        if (cutTime1 == null) cutTime1 = time
-        else if (cutTime2 == null) cutTime2 = time
-        else return@cutPointSetter
+            if (cutTime1 == null) cutTime1 = time
+            else if (cutTime2 == null) cutTime2 = time else return@cutPointSetter
 
-        updateCutSelection()
-    }
+            updateCutSelection()
+        }
 
-    val undoCutSelection = undo@{
-        if (cutTime2 != null) cutTime2 = null
-        else if (cutTime1 != null) cutTime1 = null
-        else return@undo
+    val undoCutSelection =
+        undo@{
+            if (cutTime2 != null) cutTime2 = null
+            else if (cutTime1 != null) cutTime1 = null else return@undo
 
-        updateCutSelection()
-    }
+            updateCutSelection()
+        }
 
     if (cutMode != cutModeCheck) {
         cutModeCheck = cutMode
@@ -501,165 +585,184 @@ fun MapHistoryView_Old(
         needUpdate = true
     }
 
-    updateMap = updater@{
-        if (mapViewObj == null) return@updater
+    updateMap =
+        updater@{
+            if (mapViewObj == null) return@updater
 
-        mapViewObj?.overlays?.clear()
+            mapViewObj?.overlays?.clear()
 
-        val polyline = Polyline(mapViewObj).apply {
-            setPoints(shownCoordinates)
-            outlinePaint.color =
-                if (!cutMode) android.graphics.Color.BLUE
-                else android.graphics.Color.GRAY
-            outlinePaint.strokeWidth = 3f * screenDpi
-            outlinePaint.strokeCap = Paint.Cap.ROUND
-        }
-        val polylineBorder = Polyline(mapViewObj).apply {
-            setPoints(shownCoordinates)
-            outlinePaint.color = android.graphics.Color.rgb(0, 0, 20)
-            outlinePaint.strokeWidth = 4f * screenDpi
-            outlinePaint.strokeCap = Paint.Cap.ROUND
-        }
-        val markerStart = Marker(mapViewObj).apply {
-            position = geoPoints.first()
-            icon = context.getDrawable(R.drawable.ic_location_start)
-            setOnMarkerClickListener { _, _ ->
-                setCutPoint(locations.keys.first())
-                true
-            }
-        }
-        val markerEnd = Marker(mapViewObj).apply {
-            position = geoPoints.last()
-            icon = context.getDrawable(R.drawable.ic_location_end)
-            setOnMarkerClickListener { _, _ ->
-                setCutPoint(locations.keys.last())
-                true
-            }
-        }
-
-        mapViewObj?.overlays?.add(polylineBorder)
-        if (!showData || cutMode) {
-            mapViewObj?.overlays?.add(polyline)
-        }
-        else {
-            shownKeys
-                .associateWith { locations[it]!! }
-                .getLocationData()
-                .forEach {
-                    val coloredPolyline = Polyline(mapViewObj).apply {
-                        setPoints(it.points.map { point -> point.toGeoPoint() } )
-                        outlinePaint.color = calculateColor(it.speed.roundToInt()).toArgb()
-                        outlinePaint.strokeWidth = 3f * screenDpi
-                        outlinePaint.strokeCap = Paint.Cap.ROUND
-
-                        setOnClickListener { _, _, _ -> // polyline, mapView, eventPos
-                            selectedTime = "${TimeFormatterWithSecond.format(it.start)} - ${TimeFormatterWithSecond.format(it.end)}"
-                            selectedSpeed = it.speed.roundToInt()
-                            selectedFirstKey = it.start
-                            selectedSecondKey = it.end
-                            isSelected = true
-                            updateRemaining = 1000000
-                            updateMap()
-
-                            true
-                        }
+            val polyline =
+                Polyline(mapViewObj).apply {
+                    setPoints(shownCoordinates)
+                    outlinePaint.color =
+                        if (!cutMode) android.graphics.Color.BLUE
+                        else android.graphics.Color.GRAY
+                    outlinePaint.strokeWidth = 3f * screenDpi
+                    outlinePaint.strokeCap = Paint.Cap.ROUND
+                }
+            val polylineBorder =
+                Polyline(mapViewObj).apply {
+                    setPoints(shownCoordinates)
+                    outlinePaint.color = android.graphics.Color.rgb(0, 0, 20)
+                    outlinePaint.strokeWidth = 4f * screenDpi
+                    outlinePaint.strokeCap = Paint.Cap.ROUND
+                }
+            val markerStart =
+                Marker(mapViewObj).apply {
+                    position = geoPoints.first()
+                    icon = context.getDrawable(R.drawable.ic_location_start)
+                    setOnMarkerClickListener { _, _ ->
+                        setCutPoint(locations.keys.first())
+                        true
                     }
+                }
+            val markerEnd =
+                Marker(mapViewObj).apply {
+                    position = geoPoints.last()
+                    icon = context.getDrawable(R.drawable.ic_location_end)
+                    setOnMarkerClickListener { _, _ ->
+                        setCutPoint(locations.keys.last())
+                        true
+                    }
+                }
+
+            mapViewObj?.overlays?.add(polylineBorder)
+            if (!showData || cutMode) {
+                mapViewObj?.overlays?.add(polyline)
+            } else {
+                shownKeys.associateWith { locations[it]!! }.getLocationData().forEach {
+                    val coloredPolyline =
+                        Polyline(mapViewObj).apply {
+                            setPoints(it.points.map { point -> point.toGeoPoint() })
+                            outlinePaint.color =
+                                calculateColor(it.speed.roundToInt()).toArgb()
+                            outlinePaint.strokeWidth = 3f * screenDpi
+                            outlinePaint.strokeCap = Paint.Cap.ROUND
+
+                            setOnClickListener { _, _, _ -> // polyline, mapView, eventPos
+                                selectedTime =
+                                    "${TimeFormatterWithSecond.format(it.start)} - ${
+                                        TimeFormatterWithSecond.format(
+                                            it.end
+                                        )
+                                    }"
+                                selectedSpeed = it.speed.roundToInt()
+                                selectedFirstKey = it.start
+                                selectedSecondKey = it.end
+                                isSelected = true
+                                updateRemaining = 1000000
+                                updateMap()
+
+                                true
+                            }
+                        }
+
+                    mapViewObj?.overlays?.add(coloredPolyline)
+                }
+
+                if (isSelected && mapViewObj != null) {
+                    val firstKey = selectedFirstKey
+                    val secondKey = selectedSecondKey
+
+                    val polylinePoints =
+                        listOf(locations[firstKey]!!, locations[secondKey]!!).map {
+                            GeoPoint(it.latitude, it.longitude)
+                        }
 
                     mapViewObj?.overlays?.add(
-                        coloredPolyline
+                        Polyline(mapViewObj).apply {
+                            setPoints(polylinePoints)
+                            outlinePaint.color = Color.DarkGray.toArgb()
+                            outlinePaint.strokeWidth = 7f * screenDpi
+                            outlinePaint.strokeCap = Paint.Cap.ROUND
+                            id = firstKey.toString()
+                        }
                     )
+                    mapViewObj?.overlays?.add(
+                        Polyline(mapViewObj).apply {
+                            setPoints(polylinePoints)
+                            outlinePaint.color = calculateColor(selectedSpeed).toArgb()
+                            outlinePaint.strokeWidth = 3.5f * screenDpi
+                            outlinePaint.strokeCap = Paint.Cap.ROUND
+                            id = firstKey.toString()
+                        }
+                    )
+                } else {
+                    Log.d("NanHistoryDebug", "No selected polyline")
                 }
-
-            if (isSelected && mapViewObj != null) {
-                val firstKey = selectedFirstKey
-                val secondKey = selectedSecondKey
-
-                val polylinePoints = listOf(
-                    locations[firstKey]!!,
-                    locations[secondKey]!!
-                ).map { GeoPoint(it.latitude, it.longitude) }
-
-                mapViewObj?.overlays?.add(
-                    Polyline(mapViewObj).apply {
-                        setPoints(polylinePoints)
-                        outlinePaint.color = Color.DarkGray.toArgb()
-                        outlinePaint.strokeWidth = 7f * screenDpi
-                        outlinePaint.strokeCap = Paint.Cap.ROUND
-                        id = firstKey.toString()
-                    }
-                )
-                mapViewObj?.overlays?.add(
-                    Polyline(mapViewObj).apply {
-                        setPoints(polylinePoints)
-                        outlinePaint.color = calculateColor(selectedSpeed).toArgb()
-                        outlinePaint.strokeWidth = 3.5f * screenDpi
-                        outlinePaint.strokeCap = Paint.Cap.ROUND
-                        id = firstKey.toString()
-                    }
-                )
             }
-            else {
-                Log.d("NanHistoryDebug", "No selected polyline")
-            }
-        }
 
-        val currentCutTime1 = cutTime1
-        val currentCutTime2 = cutTime2
-        if (cutMode && currentCutTime1 != null && currentCutTime2 != null) {
-            val startTime =
-                if (currentCutTime1 < currentCutTime2) currentCutTime1
-                else currentCutTime2
-            val endTime =
-                if (currentCutTime1 > currentCutTime2) currentCutTime1
-                else currentCutTime2
-            val selectedArea = mutableListOf<ZonedDateTime>()
-//            Log.d("NanHistoryDebug", "START TIME: $startTime, END TIME: $endTime")
-            shownKeys
-                .forEach selectionIterator@{
-                    if (it < startTime || it > endTime)
-                        return@selectionIterator
+            val currentCutTime1 = cutTime1
+            val currentCutTime2 = cutTime2
+            if (cutMode && currentCutTime1 != null && currentCutTime2 != null) {
+                val startTime =
+                    if (currentCutTime1 < currentCutTime2) currentCutTime1
+                    else currentCutTime2
+                val endTime =
+                    if (currentCutTime1 > currentCutTime2) currentCutTime1
+                    else currentCutTime2
+                val selectedArea = mutableListOf<ZonedDateTime>()
+                //            Log.d("NanHistoryDebug", "START TIME: $startTime, END TIME:
+                // $endTime")
+                shownKeys.forEach selectionIterator@{
+                    if (it < startTime || it > endTime) return@selectionIterator
                     selectedArea.add(it)
                 }
-            val selectedPolyline = Polyline(mapViewObj).apply {
-                setPoints(selectedArea.map { locations[it]!!.toGeoPoint() })
-                outlinePaint.color = android.graphics.Color.BLUE
-                outlinePaint.strokeWidth = 3f * screenDpi
-                outlinePaint.strokeCap = Paint.Cap.ROUND
+                val selectedPolyline =
+                    Polyline(mapViewObj).apply {
+                        setPoints(selectedArea.map { locations[it]!!.toGeoPoint() })
+                        outlinePaint.color = android.graphics.Color.BLUE
+                        outlinePaint.strokeWidth = 3f * screenDpi
+                        outlinePaint.strokeCap = Paint.Cap.ROUND
+                    }
+                mapViewObj?.overlays?.add(selectedPolyline)
             }
-            mapViewObj?.overlays?.add(selectedPolyline)
-        }
 
-        if (showPoints || cutMode) {
-            if (cutTime1 == null || cutTime2 == null)
-                for ((shownKey, shownCoordinate) in shownCoordinates.mapIndexed { idx, it -> shownKeys[idx] to it }) {
-                    mapViewObj?.overlays?.add(Marker(mapViewObj).apply {
-                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                        position = shownCoordinate
-                        icon = context.getDrawable(R.drawable.ic_map_touch_point)
+            if (showPoints || cutMode) {
+                if (cutTime1 == null || cutTime2 == null)
+                    for ((shownKey, shownCoordinate) in
+                    shownCoordinates.mapIndexed { idx, it ->
+                        shownKeys[idx] to it
+                    }) {
+                        mapViewObj?.overlays?.add(
+                            Marker(mapViewObj).apply {
+                                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                                position = shownCoordinate
+                                icon =
+                                    context.getDrawable(
+                                        R.drawable.ic_map_touch_point
+                                    )
 
-                        setOnMarkerClickListener { _, _ ->
-                            setCutPoint(shownKey)
-                            true
+                                setOnMarkerClickListener { _, _ ->
+                                    setCutPoint(shownKey)
+                                    true
+                                }
+                            }
+                        )
+                    }
+                if (cutTime1 != null)
+                    mapViewObj?.overlays?.add(
+                        Marker(mapViewObj).apply {
+                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                            position = locations[cutTime1]!!.toGeoPoint()
+                            icon = context.getDrawable(R.drawable.ic_map_stop_point)
                         }
-                    })
-                }
-            if (cutTime1 != null) mapViewObj?.overlays?.add(Marker(mapViewObj).apply {
-                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                position = locations[cutTime1]!!.toGeoPoint()
-                icon = context.getDrawable(R.drawable.ic_map_stop_point)
-            })
-            if (cutTime2 != null) mapViewObj?.overlays?.add(Marker(mapViewObj).apply {
-                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                position = locations[cutTime2]!!.toGeoPoint()
-                icon = context.getDrawable(R.drawable.ic_map_stop_point)
-            })
+                    )
+                if (cutTime2 != null)
+                    mapViewObj?.overlays?.add(
+                        Marker(mapViewObj).apply {
+                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                            position = locations[cutTime2]!!.toGeoPoint()
+                            icon = context.getDrawable(R.drawable.ic_map_stop_point)
+                        }
+                    )
+            }
+
+            if (shownCoordinates.size > 1) mapViewObj?.overlays?.add(markerStart)
+            mapViewObj?.overlays?.add(markerEnd)
+
+            mapViewObj?.invalidate()
         }
-
-        if (shownCoordinates.size > 1) mapViewObj?.overlays?.add(markerStart)
-        mapViewObj?.overlays?.add(markerEnd)
-
-        mapViewObj?.invalidate()
-    }
 
     if (maxDetail != inMaxDetail) {
         inMaxDetail = maxDetail
@@ -675,31 +778,36 @@ fun MapHistoryView_Old(
                 // Configure the MapView
                 setMultiTouchControls(true)
 
-                addMapListener(object : MapListener {
-                    override fun onScroll(event: ScrollEvent?): Boolean {
-                        Log.d("MapListener", "Map scrolled")
-                        center = GeoPoint(mapCenter.latitude, mapCenter.longitude)
-                        return true // Return true if the event was handled
-                    }
+                addMapListener(
+                    object : MapListener {
+                        override fun onScroll(event: ScrollEvent?): Boolean {
+                            Log.d("MapListener", "Map scrolled")
+                            center =
+                                GeoPoint(
+                                    mapCenter.latitude,
+                                    mapCenter.longitude
+                                )
+                            return true // Return true if the event was handled
+                        }
 
-                    override fun onZoom(event: ZoomEvent?): Boolean {
-                        zoomLevel = event?.zoomLevel ?: zoomLevel
-                        return true
+                        override fun onZoom(event: ZoomEvent?): Boolean {
+                            zoomLevel = event?.zoomLevel ?: zoomLevel
+                            return true
+                        }
                     }
-                })
-                zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
+                )
+                zoomController.setVisibility(
+                    CustomZoomButtonsController.Visibility.NEVER
+                )
 
                 val currentFirstLoad = firstLoad
 
                 if (currentFirstLoad) {
                     setTileSource(TileSourceFactory.DEFAULT_TILE_SOURCE)
 
-                    post {
-                        zoomToBoundingBox(shownCoordinates.toBoundingBox(), false)
-                    }
+                    post { zoomToBoundingBox(shownCoordinates.toBoundingBox(), false) }
                     firstLoad = false
-                }
-                else {
+                } else {
                     val currentZoom = zoomLevel
                     val currentCenter = center
                     post {
@@ -726,129 +834,117 @@ fun MapHistoryView_Old(
             }
             // Update MapView if needed
         }
-    ).also { view ->
-        DisposableEffect(Unit) {
-            onDispose {
-            }
-        }
+    )
+        .also { view -> DisposableEffect(Unit) { onDispose {} } }
 
-    }
-
-    if (isSelected) Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .requiredHeight(288.dp),
-    ) {
-        Surface(
-            shape = RoundedCornerShape(32.dp),
-            shadowElevation = 1.dp,
+    if (isSelected)
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp)
+                .requiredHeight(288.dp),
         ) {
-            Row(
+            Surface(
+                shape = RoundedCornerShape(32.dp),
+                shadowElevation = 1.dp,
                 modifier = Modifier
-                    .padding(start = 8.dp)
-                    .padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .fillMaxWidth()
+                    .padding(8.dp)
             ) {
-                val infoScrollState = rememberScrollState()
                 Row(
-                    Modifier.weight(1f)
+                    modifier = Modifier
+                        .padding(start = 8.dp)
+                        .padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(
-                        Modifier
-                            .horizontalScroll(infoScrollState),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            painterResource(R.drawable.ic_schedule),
-                            contentDescription = "Time",
-                            modifier = Modifier.padding(end = 8.dp),
-                            tint = Color.Gray
-                        )
-                        Text(
-                            selectedTime,
-                            color = Color.Gray
-                        )
-
-                        Box(modifier = Modifier.width(16.dp))
-
-                        Icon(
-                            painterResource(R.drawable.ic_speed),
-                            contentDescription = "Speed",
-                            modifier = Modifier.padding(end = 8.dp),
-                            tint = Color.Gray
-                        )
-                        Text(
-                            "$selectedSpeed Km/h",
-                            color = Color.Gray
-                        )
-
-                        Box(modifier = Modifier.width(16.dp))
-
-                        Button(
-                            onClick = handler@{
-                                val location = locations[selectedFirstKey]
-                                val stringLocation = location?.toString()
-                                if (stringLocation == null) {
-                                    Toast.makeText(
-                                        context,
-                                        "Selected coordinate unknown",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                    return@handler
-                                }
-                                val gmmIntentUri =
-                                    Uri.parse("geo:$stringLocation?q=$stringLocation") // Replace with your latitude & longitude
-                                val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
-                                mapIntent.setPackage("com.google.android.apps.maps")
-
-                                if (mapIntent.resolveActivity(context.packageManager) != null) {
-                                    context.startActivity(mapIntent)
-                                } else {
-                                    Toast.makeText(
-                                        context,
-                                        "Google Maps is not installed",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            }
+                    val infoScrollState = rememberScrollState()
+                    Row(Modifier.weight(1f)) {
+                        Row(
+                            Modifier.horizontalScroll(infoScrollState),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                painterResource(R.drawable.ic_location_filled),
-                                contentDescription = "Location",
+                                painterResource(R.drawable.ic_schedule),
+                                contentDescription = "Time",
                                 modifier = Modifier.padding(end = 8.dp),
+                                tint = Color.Gray
                             )
-                            Text("Open")
+                            Text(selectedTime, color = Color.Gray)
+
+                            Box(modifier = Modifier.width(16.dp))
+
+                            Icon(
+                                painterResource(R.drawable.ic_speed),
+                                contentDescription = "Speed",
+                                modifier = Modifier.padding(end = 8.dp),
+                                tint = Color.Gray
+                            )
+                            Text("$selectedSpeed Km/h", color = Color.Gray)
+
+                            Box(modifier = Modifier.width(16.dp))
+
+                            Button(
+                                onClick = handler@{
+                                    val location = locations[selectedFirstKey]
+                                    val stringLocation = location?.toString()
+                                    if (stringLocation == null) {
+                                        Toast.makeText(
+                                            context,
+                                            "Selected coordinate unknown",
+                                            Toast.LENGTH_SHORT
+                                        )
+                                            .show()
+                                        return@handler
+                                    }
+                                    val gmmIntentUri =
+                                        Uri.parse(
+                                            "geo:$stringLocation?q=$stringLocation"
+                                        ) // Replace with your latitude &
+                                    // longitude
+                                    val mapIntent =
+                                        Intent(Intent.ACTION_VIEW, gmmIntentUri)
+                                    mapIntent.setPackage(
+                                        "com.google.android.apps.maps"
+                                    )
+
+                                    if (mapIntent.resolveActivity(
+                                            context.packageManager
+                                        ) != null
+                                    ) {
+                                        context.startActivity(mapIntent)
+                                    } else {
+                                        Toast.makeText(
+                                            context,
+                                            "Google Maps is not installed",
+                                            Toast.LENGTH_SHORT
+                                        )
+                                            .show()
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    painterResource(R.drawable.ic_location_filled),
+                                    contentDescription = "Location",
+                                    modifier = Modifier.padding(end = 8.dp),
+                                )
+                                Text("Open")
+                            }
                         }
                     }
-                }
-                IconButton(
-                    onClick = {
-                        isSelected = false
+                    IconButton(onClick = { isSelected = false }) {
+                        Icon(Icons.Rounded.Close, "Close")
                     }
-                ) {
-                    Icon(Icons.Rounded.Close, "Close")
                 }
             }
         }
-    }
 
-    Surface(
-        modifier = Modifier
-            .requiredHeight(132.dp)
-    ) {
+    Surface(modifier = Modifier.requiredHeight(132.dp)) {
         Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .fillMaxWidth()
-                .padding(
-                    bottom = 64.dp,
-                    start = 8.dp,
-                    end = 8.dp
-                ),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .fillMaxWidth()
+                    .padding(bottom = 64.dp, start = 8.dp, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
@@ -862,59 +958,56 @@ fun MapHistoryView_Old(
                 )
             }
             Box(modifier = Modifier.width(8.dp))
-            if (!cutMode) Row(
-                modifier = Modifier
-                    .horizontalScroll(bottomBarScrollState)
-                    .padding(start = 8.dp)
-                    .weight(1f)
-            ) {
-                val onShowPointsClicked: () -> Unit = {
-                    showPoints = !showPoints
-                    needUpdate = true
-                }
-                val onShowMovementSpeedClicked: () -> Unit = {
-                    showData = !showData
-                    needUpdate = true
-                }
-                Button(
-                    onClick = onShowPointsClicked,
-                    colors =
-                        if (showPoints) ButtonDefaults.buttonColors()
-                        else ButtonDefaults.textButtonColors(),
-                    contentPadding = PaddingValues(8.dp)
+            if (!cutMode)
+                Row(
+                    modifier =
+                        Modifier
+                            .horizontalScroll(bottomBarScrollState)
+                            .padding(start = 8.dp)
+                            .weight(1f)
                 ) {
-                    Text("Show Point")
+                    val onShowPointsClicked: () -> Unit = {
+                        showPoints = !showPoints
+                        needUpdate = true
+                    }
+                    val onShowMovementSpeedClicked: () -> Unit = {
+                        showData = !showData
+                        needUpdate = true
+                    }
+                    Button(
+                        onClick = onShowPointsClicked,
+                        colors =
+                            if (showPoints) ButtonDefaults.buttonColors()
+                            else ButtonDefaults.textButtonColors(),
+                        contentPadding = PaddingValues(8.dp)
+                    ) { Text("Show Point") }
+                    Box(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = onShowMovementSpeedClicked,
+                        colors =
+                            if (showData) ButtonDefaults.buttonColors()
+                            else ButtonDefaults.textButtonColors(),
+                        contentPadding = PaddingValues(8.dp)
+                    ) { Text("Show Data") }
                 }
-                Box(modifier = Modifier.width(8.dp))
-                Button(
-                    onClick = onShowMovementSpeedClicked,
-                    colors =
-                        if (showData) ButtonDefaults.buttonColors()
-                        else ButtonDefaults.textButtonColors(),
-                    contentPadding = PaddingValues(8.dp)
+            else
+                Row(
+                    modifier =
+                        Modifier
+                            .horizontalScroll(bottomBarScrollState)
+                            .padding(start = 8.dp)
+                            .weight(1f)
                 ) {
-                    Text("Show Data")
+                    Button(
+                        onClick = undoCutSelection,
+                        colors = ButtonDefaults.buttonColors(),
+                        contentPadding = PaddingValues(8.dp),
+                        enabled = cutTime1 != null || cutTime2 != null
+                    ) { Text("Undo Selection") }
                 }
-            }
-            else Row(
-                modifier = Modifier
-                    .horizontalScroll(bottomBarScrollState)
-                    .padding(start = 8.dp)
-                    .weight(1f)
-            ) {
-                Button(
-                    onClick = undoCutSelection,
-                    colors = ButtonDefaults.buttonColors(),
-                    contentPadding = PaddingValues(8.dp),
-                    enabled = cutTime1 != null || cutTime2 != null
-                ) {
-                    Text("Undo Selection")
-                }
-            }
         }
     }
-    if (updateRemaining > 0)
-        updateRemaining -= 1
+    if (updateRemaining > 0) updateRemaining -= 1
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -955,120 +1048,231 @@ fun EventLocationView_New(eventId: String, startAsCutMode: Boolean = false) {
                             if (cutMode) "Cut Event" else "Event Map",
                             style = MaterialTheme.typography.headlineSmall
                         )
-                    else
-                        ComponentPlaceholder(Modifier.size(128.dp, 16.dp))
+                    else ComponentPlaceholder(Modifier.size(128.dp, 16.dp))
                 },
                 navigationIcon = {
-                    IconButton(
-                        onClick = {
-                            context.getActivity()!!.finish()
-                        }
-                    ) {
+                    IconButton(onClick = { context.getActivity()!!.finish() }) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
                     }
                 },
                 actions = {
-                    if (eventData == null) ComponentPlaceholder(Modifier.size(24.dp).padding(8.dp))
-                    if (cutMode && eventData is EventRange) IconButton(
-                        onClick = {
-                            val event = EventRange(
-                                title = "Cut of ${eventData.title}",
-                                description = eventData.description +
-                                        if (eventData.description.isBlank()) "" else "\n" +
-                                                "Cut of ${eventData.title}",
-                                time = eventLocations[cutStart!!].time,
-                                favorite = eventData.favorite,
-                                tags = eventData.tags,
-                                end = eventLocations[cutEnd!!].time,
-                                locationDescriptions = eventData.locationDescriptions.keys
-                                    .mapIndexed { a, b -> a to b }
-                                    .associate { (idx, key) -> idx to (key to eventData.locationDescriptions[key]!!) }
-                                    .filter {
-                                        it.key >= cutStart!! && it.key <= cutEnd!!
+                    if (eventData == null)
+                        ComponentPlaceholder(Modifier
+                            .size(24.dp)
+                            .padding(8.dp))
+                    if (cutMode && eventData is EventRange)
+                        IconButton(
+                            onClick = {
+                                val event =
+                                    EventRange(
+                                        title =
+                                            "Cut of ${eventData.title}",
+                                        description =
+                                            eventData
+                                                .description +
+                                                    if (eventData
+                                                            .description
+                                                            .isBlank()
+                                                    )
+                                                        ""
+                                                    else
+                                                        "\n" +
+                                                                "Cut of ${eventData.title}",
+                                        time =
+                                            eventLocations[
+                                                cutStart!!]
+                                                .time,
+                                        favorite =
+                                            eventData.favorite,
+                                        tags = eventData.tags,
+                                        end =
+                                            eventLocations[
+                                                cutEnd!!]
+                                                .time,
+                                        locationDescriptions =
+                                            eventData
+                                                .locationDescriptions
+                                                .keys
+                                                .mapIndexed { a,
+                                                              b ->
+                                                    a to b
+                                                }
+                                                .associate { (
+                                                                 idx,
+                                                                 key)
+                                                    ->
+                                                    idx to
+                                                            (key to
+                                                                    eventData
+                                                                        .locationDescriptions[
+                                                                        key]!!)
+                                                }
+                                                .filter {
+                                                    it.key >=
+                                                            cutStart!! &&
+                                                            it.key <=
+                                                            cutEnd!!
+                                                }
+                                                .map {
+                                                    it.value
+                                                }
+                                                .toMap()
+                                                .toMutableMap(),
+                                        metadata =
+                                            eventData.metadata,
+                                    )
+                                        .apply {
+                                            metadata["original_event_id"] =
+                                                eventData.id
+                                            metadata[
+                                                "original_event_time"] =
+                                                eventData
+                                                    .time
+                                                    .toOffsetDateTime()
+                                                    .toString()
+                                            metadata["original_event_end"] =
+                                                eventData
+                                                    .end
+                                                    .toOffsetDateTime()
+                                                    .toString()
+                                            if (metadata["root_event_id"] ==
+                                                null
+                                            )
+                                                metadata[
+                                                    "root_event_id"] =
+                                                    eventData.id
+                                            if (metadata[
+                                                    "root_event_time"] ==
+                                                null
+                                            )
+                                                metadata[
+                                                    "root_event_time"] =
+                                                    eventData
+                                                        .time
+                                                        .toOffsetDateTime()
+                                                        .toString()
+                                            if (metadata[
+                                                    "root_event_end"] ==
+                                                null
+                                            )
+                                                metadata[
+                                                    "root_event_end"] =
+                                                    eventData
+                                                        .end
+                                                        .toOffsetDateTime()
+                                                        .toString()
+                                        }
+                                val locationFile =
+                                    createLocationFile(context, event.time)
+                                val locationsData =
+                                    eventLocations
+                                        .withIndex()
+                                        .filter {
+                                            it.index >= cutStart!! &&
+                                                    it.index <= cutEnd!!
+                                        }
+                                        .map { it.value }
+                                locationFile.delete()
+                                locationsData.appendToLocationFile(locationFile)
+                                event.locationPath =
+                                    locationFile.absolutePath.removePrefix(
+                                        File(context.filesDir, "locations")
+                                            .absolutePath + "/"
+                                    )
+
+                                if (eventData.audio != null) {
+                                    val audioFile =
+                                        File(
+                                            context.filesDir,
+                                            "audio/${eventData.audio}"
+                                        )
+                                    audioFile.parentFile?.let {
+                                        val id = generateEventId()
+                                        val targetPath = "${it.name}/$id.m4a"
+                                        val targetFile = File(it, "/$id.m4a")
+                                        Log.d(
+                                            "NanHistoryDebug",
+                                            "AUDIO COPY | FROM: ${audioFile.absolutePath} | TO: ${targetFile.absolutePath}"
+                                        )
+                                        audioFile.copyTo(targetFile)
+
+                                        event.audio = targetPath
                                     }
-                                    .map { it.value }.toMap()
-                                    .toMutableMap(),
-                                metadata = eventData.metadata,
-                            ).apply {
-                                metadata["original_event_id"] = eventData.id
-                                metadata["original_event_time"] = eventData.time.toOffsetDateTime().toString()
-                                metadata["original_event_end"] = eventData.end.toOffsetDateTime().toString()
-                                if (metadata["root_event_id"] == null)
-                                    metadata["root_event_id"] = eventData.id
-                                if (metadata["root_event_time"] == null)
-                                    metadata["root_event_time"] = eventData.time.toOffsetDateTime().toString()
-                                if (metadata["root_event_end"] == null)
-                                    metadata["root_event_end"] = eventData.end.toOffsetDateTime().toString()
-                            }
-                            val locationFile = createLocationFile(context, event.time)
-                            val locationsData = eventLocations.withIndex().filter {
-                                it.index >= cutStart!! && it.index <= cutEnd!!
-                            }.map { it.value }
-                            locationFile.delete()
-                            locationsData.appendToLocationFile(locationFile)
-                            event.locationPath = locationFile.absolutePath.removePrefix(File(context.filesDir, "locations").absolutePath + "/")
-
-                            if (eventData.audio != null) {
-                                val audioFile = File(context.filesDir, "audio/${eventData.audio}")
-                                audioFile.parentFile?.let {
-                                    val id = generateEventId()
-                                    val targetPath = "${it.name}/$id.m4a"
-                                    val targetFile = File(it, "/$id.m4a")
-                                    Log.d("NanHistoryDebug", "AUDIO COPY | FROM: ${audioFile.absolutePath} | TO: ${targetFile.absolutePath}")
-                                    audioFile.copyTo(targetFile)
-
-                                    event.audio = targetPath
                                 }
-                            }
-                            if (eventData.validateSignature(context = context)) event.generateSignature(context, true)
+                                if (eventData.validateSignature(context = context))
+                                    event.generateSignature(context, true)
 
-                            val db = AppDatabase.getInstance(context)
-                            val dao = db.appDao()
+                                val db = AppDatabase.getInstance(context)
+                                val dao = db.appDao()
 
-                            scope.launch { dao.insertEvent(event.toEventEntity()) }
+                                scope.launch {
+                                    dao.insertEvent(event.toEventEntity())
+                                }
 
-                            cutMode = false
-                            Toast.makeText(context, "${event.title} has been saved", Toast.LENGTH_SHORT).show()
+                                cutMode = false
+                                Toast.makeText(
+                                    context,
+                                    "${event.title} has been saved",
+                                    Toast.LENGTH_SHORT
+                                )
+                                    .show()
 
-                            val resultIntent = Intent().apply {
-                                putExtra("path", getFilePathFromDate(event.time.toLocalDate()))
-                            }
+                                val resultIntent =
+                                    Intent().apply {
+                                        putExtra(
+                                            "path",
+                                            getFilePathFromDate(
+                                                event.time.toLocalDate()
+                                            )
+                                        )
+                                    }
 
-                            context.getActivity()?.setResult(2, resultIntent)
-                            if (startAsCutMode) context.getActivity()?.finish()
-                        },
-                        enabled = cutStart != null && cutEnd != null
-                    ) {
-                        Icon(
-                            Icons.Rounded.Check,
-                            contentDescription = "Confirm",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    if (eventData is EventRange) IconButton(
-                        onClick = { cutMode = !cutMode },
-                        enabled = !recording
-                    ) {
-                        if (cutMode) Icon(
-                            Icons.Rounded.Close,
-                            "Exit Cut Mode",
-                            tint = if (cutMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                        ) else Icon(
-                            painterResource(R.drawable.ic_content_cut),
-                            "Exit Cut Mode",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                                context.getActivity()?.setResult(2, resultIntent)
+                                if (startAsCutMode) context.getActivity()?.finish()
+                            },
+                            enabled = cutStart != null && cutEnd != null
+                        ) {
+                            Icon(
+                                Icons.Rounded.Check,
+                                contentDescription = "Confirm",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    if (eventData is EventRange)
+                        IconButton(
+                            onClick = { cutMode = !cutMode },
+                            enabled = !recording
+                        ) {
+                            if (cutMode)
+                                Icon(
+                                    Icons.Rounded.Close,
+                                    "Exit Cut Mode",
+                                    tint =
+                                        if (cutMode)
+                                            MaterialTheme.colorScheme
+                                                .error
+                                        else
+                                            MaterialTheme.colorScheme
+                                                .primary
+                                )
+                            else
+                                Icon(
+                                    painterResource(R.drawable.ic_content_cut),
+                                    "Exit Cut Mode",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                        }
                 },
                 colors = TopAppBarDefaults.topAppBarColors()
             )
         }
     ) { paddingValues ->
         Column(
-            modifier = Modifier
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .padding(paddingValues)
-                .fillMaxSize()
+            modifier =
+                Modifier
+                    .nestedScroll(scrollBehavior.nestedScrollConnection)
+                    .padding(paddingValues)
+                    .fillMaxSize()
         ) {
             if (locationAvailable) {
                 MapHistoryView_New(
@@ -1085,18 +1289,20 @@ fun EventLocationView_New(eventId: String, startAsCutMode: Boolean = false) {
                     },
                     cutMode = cutMode
                 )
-            }
-            else ComponentPlaceholder(
-                Modifier
-                    .weight(1f)
-                    .padding(8.dp)
-            )
+            } else ComponentPlaceholder(Modifier
+                .weight(1f)
+                .padding(8.dp))
         }
     }
 }
 
 enum class DataMode {
-    SPEED, ACCELERATION, TIME, ACCURACY, BEARING, ALTITUDE
+    SPEED,
+    ACCELERATION,
+    TIME,
+    ACCURACY,
+    BEARING,
+    ALTITUDE
 }
 
 @Composable
@@ -1108,9 +1314,7 @@ fun MapHistoryView_New(
 ) {
     val context = LocalContext.current
 
-    val geoPoints = locations.map {
-        GeoPoint(it.location.latitude, it.location.longitude)
-    }
+    val geoPoints = locations.map { GeoPoint(it.location.latitude, it.location.longitude) }
 
     val bottomBarScrollState = rememberScrollState()
 
@@ -1122,7 +1326,9 @@ fun MapHistoryView_New(
 
     var showPoints by rememberSaveable { mutableStateOf(false) }
     var showData by rememberSaveable { mutableStateOf(false) }
-    var dataMode by rememberSaveable { mutableStateOf<DataMode>(DataMode.SPEED) } // DataMode.SPEED, DataMode.ACCELERATION, DataMode.TIME
+    var dataMode by rememberSaveable {
+        mutableStateOf<DataMode>(DataMode.SPEED)
+    } // DataMode.SPEED, DataMode.ACCELERATION, DataMode.TIME
 
     var needUpdate by remember { mutableStateOf(false) }
     var firstLoad by remember { mutableStateOf(true) }
@@ -1148,54 +1354,63 @@ fun MapHistoryView_New(
 
     val shownCoordinates =
         if (geoPoints.size > 2) {
-            val coordinates = geoPoints.dropLast(1).mapIndexed { a, b -> a to b }.filter {
-                it.first % (2.0.pow((15 - zoomLevel.roundToInt()))) == 0.0
-            }.toMap().toMutableMap()
+            val coordinates =
+                geoPoints
+                    .dropLast(1)
+                    .mapIndexed { a, b -> a to b }
+                    .filter {
+                        it.first % (2.0.pow((15 - zoomLevel.roundToInt()))) == 0.0
+                    }
+                    .toMap()
+                    .toMutableMap()
             coordinates[locations.size - 1] = geoPoints.last()
             coordinates
-        }
-        else geoPoints.withIndex().associate { it.index to it.value }
+        } else geoPoints.withIndex().associate { it.index to it.value }
 
     val shownLocations =
         if (geoPoints.size > 2) {
-            val coordinates = locations.dropLast(1).mapIndexed { a, b -> a to b }.filter {
-                it.first % (2.0.pow((15 - zoomLevel.roundToInt()))) == 0.0
-            }.toMap().toMutableMap()
+            val coordinates =
+                locations
+                    .dropLast(1)
+                    .mapIndexed { a, b -> a to b }
+                    .filter {
+                        it.first % (2.0.pow((15 - zoomLevel.roundToInt()))) == 0.0
+                    }
+                    .toMap()
+                    .toMutableMap()
             coordinates[locations.size - 1] = locations.last()
             coordinates
-        }
-        else locations.withIndex().associate { it.index to it.value }
+        } else locations.withIndex().associate { it.index to it.value }
 
     var inMaxDetail by remember { mutableStateOf(false) }
     val maxDetail = shownCoordinates.size == geoPoints.size
 
     val screenDpi = LocalDensity.current.run { 1.dp.toPx() }
 
-    var updateMap = { }
+    var updateMap = {}
 
     val updateCutSelection = {
         onPointsSelected(cutIndex1, cutIndex2)
-        if (cutIndex1 == null || cutIndex2 == null) updateMap()
-        else needUpdate = true
+        if (cutIndex1 == null || cutIndex2 == null) updateMap() else needUpdate = true
     }
 
-    val setCutPoint = cutPointSetter@{ index: Int ->
-        if (index == cutIndex1 || index == cutIndex2) return@cutPointSetter
+    val setCutPoint =
+        cutPointSetter@{ index: Int ->
+            if (index == cutIndex1 || index == cutIndex2) return@cutPointSetter
 
-        if (cutIndex1 == null) cutIndex1 = index
-        else if (cutIndex2 == null) cutIndex2 = index
-        else return@cutPointSetter
+            if (cutIndex1 == null) cutIndex1 = index
+            else if (cutIndex2 == null) cutIndex2 = index else return@cutPointSetter
 
-        updateCutSelection()
-    }
+            updateCutSelection()
+        }
 
-    val undoCutSelection = undo@{
-        if (cutIndex2 != null) cutIndex2 = null
-        else if (cutIndex1 != null) cutIndex1 = null
-        else return@undo
+    val undoCutSelection =
+        undo@{
+            if (cutIndex2 != null) cutIndex2 = null
+            else if (cutIndex1 != null) cutIndex1 = null else return@undo
 
-        updateCutSelection()
-    }
+            updateCutSelection()
+        }
 
     if (cutMode != cutModeCheck) {
         cutModeCheck = cutMode
@@ -1204,254 +1419,377 @@ fun MapHistoryView_New(
         needUpdate = true
     }
 
-    updateMap = updater@{
-        if (mapViewObj == null) return@updater
+    updateMap =
+        updater@{
+            if (mapViewObj == null) return@updater
 
-        mapViewObj?.overlays?.clear()
+            mapViewObj?.overlays?.clear()
 
-        val polyline = Polyline(mapViewObj).apply {
-            setPoints(shownCoordinates.values.toList())
-            outlinePaint.color = if (!cutMode) android.graphics.Color.BLUE else android.graphics.Color.GRAY
-            outlinePaint.strokeWidth = 3f * screenDpi
-            outlinePaint.strokeCap = Paint.Cap.ROUND
-        }
-        val polylineBorder = Polyline(mapViewObj).apply {
-            setPoints(shownCoordinates.values.toList())
-            outlinePaint.color = android.graphics.Color.rgb(0, 0, 20)
-            outlinePaint.strokeWidth = 4f * screenDpi
-            outlinePaint.strokeCap = Paint.Cap.ROUND
-        }
-        val markerStart = Marker(mapViewObj).apply {
-            position = geoPoints.first()
-            icon = context.getDrawable(R.drawable.ic_location_start)
-            setOnMarkerClickListener { _, _ ->
-                if (cutMode) setCutPoint(0)
-                true
-            }
-        }
-        val markerEnd = Marker(mapViewObj).apply {
-            position = geoPoints.last()
-            icon = context.getDrawable(R.drawable.ic_location_end)
-            setOnMarkerClickListener { _, _ ->
-                setCutPoint(locations.size - 1)
-                true
-            }
-        }
+            val polyline =
+                Polyline(mapViewObj).apply {
+                    setPoints(shownCoordinates.values.toList())
+                    outlinePaint.color =
+                        if (!cutMode) android.graphics.Color.BLUE
+                        else android.graphics.Color.GRAY
+                    outlinePaint.strokeWidth = 3f * screenDpi
+                    outlinePaint.strokeCap = Paint.Cap.ROUND
+                }
+            val polylineBorder =
+                Polyline(mapViewObj).apply {
+                    setPoints(shownCoordinates.values.toList())
+                    outlinePaint.color = android.graphics.Color.rgb(0, 0, 20)
+                    outlinePaint.strokeWidth = 4f * screenDpi
+                    outlinePaint.strokeCap = Paint.Cap.ROUND
+                }
+            val markerStart =
+                Marker(mapViewObj).apply {
+                    position = geoPoints.first()
+                    icon = context.getDrawable(R.drawable.ic_location_start)
+                    setOnMarkerClickListener { _, _ ->
+                        if (cutMode) setCutPoint(0)
+                        true
+                    }
+                }
+            val markerEnd =
+                Marker(mapViewObj).apply {
+                    position = geoPoints.last()
+                    icon = context.getDrawable(R.drawable.ic_location_end)
+                    setOnMarkerClickListener { _, _ ->
+                        setCutPoint(locations.size - 1)
+                        true
+                    }
+                }
 
-        mapViewObj?.overlays?.add(polylineBorder)
-        if (!showData || cutMode) {
-            mapViewObj?.overlays?.add(polyline)
-        }
-        else {
-            shownLocations.map { it.value }
-                .getLocationData()
-                .forEach {
-                    val indices = shownLocations.filter { location ->
-                        location.value.time == it.start || location.value.time == it.end
-                    }.map { location -> location.key }
-
-                    if (dataMode in listOf(DataMode.SPEED, DataMode.ACCELERATION, DataMode.TIME)) {
-                        val coloredPolyline = Polyline(mapViewObj).apply {
-                            setPoints(it.points.map { point -> point.toGeoPoint() } )
-                            outlinePaint.color = when (dataMode) {
-                                DataMode.SPEED -> calculateColor(it.speed.roundToInt()).toArgb()
-                                DataMode.ACCELERATION -> calculateAccelerationColor(it.acceleration.roundToInt()).toArgb()
-                                DataMode.TIME -> calculateTimeColor(
-                                    it.start,
-                                    it.end,
-                                    locations.first().time,
-                                    locations.last().time).toArgb()
-                                else -> calculateColor(it.speed.roundToInt()).toArgb()
+            mapViewObj?.overlays?.add(polylineBorder)
+            if (!showData || cutMode) {
+                mapViewObj?.overlays?.add(polyline)
+            } else {
+                shownLocations.map { it.value }.getLocationData().forEach {
+                    val indices =
+                        shownLocations
+                            .filter { location ->
+                                location.value.time == it.start ||
+                                        location.value.time == it.end
                             }
-                            outlinePaint.strokeWidth = 3f * screenDpi
-                            outlinePaint.strokeCap = Paint.Cap.ROUND
+                            .map { location -> location.key }
 
-                            setOnClickListener { _, _, _ ->
-                                selectedTime = "${TimeFormatterWithSecond.format(it.start)} - ${TimeFormatterWithSecond.format(it.end)}"
-                                selectedSpeed = it.speed.roundToInt()
-                                selectedFirstKey = indices.first()
-                                selectedSecondKey = indices.last()
-                                isSelected = true
-                                updateRemaining = 1000000
-                                updateMap()
-                                true
+                    if (dataMode in listOf(DataMode.SPEED, DataMode.ACCELERATION, DataMode.TIME)
+                    ) {
+                        val coloredPolyline =
+                            Polyline(mapViewObj).apply {
+                                setPoints(it.points.map { point -> point.toGeoPoint() })
+                                outlinePaint.color =
+                                    when (dataMode) {
+                                        DataMode.SPEED ->
+                                            calculateColor(it.speed.roundToInt())
+                                                .toArgb()
+
+                                        DataMode.ACCELERATION ->
+                                            calculateAccelerationColor(
+                                                it.acceleration
+                                                    .roundToInt()
+                                            )
+                                                .toArgb()
+
+                                        DataMode.TIME ->
+                                            calculateTimeColor(
+                                                it.start,
+                                                it.end,
+                                                locations.first().time,
+                                                locations.last().time
+                                            )
+                                                .toArgb()
+
+                                        else ->
+                                            calculateColor(it.speed.roundToInt())
+                                                .toArgb()
+                                    }
+                                outlinePaint.strokeWidth = 3f * screenDpi
+                                outlinePaint.strokeCap = Paint.Cap.ROUND
+
+                                setOnClickListener { _, _, _ ->
+                                    selectedTime =
+                                        "${TimeFormatterWithSecond.format(it.start)} - ${
+                                            TimeFormatterWithSecond.format(
+                                                it.end
+                                            )
+                                        }"
+                                    selectedSpeed = it.speed.roundToInt()
+                                    selectedFirstKey = indices.first()
+                                    selectedSecondKey = indices.last()
+                                    isSelected = true
+                                    updateRemaining = 1000000
+                                    updateMap()
+                                    true
+                                }
                             }
-                        }
 
                         mapViewObj?.overlays?.add(coloredPolyline)
-                    }
-                    else {
-                        val points = it.locationData.map { loc -> loc.location }.let { locationData ->
-                            listOf(
-                                locationData.first().toGeoPoint(),
-                                GeoPoint(
-                                    (locationData.first().latitude + locationData.last().latitude) / 2.0,
-                                    (locationData.first().longitude + locationData.last().longitude) / 2.0,
-                                ),
-                                locationData.last().toGeoPoint()
-                            )
-                        }
-
-                        val coloredPolyline1 = Polyline(mapViewObj).apply {
-                            setPoints(points.take(2))
-                            outlinePaint.color = when (dataMode) {
-                                DataMode.ACCURACY -> calculateAccuracyColor(it.locationData.first().accuracy).toArgb()
-                                DataMode.BEARING -> calculateAccelerationColor(it.acceleration.roundToInt()).toArgb()
-                                DataMode.ALTITUDE -> calculateAltitudeColor(it.locationData.first().altitude).toArgb()
-                                else -> calculateColor(it.speed.roundToInt()).toArgb()
+                    } else {
+                        val points =
+                            it.locationData.map { loc -> loc.location }.let { locationData
+                                ->
+                                listOf(
+                                    locationData.first().toGeoPoint(),
+                                    GeoPoint(
+                                        (locationData.first().latitude +
+                                                locationData.last().latitude) / 2.0,
+                                        (locationData.first().longitude +
+                                                locationData.last().longitude) /
+                                                2.0,
+                                    ),
+                                    locationData.last().toGeoPoint()
+                                )
                             }
-                            outlinePaint.strokeWidth = 3f * screenDpi
-                            outlinePaint.strokeCap = Paint.Cap.ROUND
 
-                            setOnClickListener { _, _, _ ->
-                                selectedTime = "${TimeFormatterWithSecond.format(it.start)} - ${TimeFormatterWithSecond.format(it.end)}"
-                                selectedSpeed = it.speed.roundToInt()
-                                selectedFirstKey = indices.first()
-                                selectedSecondKey = indices.last()
-                                isSelected = true
-                                updateRemaining = 1000000
-                                updateMap()
-                                true
-                            }
-                        }
+                        val coloredPolyline1 =
+                            Polyline(mapViewObj).apply {
+                                setPoints(points.take(2))
+                                outlinePaint.color = when (dataMode) {
+                                    DataMode.ACCURACY -> calculateAccuracyColor(
+                                        it.locationData.first().accuracy
+                                    ).toArgb()
 
-                        val coloredPolyline2 = Polyline(mapViewObj).apply {
-                            setPoints(points.takeLast(2))
-                            outlinePaint.color = when (dataMode) {
-                                DataMode.ACCURACY -> calculateAccuracyColor(it.locationData.last().accuracy).toArgb()
-                                DataMode.BEARING -> calculateAccelerationColor(it.acceleration.roundToInt()).toArgb()
-                                DataMode.ALTITUDE -> calculateAltitudeColor(it.locationData.last().altitude).toArgb()
-                                else -> calculateColor(it.speed.roundToInt()).toArgb()
-                            }
-                            outlinePaint.strokeWidth = 3f * screenDpi
-                            outlinePaint.strokeCap = Paint.Cap.ROUND
+                                    DataMode.BEARING -> Color.hsl(
+                                        it.locationData.first().bearing ?: 0f,
+                                        1f,
+                                        0.5f
+                                    ).toArgb()
 
-                            setOnClickListener { _, _, _ ->
-                                selectedTime = "${TimeFormatterWithSecond.format(it.start)} - ${TimeFormatterWithSecond.format(it.end)}"
-                                selectedSpeed = it.speed.roundToInt()
-                                selectedFirstKey = indices.first()
-                                selectedSecondKey = indices.last()
-                                isSelected = true
-                                updateRemaining = 1000000
-                                updateMap()
-                                true
+                                    DataMode.ALTITUDE -> calculateAltitudeColor(
+                                        it.locationData.first().altitude
+                                    ).toArgb()
+
+                                    else -> calculateColor(it.speed.roundToInt()).toArgb()
+                                }
+                                outlinePaint.strokeWidth = 3f * screenDpi
+                                outlinePaint.strokeCap = Paint.Cap.ROUND
+
+                                setOnClickListener { _, _, _ ->
+                                    selectedTime =
+                                        "${TimeFormatterWithSecond.format(it.start)} - ${
+                                            TimeFormatterWithSecond.format(
+                                                it.end
+                                            )
+                                        }"
+                                    selectedSpeed = it.speed.roundToInt()
+                                    selectedFirstKey = indices.first()
+                                    selectedSecondKey = indices.last()
+                                    isSelected = true
+                                    updateRemaining = 1000000
+                                    updateMap()
+                                    true
+                                }
                             }
-                        }
+
+                        val coloredPolyline2 =
+                            Polyline(mapViewObj).apply {
+                                setPoints(points.takeLast(2))
+                                outlinePaint.color = when (dataMode) {
+                                    DataMode.ACCURACY -> calculateAccuracyColor(
+                                        it.locationData.last().accuracy
+                                    ).toArgb()
+
+                                    DataMode.BEARING -> Color.hsl(
+                                        it.locationData.last().bearing ?: 0f,
+                                        1f,
+                                        0.5f
+                                    ).toArgb()
+
+                                    DataMode.ALTITUDE -> calculateAltitudeColor(
+                                        it.locationData.last().altitude
+                                    ).toArgb()
+
+                                    else -> calculateColor(it.speed.roundToInt()).toArgb()
+                                }
+                                outlinePaint.strokeWidth = 3f * screenDpi
+                                outlinePaint.strokeCap = Paint.Cap.ROUND
+
+                                setOnClickListener { _, _, _ ->
+                                    selectedTime =
+                                        "${TimeFormatterWithSecond.format(it.start)} - ${
+                                            TimeFormatterWithSecond.format(
+                                                it.end
+                                            )
+                                        }"
+                                    selectedSpeed = it.speed.roundToInt()
+                                    selectedFirstKey = indices.first()
+                                    selectedSecondKey = indices.last()
+                                    isSelected = true
+                                    updateRemaining = 1000000
+                                    updateMap()
+                                    true
+                                }
+                            }
 
                         mapViewObj?.overlays?.add(coloredPolyline1)
                         mapViewObj?.overlays?.add(coloredPolyline2)
                     }
                 }
 
-            if (isSelected && mapViewObj != null) {
-                val firstKey = selectedFirstKey
-                val secondKey = selectedSecondKey
+                if (isSelected && mapViewObj != null) {
+                    val firstKey = selectedFirstKey
+                    val secondKey = selectedSecondKey
 
-                val polylinePoints = listOf(
-                    locations[firstKey],
-                    locations[secondKey]
-                ).map { GeoPoint(it.location.latitude, it.location.longitude) }
-
-                mapViewObj?.overlays?.add(
-                    Polyline(mapViewObj).apply {
-                        setPoints(polylinePoints)
-                        outlinePaint.color = Color.DarkGray.toArgb()
-                        outlinePaint.strokeWidth = 7f * screenDpi
-                        outlinePaint.strokeCap = Paint.Cap.ROUND
-                        id = firstKey.toString()
-                    }
-                )
-                mapViewObj?.overlays?.add(
-                    Polyline(mapViewObj).apply {
-                        setPoints(polylinePoints)
-                        outlinePaint.color = when (dataMode) {
-                            DataMode.SPEED -> calculateColor(selectedSpeed).toArgb()
-                            DataMode.ACCELERATION -> calculateAccelerationColor(selectedSpeed).toArgb()
-                            DataMode.TIME -> calculateTimeColor(
-                                locations[selectedFirstKey].time,
-                                locations[selectedSecondKey].time,
-                                locations.first().time,
-                                locations.last().time
-                            ).toArgb()
-                            else -> calculateColor(selectedSpeed).toArgb()
+                    val polylinePoints =
+                        listOf(locations[firstKey], locations[secondKey]).map {
+                            GeoPoint(it.location.latitude, it.location.longitude)
                         }
-                        outlinePaint.strokeWidth = 3.5f * screenDpi
-                        outlinePaint.strokeCap = Paint.Cap.ROUND
-                        id = firstKey.toString()
-                    }
-                )
-            }
-        }
 
-        val currentCutIndex1 = cutIndex1
-        val currentCutIndex2 = cutIndex2
-        if (cutMode && currentCutIndex1 != null && currentCutIndex2 != null) {
-            val startIndex =
-                if (currentCutIndex1 < currentCutIndex2) currentCutIndex1 else currentCutIndex2
-            val endIndex =
-                if (currentCutIndex1 > currentCutIndex2) currentCutIndex1 else currentCutIndex2
-            val selectedArea = mutableListOf<Int>()
-            shownLocations
-                .forEach selectionIterator@{ (index, _) ->
-                    if (index !in startIndex..endIndex)
-                        return@selectionIterator
+                    mapViewObj?.overlays?.add(
+                        Polyline(mapViewObj).apply {
+                            setPoints(polylinePoints)
+                            outlinePaint.color = Color.DarkGray.toArgb()
+                            outlinePaint.strokeWidth = 7f * screenDpi
+                            outlinePaint.strokeCap = Paint.Cap.ROUND
+                            id = firstKey.toString()
+                        }
+                    )
+                    mapViewObj?.overlays?.add(
+                        Polyline(mapViewObj).apply {
+                            setPoints(polylinePoints)
+                            outlinePaint.color =
+                                when (dataMode) {
+                                    DataMode.SPEED ->
+                                        calculateColor(selectedSpeed).toArgb()
+
+                                    DataMode.ACCELERATION ->
+                                        calculateAccelerationColor(selectedSpeed)
+                                            .toArgb()
+
+                                    DataMode.TIME ->
+                                        calculateTimeColor(
+                                            locations[selectedFirstKey]
+                                                .time,
+                                            locations[selectedSecondKey]
+                                                .time,
+                                            locations.first().time,
+                                            locations.last().time
+                                        )
+                                            .toArgb()
+
+                                    else -> calculateColor(selectedSpeed).toArgb()
+                                }
+                            outlinePaint.strokeWidth = 3.5f * screenDpi
+                            outlinePaint.strokeCap = Paint.Cap.ROUND
+                            id = firstKey.toString()
+                        }
+                    )
+                }
+            }
+
+            val currentCutIndex1 = cutIndex1
+            val currentCutIndex2 = cutIndex2
+            if (cutMode && currentCutIndex1 != null && currentCutIndex2 != null) {
+                val startIndex =
+                    if (currentCutIndex1 < currentCutIndex2) currentCutIndex1
+                    else currentCutIndex2
+                val endIndex =
+                    if (currentCutIndex1 > currentCutIndex2) currentCutIndex1
+                    else currentCutIndex2
+                val selectedArea = mutableListOf<Int>()
+                shownLocations.forEach selectionIterator@{ (index, _) ->
+                    if (index !in startIndex..endIndex) return@selectionIterator
                     selectedArea.add(index)
                 }
-            val selectedPolyline = Polyline(mapViewObj).apply {
-                setPoints(selectedArea.map { locations[it].location.toGeoPoint() })
-                outlinePaint.color = android.graphics.Color.BLUE
-                outlinePaint.strokeWidth = 3f * screenDpi
-                outlinePaint.strokeCap = Paint.Cap.ROUND
-            }
-            mapViewObj?.overlays?.add(selectedPolyline)
-        }
-
-
-
-        if (showPoints || cutMode) {
-            if (cutIndex1 == null || cutIndex2 == null)
-                for ((shownKey, shownCoordinate) in shownLocations) {
-                    mapViewObj?.overlays?.add(Marker(mapViewObj).apply {
-                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                        position = shownCoordinate.location.toGeoPoint()
-                        icon = context.getDrawable(R.drawable.ic_map_touch_point)
-
-                        setOnMarkerClickListener { _, _ ->
-                            if (cutMode) setCutPoint(shownKey)
-                            true
-                        }
-                    })
-
-                    if (dataMode == DataMode.ACCURACY && shownCoordinate.accuracy != null && shownCoordinate.accuracy > 15) {
-                        mapViewObj?.overlays?.add(Polygon(mapViewObj).apply {
-                            val accuracyColor = calculateAccuracyColor(shownCoordinate.accuracy)
-                            points = Polygon.pointsAsCircle(
-                                shownCoordinate.location.toGeoPoint(),
-                                shownCoordinate.accuracy.toDouble()
-                            )
-                            fillPaint.color = accuracyColor.copy(alpha = 0.3f).toArgb()
-                            outlinePaint.strokeWidth = 2f
-                            outlinePaint.color = accuracyColor.copy(alpha = 0.5f).toArgb()
-                        })
+                val selectedPolyline =
+                    Polyline(mapViewObj).apply {
+                        setPoints(selectedArea.map { locations[it].location.toGeoPoint() })
+                        outlinePaint.color = android.graphics.Color.BLUE
+                        outlinePaint.strokeWidth = 3f * screenDpi
+                        outlinePaint.strokeCap = Paint.Cap.ROUND
                     }
-                }
-            if (cutIndex1 != null) mapViewObj?.overlays?.add(Marker(mapViewObj).apply {
-                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                position = locations[cutIndex1!!].location.toGeoPoint()
-                icon = context.getDrawable(R.drawable.ic_map_stop_point)
-            })
-            if (cutIndex2 != null) mapViewObj?.overlays?.add(Marker(mapViewObj).apply {
-                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                position = locations[cutIndex2!!].location.toGeoPoint()
-                icon = context.getDrawable(R.drawable.ic_map_stop_point)
-            })
+                mapViewObj?.overlays?.add(selectedPolyline)
+            }
+
+            if (showPoints || cutMode) {
+                if (cutIndex1 == null || cutIndex2 == null)
+                    for ((shownKey, shownCoordinate) in shownLocations) {
+                        mapViewObj?.overlays?.add(
+                            Marker(mapViewObj).apply {
+                                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                                position = shownCoordinate.location.toGeoPoint()
+                                icon =
+                                    context.getDrawable(
+                                        R.drawable.ic_map_touch_point
+                                    )
+
+                                setOnMarkerClickListener { _, _ ->
+                                    if (cutMode) setCutPoint(shownKey)
+                                    true
+                                }
+                            }
+                        )
+
+                        if (dataMode == DataMode.ACCURACY &&
+                            shownCoordinate.accuracy != null &&
+                            shownCoordinate.accuracy > 15
+                        ) {
+                            mapViewObj?.overlays?.add(
+                                Polygon(mapViewObj).apply {
+                                    val accuracyColor =
+                                        calculateAccuracyColor(
+                                            shownCoordinate.accuracy
+                                        )
+                                    points =
+                                        Polygon.pointsAsCircle(
+                                            shownCoordinate.location
+                                                .toGeoPoint(),
+                                            shownCoordinate.accuracy.toDouble()
+                                        )
+                                    fillPaint.color =
+                                        accuracyColor.copy(alpha = 0.3f).toArgb()
+                                    outlinePaint.strokeWidth = 2f
+                                    outlinePaint.color =
+                                        accuracyColor.copy(alpha = 0.5f).toArgb()
+                                }
+                            )
+                        }
+                        if (dataMode == DataMode.BEARING &&
+                            shownCoordinate.bearing != null &&
+                            shownCoordinate.bearingAccuracy != null
+                        ) {
+                            mapViewObj?.overlays?.add(
+                                Polygon(mapViewObj).apply {
+                                    val accuracyColor = Color.hsl(shownCoordinate.bearing, 1f, 0.5f)
+                                    points =
+                                        calculateBearingArcPoints(
+                                            shownCoordinate.location.toGeoPoint(),
+                                            shownCoordinate.bearing,
+                                            shownCoordinate.bearingAccuracy.coerceIn(20f..360f),
+                                            (shownCoordinate.accuracy?.toDouble() ?: 20.0).coerceIn(20.0..360.0)
+                                        )
+                                    fillPaint.color = accuracyColor.copy(alpha = 0.3f).toArgb()
+                                    outlinePaint.strokeWidth = 4f
+                                    outlinePaint.color = 0x00808080
+                                }
+                            )
+                        }
+                    }
+
+                if (cutIndex1 != null)
+                    mapViewObj?.overlays?.add(
+                        Marker(mapViewObj).apply {
+                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                            position = locations[cutIndex1!!].location.toGeoPoint()
+                            icon = context.getDrawable(R.drawable.ic_map_stop_point)
+                        }
+                    )
+                if (cutIndex2 != null)
+                    mapViewObj?.overlays?.add(
+                        Marker(mapViewObj).apply {
+                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                            position = locations[cutIndex2!!].location.toGeoPoint()
+                            icon = context.getDrawable(R.drawable.ic_map_stop_point)
+                        }
+                    )
+            }
+
+            if (shownCoordinates.size > 1) mapViewObj?.overlays?.add(markerStart)
+            mapViewObj?.overlays?.add(markerEnd)
+
+            mapViewObj?.invalidate()
         }
-
-        if (shownCoordinates.size > 1) mapViewObj?.overlays?.add(markerStart)
-        mapViewObj?.overlays?.add(markerEnd)
-
-        mapViewObj?.invalidate()
-    }
 
     if (maxDetail != inMaxDetail) {
         inMaxDetail = maxDetail
@@ -1467,18 +1805,26 @@ fun MapHistoryView_New(
                 MapView(ctx).apply {
                     setMultiTouchControls(true)
 
-                    addMapListener(object : MapListener {
-                        override fun onScroll(event: ScrollEvent?): Boolean {
-                            center = GeoPoint(mapCenter.latitude, mapCenter.longitude)
-                            return true
-                        }
+                    addMapListener(
+                        object : MapListener {
+                            override fun onScroll(event: ScrollEvent?): Boolean {
+                                center =
+                                    GeoPoint(
+                                        mapCenter.latitude,
+                                        mapCenter.longitude
+                                    )
+                                return true
+                            }
 
-                        override fun onZoom(event: ZoomEvent?): Boolean {
-                            zoomLevel = event?.zoomLevel ?: zoomLevel
-                            return true
+                            override fun onZoom(event: ZoomEvent?): Boolean {
+                                zoomLevel = event?.zoomLevel ?: zoomLevel
+                                return true
+                            }
                         }
-                    })
-                    zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
+                    )
+                    zoomController.setVisibility(
+                        CustomZoomButtonsController.Visibility.NEVER
+                    )
 
                     val currentFirstLoad = firstLoad
 
@@ -1486,11 +1832,13 @@ fun MapHistoryView_New(
                         setTileSource(TileSourceFactory.DEFAULT_TILE_SOURCE)
 
                         post {
-                            zoomToBoundingBox(shownCoordinates.map { it.value }.toBoundingBox(), false)
+                            zoomToBoundingBox(
+                                shownCoordinates.map { it.value }.toBoundingBox(),
+                                false
+                            )
                         }
                         firstLoad = false
-                    }
-                    else {
+                    } else {
                         val currentZoom = zoomLevel
                         val currentCenter = center
                         post {
@@ -1515,20 +1863,18 @@ fun MapHistoryView_New(
                     needUpdate = false
                 }
             }
-        ).also { _ ->
-            DisposableEffect(Unit) {
-                onDispose { }
-            }
-        }
+        )
+            .also { _ -> DisposableEffect(Unit) { onDispose {} } }
 
         // Selected Segment Info Card - Overlaid on map
         if (isSelected) {
             Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .align(Alignment.TopCenter),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .align(Alignment.TopCenter),
                 color = MaterialTheme.colorScheme.surfaceContainer,
                 tonalElevation = 4.dp,
                 shadowElevation = 2.dp
@@ -1563,10 +1909,21 @@ fun MapHistoryView_New(
                         InfoChip(
                             icon = painterResource(R.drawable.ic_speed),
                             label = "$selectedSpeed Km/h",
-                            color = calculateColor(selectedSpeed).let { color ->
-                                if (!darkMode) color.copyWith(value = 0.5f, saturation = 1f)
-                                else color.copyWith(value = 1f, saturation = 0.4f)
-                            }.copy(alpha = 0.8f)
+                            color =
+                                calculateColor(selectedSpeed)
+                                    .let { color ->
+                                        if (!darkMode)
+                                            color.copyWith(
+                                                value = 0.5f,
+                                                saturation = 1f
+                                            )
+                                        else
+                                            color.copyWith(
+                                                value = 1f,
+                                                saturation = 0.4f
+                                            )
+                                    }
+                                    .copy(alpha = 0.8f)
                         )
 
                         VerticalDivider(
@@ -1574,15 +1931,16 @@ fun MapHistoryView_New(
                             color = MaterialTheme.colorScheme.outlineVariant
                         )
 
-                        val selectedAltitude = locations.let {
-                            val first = it[selectedFirstKey]
-                            val second = it[selectedSecondKey]
+                        val selectedAltitude =
+                            locations.let {
+                                val first = it[selectedFirstKey]
+                                val second = it[selectedSecondKey]
 
-                            if (first.altitude == null) return@let null
-                            if (second.altitude == null) return@let null
+                                if (first.altitude == null) return@let null
+                                if (second.altitude == null) return@let null
 
-                            "${(first.altitude * 10.0).roundToInt() / 10.0} - ${(second.altitude * 10.0).roundToInt() / 10.0} m"
-                        }
+                                "${(first.altitude * 10.0).roundToInt() / 10.0} - ${(second.altitude * 10.0).roundToInt() / 10.0} m"
+                            }
 
                         if (selectedAltitude != null) {
                             InfoChip(
@@ -1596,15 +1954,16 @@ fun MapHistoryView_New(
                             )
                         }
 
-                        val selectedAccuracy = locations.let {
-                            val first = it[selectedFirstKey]
-                            val second = it[selectedSecondKey]
+                        val selectedAccuracy =
+                            locations.let {
+                                val first = it[selectedFirstKey]
+                                val second = it[selectedSecondKey]
 
-                            if (first.accuracy == null) return@let null
-                            if (second.accuracy == null) return@let null
+                                if (first.accuracy == null) return@let null
+                                if (second.accuracy == null) return@let null
 
-                            "${(first.accuracy * 10.0).roundToInt() / 10.0} - ${(second.accuracy * 10.0).roundToInt() / 10.0} m"
-                        }
+                                "${(first.accuracy * 10.0).roundToInt() / 10.0} - ${(second.accuracy * 10.0).roundToInt() / 10.0} m"
+                            }
 
                         if (selectedAccuracy != null) {
                             InfoChip(
@@ -1627,21 +1986,28 @@ fun MapHistoryView_New(
                                         context,
                                         "Selected coordinate unknown",
                                         Toast.LENGTH_SHORT
-                                    ).show()
+                                    )
+                                        .show()
                                     return@handler
                                 }
-                                val gmmIntentUri = Uri.parse("geo:$stringLocation?q=$stringLocation")
+                                val gmmIntentUri =
+                                    Uri.parse(
+                                        "geo:$stringLocation?q=$stringLocation"
+                                    )
                                 val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
                                 mapIntent.setPackage("com.google.android.apps.maps")
 
-                                if (mapIntent.resolveActivity(context.packageManager) != null) {
+                                if (mapIntent.resolveActivity(context.packageManager) !=
+                                    null
+                                ) {
                                     context.startActivity(mapIntent)
                                 } else {
                                     Toast.makeText(
                                         context,
                                         "Google Maps is not installed",
                                         Toast.LENGTH_SHORT
-                                    ).show()
+                                    )
+                                        .show()
                                 }
                             },
                             modifier = Modifier.height(40.dp),
@@ -1658,10 +2024,7 @@ fun MapHistoryView_New(
                         }
                     }
 
-                    IconButton(
-                        onClick = { isSelected = false },
-                        modifier = Modifier.size(32.dp)
-                    ) {
+                    IconButton(onClick = { isSelected = false }, modifier = Modifier.size(32.dp)) {
                         Icon(
                             Icons.Rounded.Close,
                             "Close",
@@ -1675,18 +2038,17 @@ fun MapHistoryView_New(
 
         // Control Bar - Bottom aligned with modern design
         Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .align(Alignment.BottomCenter),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .align(Alignment.BottomCenter),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 8.dp,
             shadowElevation = 4.dp
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1714,7 +2076,10 @@ fun MapHistoryView_New(
                                 "${round(zoomLevel * 10) / 10.0}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary,
-                                fontWeight = if (maxDetail) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal
+                                fontWeight =
+                                    if (maxDetail)
+                                        androidx.compose.ui.text.font.FontWeight.Bold
+                                    else androidx.compose.ui.text.font.FontWeight.Normal
                             )
                         }
                     }
@@ -1727,26 +2092,40 @@ fun MapHistoryView_New(
                     ) {
                         if (!cutMode) {
                             Surface(
-                                modifier = Modifier
-                                    .height(40.dp)
-                                    .clip(RoundedCornerShape(10.dp)),
-                                color = if (showPoints) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainer,
+                                modifier =
+                                    Modifier
+                                        .height(40.dp)
+                                        .clip(RoundedCornerShape(10.dp)),
+                                color =
+                                    if (showPoints) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.surfaceContainer,
                                 tonalElevation = if (showPoints) 2.dp else 0.dp
                             ) {
                                 Button(
-                                    onClick = { showPoints = !showPoints; needUpdate = true },
+                                    onClick = {
+                                        showPoints = !showPoints
+                                        needUpdate = true
+                                    },
                                     modifier = Modifier
                                         .height(40.dp)
                                         .fillMaxWidth(),
                                     contentPadding = PaddingValues(horizontal = 14.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color.Transparent,
-                                        contentColor = if (showPoints) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                                    ),
-                                    elevation = ButtonDefaults.buttonElevation(
-                                        defaultElevation = 0.dp,
-                                        pressedElevation = 0.dp
-                                    )
+                                    colors =
+                                        ButtonDefaults.buttonColors(
+                                            containerColor = Color.Transparent,
+                                            contentColor =
+                                                if (showPoints)
+                                                    MaterialTheme.colorScheme
+                                                        .onPrimary
+                                                else
+                                                    MaterialTheme.colorScheme
+                                                        .onSurface
+                                        ),
+                                    elevation =
+                                        ButtonDefaults.buttonElevation(
+                                            defaultElevation = 0.dp,
+                                            pressedElevation = 0.dp
+                                        )
                                 ) {
                                     Icon(
                                         painterResource(R.drawable.ic_map_touch_point),
@@ -1760,27 +2139,43 @@ fun MapHistoryView_New(
                             }
 
                             Surface(
-                                modifier = Modifier
-                                    .height(40.dp)
-                                    .clip(RoundedCornerShape(10.dp)),
-                                color = if (showData) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainer,
+                                modifier =
+                                    Modifier
+                                        .height(40.dp)
+                                        .clip(RoundedCornerShape(10.dp)),
+                                color =
+                                    if (showData) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.surfaceContainer,
                                 tonalElevation = if (showData) 2.dp else 0.dp
                             ) {
                                 Row {
                                     Button(
-                                        onClick = { showData = !showData; needUpdate = true },
+                                        onClick = {
+                                            showData = !showData
+                                            needUpdate = true
+                                        },
                                         modifier = Modifier
                                             .height(40.dp)
                                             .fillMaxWidth(),
                                         contentPadding = PaddingValues(horizontal = 14.dp),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = Color.Transparent,
-                                            contentColor = if (showData) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                                        ),
-                                        elevation = ButtonDefaults.buttonElevation(
-                                            defaultElevation = 0.dp,
-                                            pressedElevation = 0.dp
-                                        )
+                                        colors =
+                                            ButtonDefaults.buttonColors(
+                                                containerColor = Color.Transparent,
+                                                contentColor =
+                                                    if (showData)
+                                                        MaterialTheme
+                                                            .colorScheme
+                                                            .onPrimary
+                                                    else
+                                                        MaterialTheme
+                                                            .colorScheme
+                                                            .onSurface
+                                            ),
+                                        elevation =
+                                            ButtonDefaults.buttonElevation(
+                                                defaultElevation = 0.dp,
+                                                pressedElevation = 0.dp
+                                            )
                                     ) {
                                         Icon(
                                             painterResource(R.drawable.ic_speed),
@@ -1792,42 +2187,81 @@ fun MapHistoryView_New(
                                         Text("Data", style = MaterialTheme.typography.labelSmall)
                                     }
 
-                                    AnimatedVisibility(
-                                        visible = showData
-                                    ) {
+                                    AnimatedVisibility(visible = showData) {
                                         Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(
+                                                        horizontal = 12.dp,
+                                                        vertical = 8.dp
+                                                    ),
                                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             DataMode.entries.forEach { mode ->
                                                 Surface(
-                                                    modifier = Modifier
-                                                        .height(32.dp)
-                                                        .clip(RoundedCornerShape(8.dp)),
-                                                    color = if (dataMode == mode) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surface,
+                                                    modifier =
+                                                        Modifier
+                                                            .height(32.dp)
+                                                            .clip(
+                                                                RoundedCornerShape(
+                                                                    8.dp
+                                                                )
+                                                            ),
+                                                    color =
+                                                        if (dataMode == mode)
+                                                            MaterialTheme.colorScheme
+                                                                .primaryContainer
+                                                                .copy(alpha = 0.2f)
+                                                        else
+                                                            MaterialTheme.colorScheme
+                                                                .surface,
                                                     tonalElevation = 0.dp
                                                 ) {
                                                     Button(
-                                                        onClick = { dataMode = mode; needUpdate = true },
-                                                        modifier = Modifier
-                                                            .height(32.dp)
-                                                            .fillMaxWidth(),
-                                                        contentPadding = PaddingValues(horizontal = 10.dp),
-                                                        colors = ButtonDefaults.buttonColors(
-                                                            containerColor = Color.Transparent,
-                                                            contentColor = if (dataMode == mode) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-                                                        ),
-                                                        elevation = ButtonDefaults.buttonElevation(
-                                                            defaultElevation = 0.dp,
-                                                            pressedElevation = 0.dp
-                                                        )
+                                                        onClick = {
+                                                            dataMode = mode
+                                                            needUpdate = true
+                                                        },
+                                                        modifier =
+                                                            Modifier
+                                                                .height(32.dp)
+                                                                .fillMaxWidth(),
+                                                        contentPadding =
+                                                            PaddingValues(
+                                                                horizontal = 10.dp
+                                                            ),
+                                                        colors =
+                                                            ButtonDefaults.buttonColors(
+                                                                containerColor =
+                                                                    Color.Transparent,
+                                                                contentColor =
+                                                                    if (dataMode ==
+                                                                        mode
+                                                                    )
+                                                                        MaterialTheme
+                                                                            .colorScheme
+                                                                            .onPrimaryContainer
+                                                                    else
+                                                                        MaterialTheme
+                                                                            .colorScheme
+                                                                            .onSurface
+                                                            ),
+                                                        elevation =
+                                                            ButtonDefaults.buttonElevation(
+                                                                defaultElevation = 0.dp,
+                                                                pressedElevation = 0.dp
+                                                            )
                                                     ) {
                                                         Text(
-                                                            mode.name.lowercase().replaceFirstChar { it.uppercaseChar() },
-                                                            style = MaterialTheme.typography.labelSmall
+                                                            mode.name.lowercase()
+                                                                .replaceFirstChar {
+                                                                    it.uppercaseChar()
+                                                                },
+                                                            style =
+                                                                MaterialTheme.typography
+                                                                    .labelSmall
                                                         )
                                                     }
                                                 }
@@ -1838,11 +2272,17 @@ fun MapHistoryView_New(
                             }
                         } else {
                             Surface(
-                                modifier = Modifier
-                                    .height(40.dp)
-                                    .clip(RoundedCornerShape(10.dp)),
-                                color = if (cutIndex1 != null || cutIndex2 != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surfaceContainerHigh,
-                                tonalElevation = if (cutIndex1 != null || cutIndex2 != null) 2.dp else 0.dp
+                                modifier =
+                                    Modifier
+                                        .height(40.dp)
+                                        .clip(RoundedCornerShape(10.dp)),
+                                color =
+                                    if (cutIndex1 != null || cutIndex2 != null)
+                                        MaterialTheme.colorScheme.error
+                                    else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                tonalElevation =
+                                    if (cutIndex1 != null || cutIndex2 != null) 2.dp
+                                    else 0.dp
                             ) {
                                 Button(
                                     onClick = undoCutSelection,
@@ -1850,14 +2290,24 @@ fun MapHistoryView_New(
                                         .height(40.dp)
                                         .fillMaxWidth(),
                                     contentPadding = PaddingValues(horizontal = 14.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color.Transparent,
-                                        contentColor = if (cutIndex1 != null || cutIndex2 != null) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onSurface
-                                    ),
-                                    elevation = ButtonDefaults.buttonElevation(
-                                        defaultElevation = 0.dp,
-                                        pressedElevation = 0.dp
-                                    ),
+                                    colors =
+                                        ButtonDefaults.buttonColors(
+                                            containerColor = Color.Transparent,
+                                            contentColor =
+                                                if (cutIndex1 != null ||
+                                                    cutIndex2 != null
+                                                )
+                                                    MaterialTheme.colorScheme
+                                                        .onError
+                                                else
+                                                    MaterialTheme.colorScheme
+                                                        .onSurface
+                                        ),
+                                    elevation =
+                                        ButtonDefaults.buttonElevation(
+                                            defaultElevation = 0.dp,
+                                            pressedElevation = 0.dp
+                                        ),
                                     enabled = cutIndex1 != null || cutIndex2 != null
                                 ) {
                                     Icon(
@@ -1877,8 +2327,7 @@ fun MapHistoryView_New(
         }
     }
 
-    if (updateRemaining > 0)
-        updateRemaining -= 1
+    if (updateRemaining > 0) updateRemaining -= 1
 }
 
 // Helper function to calculate acceleration color (green to red)
@@ -1888,27 +2337,34 @@ fun calculateAccelerationColor(acceleration: Int): Color {
     // Normalize acceleration to -1 to 1 range
     val normalized = (acceleration.coerceIn(-10000, 10000) / 10000f)
 
-    val hue = when {
-        normalized < 0f -> {
-            // Red (0°) to Orange (30°) to Yellow (60°)
-            30f * (1f + normalized)
+    val hue =
+        when {
+            normalized < 0f -> {
+                // Red (0°) to Orange (30°) to Yellow (60°)
+                30f * (1f + normalized)
+            }
+
+            normalized > 0f -> {
+                // Green (120°) to Blue (240°)
+                120f + (120f * normalized)
+            }
+
+            else -> {
+                // Yellow for center (will be desaturated to gray)
+                60f
+            }
         }
-        normalized > 0f -> {
-            // Green (120°) to Blue (240°)
-            120f + (120f * normalized)
-        }
-        else -> {
-            // Yellow for center (will be desaturated to gray)
-            60f
-        }
-    }
 
     // Saturation curve: fully saturated at extremes, low in center
     // Using quadratic easing: saturation = abs(normalized)^0.5 for smooth transition
-    val saturation = when {
-        kotlin.math.abs(normalized) > 0.5f -> 1f // Fully saturated at extremes
-        else -> kotlin.math.sqrt(kotlin.math.abs(normalized) * 2f).coerceIn(0f, 1f) // Smooth transition to center
-    }
+    val saturation =
+        when {
+            kotlin.math.abs(normalized) > 0.5f -> 1f // Fully saturated at extremes
+            else ->
+                kotlin.math
+                    .sqrt(kotlin.math.abs(normalized) * 2f)
+                    .coerceIn(0f, 1f) // Smooth transition to center
+        }
 
     // Brightness curve: darker at extremes, brighter in center
     val brightness = 1f - (kotlin.math.abs(normalized) * 0.3f) // Ranges from 1.0 to 0.7
@@ -1917,7 +2373,12 @@ fun calculateAccelerationColor(acceleration: Int): Color {
 }
 
 // Helper function to calculate time-based color (blue to gray gradient)
-fun calculateTimeColor(start: ZonedDateTime, end: ZonedDateTime, firstTime: ZonedDateTime, lastTime: ZonedDateTime): Color {
+fun calculateTimeColor(
+    start: ZonedDateTime,
+    end: ZonedDateTime,
+    firstTime: ZonedDateTime,
+    lastTime: ZonedDateTime
+): Color {
     val totalDuration = Duration.between(firstTime, lastTime).seconds.toFloat()
     val segmentTime = Duration.between(firstTime, start).seconds.toFloat()
     val progress = (segmentTime / totalDuration).coerceIn(0f, 1f)
@@ -1944,24 +2405,34 @@ private fun InfoChip(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Icon(
-            icon,
-            contentDescription = label,
-            modifier = Modifier.size(16.dp),
-            tint = color
-        )
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            color = color
-        )
+        Icon(icon, contentDescription = label, modifier = Modifier.size(16.dp), tint = color)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = color)
     }
 }
 
 @Preview(showBackground = true)
 @Composable
 fun EventLocationPreview() {
-    NanHistoryTheme {
-        EventLocationView("")
+    NanHistoryTheme { EventLocationView("") }
+}
+
+fun calculateBearingArcPoints(
+    center: GeoPoint,
+    bearing: Float,
+    bearingAccuracy: Float,
+    radius: Double
+): List<GeoPoint> {
+    val points = mutableListOf<GeoPoint>()
+    points.add(center)
+    val startAngle = bearing - bearingAccuracy
+    val endAngle = bearing + bearingAccuracy
+    val step = 5 // degrees
+    var angle = startAngle
+    while (angle <= endAngle) {
+        points.add(center.destinationPoint(radius, angle.toDouble()))
+        angle += step
     }
+    points.add(center.destinationPoint(radius, endAngle.toDouble()))
+    points.add(center)
+    return points
 }
