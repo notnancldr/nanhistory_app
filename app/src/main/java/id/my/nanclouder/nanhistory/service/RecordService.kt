@@ -55,7 +55,6 @@ import id.my.nanclouder.nanhistory.utils.history.generateEventId
 import id.my.nanclouder.nanhistory.utils.history.generateSignature
 import id.my.nanclouder.nanhistory.utils.history.getFilePathFromDate
 import id.my.nanclouder.nanhistory.utils.history.updateModifiedTime
-import id.my.nanclouder.nanhistory.utils.history.writeToLocationFile
 import id.my.nanclouder.nanhistory.utils.matchOrNull
 import id.my.nanclouder.nanhistory.utils.readableTimeHours
 import java.io.File
@@ -101,6 +100,7 @@ import java.io.RandomAccessFile
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import kotlin.math.abs
+import kotlin.math.max
 
 class RecordService : Service() {
     companion object {
@@ -676,6 +676,8 @@ class RecordService : Service() {
 
         event.locationPath = locationPath
         eventLocations.clear()
+        locationBuffer.clear()
+        iteratedLocationBuffer.clear()
 
         validUpdates = 0
         updates = 0
@@ -931,12 +933,12 @@ class RecordService : Service() {
         //     event.metadata["recording_not_started"] = true
         // }
 
-        // Stop previous signature generation logic
+        // Stop previous signature generation logic (NOPE, THIS BREAKS SIGNING SEQUENCE)
         if (signatureJob != null && signatureJob?.isActive == true) try {
             val message = "Signature took way too long to be generated"
             Log.w("RecordService", message)
             logService("PROCESS TOO LONG: (SIGN + INSERT) in locationUpdate, STOPPING")
-            signatureJob?.cancel(message)
+            // signatureJob?.cancel(message)
         } catch (e: Throwable) {
             Log.w("RecordService", e.message ?: "Unknown error")
             Log.w("RecordService", e.stackTraceToString())
@@ -963,15 +965,25 @@ class RecordService : Service() {
         withContext(Dispatchers.IO) {
             val t1 = Instant.now()
 
+            // iterateLocations includes processSignature that will fail starting
+            // if there's already a process running
             iterateLocations(final = true)
 
             val t2 = Instant.now()
 
-            // TODO: new signing
+            // TODO: new signing (done)
+
+            // Join to existing signatureJob
             val plusWait = signatureJob != null && signatureJob?.isActive == true
             signatureJob?.join()
 
-            processSignature(funcLabel = "stopEventRecording", noLimit = true)
+            // finalize signing, make sure nothing left to digest
+            if (event.locationPath != null) {
+                processSignature(funcLabel = "stopEventRecording", noLimit = true)
+            }
+            else {
+                event.generateSignatureV1(applicationContext)
+            }
             event.updateModifiedTime()
 
             dao.insertEvent(event.toEventEntity())
@@ -1224,7 +1236,7 @@ class RecordService : Service() {
         event.signature = event.generateSignatureV1(
             context = applicationContext,
             locationDigest =
-                if (locationFile.exists()) locationDigest
+                if (locationFile.exists() && event.locationPath != null) locationDigest
                 else null
         ).joinToString("") { "%02x".format(it) }
         event.updateModifiedTime()
@@ -1654,20 +1666,18 @@ class RecordService : Service() {
             val startIndex = maxOf(0, lastIterationIndex - 5)
             var currentIndex = 0
 
-            val currentBuffer = locationBuffer.toList()
-
             // take from sorted locationBuffer
-            val items = currentBuffer.sortedBy { it.time }
+            val currentBuffer = locationBuffer.toList().sortedBy { it.time }
 
-            Log.d("RecordService", "Iterating from $startIndex to ${eventLocations.size} (${items.size})")
-            appendToLog("ITERATE 0 - ${locationBuffer.size.toString().padStart(4)} (${items.size})")
+            Log.d("RecordService", "Iterating from $startIndex to ${eventLocations.size} (${currentBuffer.size})")
+            appendToLog("ITERATE 0 - ${locationBuffer.size.toString().padStart(4)} (${currentBuffer.size})")
 
             // TODO: unused
             lastIterationIndex = eventLocations.size - 1
 
             // Iterate-remove (2 steps)
 
-            for ((index, item) in items.withIndex()) {
+            for ((index, item) in currentBuffer.withIndex()) {
                 val currentLocation = Location("current").apply {
                     longitude = item.location.longitude
                     latitude = item.location.latitude
@@ -1701,7 +1711,7 @@ class RecordService : Service() {
                         // Pros: Two directions check for better accuracy
                         LocationIterationLogic.LookBehindAhead_v1 -> {
                             val distanceBehind = currentLocation.distanceTo(prevLocation)
-                            val distanceAhead = items.getOrNull(index + 1)?.let {
+                            val distanceAhead = currentBuffer.getOrNull(index + 1)?.let {
                                 val aheadLocation = Location("ahead").apply {
                                     longitude = it.location.longitude
                                     latitude = it.location.latitude
@@ -1754,21 +1764,32 @@ class RecordService : Service() {
             //     eventLocations[key] = coordinateMap[key]!!
             // }
 
-            val moved = items.let {
+            // 000000000A-----------
+            // ---------B00000000000
+            //          ^ drop to prevent overlap
+
+            val moved = locationBuffer.let {
                 // Move all if it's final iteration
                 if (final) it
                 // Move processed buffer (except for the last 5 items for re-iteration)
                 else it.dropLast(5)
             }
-            locationBuffer.removeAll(moved)
-            iteratedLocationBuffer.addAll(moved)
+
+            locationBuffer.removeAll(moved.dropLast(1))  // Keep the last one (A)
+
+            if ((eventLocations.size + iteratedLocationBuffer.size) > 0) {
+                iteratedLocationBuffer.addAll(moved.drop(1)) // Exclude the overlap (B) (only if location still empty)
+            }
+            else {
+                iteratedLocationBuffer.addAll(moved)
+            }
 
             appendToLog(
                 "MOVED ${
-                    moved.size.toString().padStart(3)
-                } (BUFFER: ${
+                    max(moved.size - 1, 0).toString().padStart(3)
+                } (BUFFER_SIZE: ${
                     locationBuffer.size.toString().padStart(3)
-                } ITERATED BUFFER: ${
+                } ITERATED_BUFFER: ${
                     iteratedLocationBuffer.size.toString().padStart(3)
                 })"
             )
@@ -1778,7 +1799,12 @@ class RecordService : Service() {
             // Append data from iterated location buffer
             iteratedLocationBuffer.appendToLocationFile(locationFile)
 
-            processSignature("iterateLocations")
+            signatureJob = signatureJob ?: serviceScope.launch {
+                processSignature(
+                    funcLabel = "iterateLocations"
+                )
+                signatureJob = null
+            }
 
             // Append to main location list
             eventLocations.addAll(iteratedLocationBuffer)
