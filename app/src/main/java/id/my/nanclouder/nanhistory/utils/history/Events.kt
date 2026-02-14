@@ -799,7 +799,7 @@ fun HistoryEvent.generateSignatureV1(
     eventDigest: EventDataDigest? = null,
 ): ByteArray {
     // Get current digest state from location digest or digest current location
-    val locationDigested = locationDigest?.getDigestState() ?: locationDigestV1(context) ?: ByteArray(1) { 0 }
+    val locationDigested = locationDigest?.getDigestState() ?: locationDigestV1(context) ?: ByteArray(1)
 
     // Get current digest state from data digest or digest current event data
     val eventDataDigested = eventDigest?.getDigestState() ?: dataDigestV1()

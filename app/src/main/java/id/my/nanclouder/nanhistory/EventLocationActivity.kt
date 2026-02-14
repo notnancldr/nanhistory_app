@@ -12,6 +12,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -86,6 +87,7 @@ import id.my.nanclouder.nanhistory.utils.matchOrNull
 import id.my.nanclouder.nanhistory.utils.toGeoPoint
 import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
+import id.my.nanclouder.nanhistory.utils.copyWith
 import id.my.nanclouder.nanhistory.utils.history.LocationData
 import id.my.nanclouder.nanhistory.utils.history.appendToLocationFile
 import kotlinx.coroutines.launch
@@ -97,6 +99,7 @@ import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.Polyline
 import java.io.File
 import java.time.Duration
@@ -151,6 +154,68 @@ fun calculateColor(speed: Int): Color {
     val lightness = max(min(speed / 20f, .5f), 0.3f)
     val hue = max(min(speed * 2.5f, 270f), 0f)
     return Color.hsl(hue, 1f, lightness)
+}
+
+fun calculateAltitudeColor(altitude: Double?): Color {
+    if (altitude == null) {
+        return Color(0xFF808080)
+    }
+
+    // Clamp altitude to 0-1500m range
+    val clampedAltitude = altitude.coerceIn(0.0, 1500.0)
+
+    // Normalize altitude to 0-1 range
+    val normalized = clampedAltitude / 1500.0
+
+    // Color mapping: Blue (0m) -> Cyan -> Green -> Yellow -> Orange -> Red (1500m)
+    val hue = 180.0 - (normalized * 180.0)
+
+    // Saturation increases with altitude (deeper colors at higher elevations)
+    val saturation = (0.6 + normalized * 0.4).coerceIn(0.6, 1.0)
+
+    // Lightness decreases slightly at extremes for more visual impact
+    val lightness = (0.75 - (normalized * 0.15)).coerceIn(0.35, 0.75)
+
+    return Color.hsl(hue.toFloat(), saturation.toFloat(), lightness.toFloat())
+}
+
+fun calculateAccuracyColor(accuracy: Float?): Color {
+    if (accuracy == null) {
+        return Color(0xFF808080)
+    }
+
+    // Clamp accuracy to 5-1000 range
+    val clampedAccuracy = accuracy.coerceIn(5f, 1000f)
+
+    // Normalize: 5 (best) -> 0, 1000 (worst) -> 1
+    val normalized = (clampedAccuracy - 5f) / (1000f - 5f)
+
+    // Color mapping: Green (5m) -> Yellow -> Orange -> Red (1000m)
+    val hue = when {
+        normalized < 0.33f -> {
+            // Green to Yellow (5-335m)
+            val t = normalized / 0.33f
+            120f - (t * 60f)  // 120° to 60°
+        }
+        normalized < 0.66f -> {
+            // Yellow to Orange (335-668m)
+            val t = (normalized - 0.33f) / 0.33f
+            60f - (t * 30f)  // 60° to 30°
+        }
+        else -> {
+            // Orange to Red (668-1000m)
+            val t = (normalized - 0.66f) / 0.34f
+            30f - (t * 30f)  // 30° to 0°
+        }
+    }
+
+    // Saturation increases with worse accuracy (more vibrant at extremes)
+    val saturation = (0.5f + normalized * 0.5f).coerceIn(0.5f, 1f)
+
+    // Lightness slightly decreases for worse accuracy (darker reds are more urgent)
+    val lightness = (0.55f - normalized * 0.15f).coerceIn(0.4f, 0.6f)
+
+    return Color.hsl(hue, saturation, lightness)
 }
 
 @Composable
@@ -1030,6 +1095,10 @@ fun EventLocationView_New(eventId: String, startAsCutMode: Boolean = false) {
     }
 }
 
+enum class DataMode {
+    SPEED, ACCELERATION, TIME, ACCURACY, BEARING, ALTITUDE
+}
+
 @Composable
 fun MapHistoryView_New(
     locations: List<LocationData>,
@@ -1053,7 +1122,7 @@ fun MapHistoryView_New(
 
     var showPoints by rememberSaveable { mutableStateOf(false) }
     var showData by rememberSaveable { mutableStateOf(false) }
-    var dataMode by rememberSaveable { mutableStateOf("speed") } // "speed", "acceleration", "time"
+    var dataMode by rememberSaveable { mutableStateOf<DataMode>(DataMode.SPEED) } // DataMode.SPEED, DataMode.ACCELERATION, DataMode.TIME
 
     var needUpdate by remember { mutableStateOf(false) }
     var firstLoad by remember { mutableStateOf(true) }
@@ -1181,34 +1250,97 @@ fun MapHistoryView_New(
                         location.value.time == it.start || location.value.time == it.end
                     }.map { location -> location.key }
 
-                    val coloredPolyline = Polyline(mapViewObj).apply {
-                        setPoints(it.points.map { point -> point.toGeoPoint() } )
-                        outlinePaint.color = when (dataMode) {
-                            "speed" -> calculateColor(it.speed.roundToInt()).toArgb()
-                            "acceleration" -> calculateAccelerationColor(it.acceleration.roundToInt()).toArgb()
-                            "time" -> calculateTimeColor(
-                                it.start,
-                                it.end,
-                                locations.first().time,
-                                locations.last().time).toArgb()
-                            else -> calculateColor(it.speed.roundToInt()).toArgb()
-                        }
-                        outlinePaint.strokeWidth = 3f * screenDpi
-                        outlinePaint.strokeCap = Paint.Cap.ROUND
+                    if (dataMode in listOf(DataMode.SPEED, DataMode.ACCELERATION, DataMode.TIME)) {
+                        val coloredPolyline = Polyline(mapViewObj).apply {
+                            setPoints(it.points.map { point -> point.toGeoPoint() } )
+                            outlinePaint.color = when (dataMode) {
+                                DataMode.SPEED -> calculateColor(it.speed.roundToInt()).toArgb()
+                                DataMode.ACCELERATION -> calculateAccelerationColor(it.acceleration.roundToInt()).toArgb()
+                                DataMode.TIME -> calculateTimeColor(
+                                    it.start,
+                                    it.end,
+                                    locations.first().time,
+                                    locations.last().time).toArgb()
+                                else -> calculateColor(it.speed.roundToInt()).toArgb()
+                            }
+                            outlinePaint.strokeWidth = 3f * screenDpi
+                            outlinePaint.strokeCap = Paint.Cap.ROUND
 
-                        setOnClickListener { _, _, _ ->
-                            selectedTime = "${TimeFormatterWithSecond.format(it.start)} - ${TimeFormatterWithSecond.format(it.end)}"
-                            selectedSpeed = it.speed.roundToInt()
-                            selectedFirstKey = indices.first()
-                            selectedSecondKey = indices.last()
-                            isSelected = true
-                            updateRemaining = 1000000
-                            updateMap()
-                            true
+                            setOnClickListener { _, _, _ ->
+                                selectedTime = "${TimeFormatterWithSecond.format(it.start)} - ${TimeFormatterWithSecond.format(it.end)}"
+                                selectedSpeed = it.speed.roundToInt()
+                                selectedFirstKey = indices.first()
+                                selectedSecondKey = indices.last()
+                                isSelected = true
+                                updateRemaining = 1000000
+                                updateMap()
+                                true
+                            }
                         }
+
+                        mapViewObj?.overlays?.add(coloredPolyline)
                     }
+                    else {
+                        val points = it.locationData.map { loc -> loc.location }.let { locationData ->
+                            listOf(
+                                locationData.first().toGeoPoint(),
+                                GeoPoint(
+                                    (locationData.first().latitude + locationData.last().latitude) / 2.0,
+                                    (locationData.first().longitude + locationData.last().longitude) / 2.0,
+                                ),
+                                locationData.last().toGeoPoint()
+                            )
+                        }
 
-                    mapViewObj?.overlays?.add(coloredPolyline)
+                        val coloredPolyline1 = Polyline(mapViewObj).apply {
+                            setPoints(points.take(2))
+                            outlinePaint.color = when (dataMode) {
+                                DataMode.ACCURACY -> calculateAccuracyColor(it.locationData.first().accuracy).toArgb()
+                                DataMode.BEARING -> calculateAccelerationColor(it.acceleration.roundToInt()).toArgb()
+                                DataMode.ALTITUDE -> calculateAltitudeColor(it.locationData.first().altitude).toArgb()
+                                else -> calculateColor(it.speed.roundToInt()).toArgb()
+                            }
+                            outlinePaint.strokeWidth = 3f * screenDpi
+                            outlinePaint.strokeCap = Paint.Cap.ROUND
+
+                            setOnClickListener { _, _, _ ->
+                                selectedTime = "${TimeFormatterWithSecond.format(it.start)} - ${TimeFormatterWithSecond.format(it.end)}"
+                                selectedSpeed = it.speed.roundToInt()
+                                selectedFirstKey = indices.first()
+                                selectedSecondKey = indices.last()
+                                isSelected = true
+                                updateRemaining = 1000000
+                                updateMap()
+                                true
+                            }
+                        }
+
+                        val coloredPolyline2 = Polyline(mapViewObj).apply {
+                            setPoints(points.takeLast(2))
+                            outlinePaint.color = when (dataMode) {
+                                DataMode.ACCURACY -> calculateAccuracyColor(it.locationData.last().accuracy).toArgb()
+                                DataMode.BEARING -> calculateAccelerationColor(it.acceleration.roundToInt()).toArgb()
+                                DataMode.ALTITUDE -> calculateAltitudeColor(it.locationData.last().altitude).toArgb()
+                                else -> calculateColor(it.speed.roundToInt()).toArgb()
+                            }
+                            outlinePaint.strokeWidth = 3f * screenDpi
+                            outlinePaint.strokeCap = Paint.Cap.ROUND
+
+                            setOnClickListener { _, _, _ ->
+                                selectedTime = "${TimeFormatterWithSecond.format(it.start)} - ${TimeFormatterWithSecond.format(it.end)}"
+                                selectedSpeed = it.speed.roundToInt()
+                                selectedFirstKey = indices.first()
+                                selectedSecondKey = indices.last()
+                                isSelected = true
+                                updateRemaining = 1000000
+                                updateMap()
+                                true
+                            }
+                        }
+
+                        mapViewObj?.overlays?.add(coloredPolyline1)
+                        mapViewObj?.overlays?.add(coloredPolyline2)
+                    }
                 }
 
             if (isSelected && mapViewObj != null) {
@@ -1233,9 +1365,9 @@ fun MapHistoryView_New(
                     Polyline(mapViewObj).apply {
                         setPoints(polylinePoints)
                         outlinePaint.color = when (dataMode) {
-                            "speed" -> calculateColor(selectedSpeed).toArgb()
-                            "acceleration" -> calculateAccelerationColor(selectedSpeed).toArgb()
-                            "time" -> calculateTimeColor(
+                            DataMode.SPEED -> calculateColor(selectedSpeed).toArgb()
+                            DataMode.ACCELERATION -> calculateAccelerationColor(selectedSpeed).toArgb()
+                            DataMode.TIME -> calculateTimeColor(
                                 locations[selectedFirstKey].time,
                                 locations[selectedSecondKey].time,
                                 locations.first().time,
@@ -1274,12 +1406,14 @@ fun MapHistoryView_New(
             mapViewObj?.overlays?.add(selectedPolyline)
         }
 
+
+
         if (showPoints || cutMode) {
             if (cutIndex1 == null || cutIndex2 == null)
-                for ((shownKey, shownCoordinate) in shownCoordinates) {
+                for ((shownKey, shownCoordinate) in shownLocations) {
                     mapViewObj?.overlays?.add(Marker(mapViewObj).apply {
                         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                        position = shownCoordinate
+                        position = shownCoordinate.location.toGeoPoint()
                         icon = context.getDrawable(R.drawable.ic_map_touch_point)
 
                         setOnMarkerClickListener { _, _ ->
@@ -1287,6 +1421,19 @@ fun MapHistoryView_New(
                             true
                         }
                     })
+
+                    if (dataMode == DataMode.ACCURACY && shownCoordinate.accuracy != null && shownCoordinate.accuracy > 15) {
+                        mapViewObj?.overlays?.add(Polygon(mapViewObj).apply {
+                            val accuracyColor = calculateAccuracyColor(shownCoordinate.accuracy)
+                            points = Polygon.pointsAsCircle(
+                                shownCoordinate.location.toGeoPoint(),
+                                shownCoordinate.accuracy.toDouble()
+                            )
+                            fillPaint.color = accuracyColor.copy(alpha = 0.3f).toArgb()
+                            outlinePaint.strokeWidth = 2f
+                            outlinePaint.color = accuracyColor.copy(alpha = 0.5f).toArgb()
+                        })
+                    }
                 }
             if (cutIndex1 != null) mapViewObj?.overlays?.add(Marker(mapViewObj).apply {
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
@@ -1411,22 +1558,65 @@ fun MapHistoryView_New(
                             color = MaterialTheme.colorScheme.outlineVariant
                         )
 
+                        val darkMode = isSystemInDarkTheme()
+
                         InfoChip(
                             icon = painterResource(R.drawable.ic_speed),
                             label = "$selectedSpeed Km/h",
-                            color = calculateColor(selectedSpeed).copy(alpha = 0.8f).let { color ->
-                                val hsv = FloatArray(3)
-                                android.graphics.Color.colorToHSV(color.toArgb(), hsv)
-                                hsv[2] *= 0.7f
-                                val darkened = android.graphics.Color.HSVToColor(hsv)
-                                Color(darkened)
-                            }
+                            color = calculateColor(selectedSpeed).let { color ->
+                                if (!darkMode) color.copyWith(value = 0.5f, saturation = 1f)
+                                else color.copyWith(value = 1f, saturation = 0.4f)
+                            }.copy(alpha = 0.8f)
                         )
 
                         VerticalDivider(
                             modifier = Modifier.height(24.dp),
                             color = MaterialTheme.colorScheme.outlineVariant
                         )
+
+                        val selectedAltitude = locations.let {
+                            val first = it[selectedFirstKey]
+                            val second = it[selectedSecondKey]
+
+                            if (first.altitude == null) return@let null
+                            if (second.altitude == null) return@let null
+
+                            "${(first.altitude * 10.0).roundToInt() / 10.0} - ${(second.altitude * 10.0).roundToInt() / 10.0} m"
+                        }
+
+                        if (selectedAltitude != null) {
+                            InfoChip(
+                                icon = painterResource(R.drawable.ic_expand_all),
+                                label = selectedAltitude
+                            )
+
+                            VerticalDivider(
+                                modifier = Modifier.height(24.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant
+                            )
+                        }
+
+                        val selectedAccuracy = locations.let {
+                            val first = it[selectedFirstKey]
+                            val second = it[selectedSecondKey]
+
+                            if (first.accuracy == null) return@let null
+                            if (second.accuracy == null) return@let null
+
+                            "${(first.accuracy * 10.0).roundToInt() / 10.0} - ${(second.accuracy * 10.0).roundToInt() / 10.0} m"
+                        }
+
+                        if (selectedAccuracy != null) {
+                            InfoChip(
+                                icon = painterResource(R.drawable.ic_target),
+                                label = selectedAccuracy
+                            )
+
+                            VerticalDivider(
+                                modifier = Modifier.height(24.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant
+                            )
+                        }
 
                         Button(
                             onClick = handler@{
@@ -1612,7 +1802,7 @@ fun MapHistoryView_New(
                                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            listOf("speed", "acceleration", "time").forEach { mode ->
+                                            DataMode.entries.forEach { mode ->
                                                 Surface(
                                                     modifier = Modifier
                                                         .height(32.dp)
@@ -1636,7 +1826,7 @@ fun MapHistoryView_New(
                                                         )
                                                     ) {
                                                         Text(
-                                                            mode.replaceFirstChar { it.uppercaseChar() },
+                                                            mode.name.lowercase().replaceFirstChar { it.uppercaseChar() },
                                                             style = MaterialTheme.typography.labelSmall
                                                         )
                                                     }
