@@ -394,7 +394,8 @@ class DataProcessService : Service() {
                         "logs",
                         "config",
                         "audio",
-                        "locations"
+                        "locations",
+                        "accelerometer_data"
                     )
                     val inputFiles = (inputDirectory.listFiles() ?: arrayOf<File>())
                         .filter { includedDirs.contains(it.name) }
