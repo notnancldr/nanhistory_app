@@ -1746,8 +1746,7 @@ fun MapHistoryView_New(
                             )
                         }
                         if (dataMode == DataMode.BEARING &&
-                            shownCoordinate.bearing != null &&
-                            shownCoordinate.bearingAccuracy != null
+                            shownCoordinate.bearing != null
                         ) {
                             mapViewObj?.overlays?.add(
                                 Polygon(mapViewObj).apply {
@@ -1756,12 +1755,12 @@ fun MapHistoryView_New(
                                         calculateBearingArcPoints(
                                             shownCoordinate.location.toGeoPoint(),
                                             shownCoordinate.bearing,
-                                            shownCoordinate.bearingAccuracy.coerceIn(20f..360f),
-                                            (shownCoordinate.accuracy?.toDouble() ?: 20.0).coerceIn(20.0..360.0)
+                                            (shownCoordinate.bearingAccuracy ?: 0f).coerceIn(10f..360f),
+                                            (shownCoordinate.accuracy?.toDouble() ?: 0.0).coerceIn(10.0..360.0)
                                         )
                                     fillPaint.color = accuracyColor.copy(alpha = 0.3f).toArgb()
                                     outlinePaint.strokeWidth = 4f
-                                    outlinePaint.color = 0x00808080
+                                    outlinePaint.color = Color.DarkGray.toArgb()
                                 }
                             )
                         }

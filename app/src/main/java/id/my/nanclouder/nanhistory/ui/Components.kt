@@ -39,7 +39,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredWidthIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -113,7 +112,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.github.skydoves.colorpicker.compose.BrightnessSlider
 import com.github.skydoves.colorpicker.compose.HsvColorPicker
 import com.github.skydoves.colorpicker.compose.rememberColorPickerController
-import id.my.nanclouder.nanhistory.ImportProgressStage
+import id.my.nanclouder.nanhistory.settings.ImportProgressStage
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.TagDetailActivity
 import id.my.nanclouder.nanhistory.config.Config

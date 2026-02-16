@@ -12,8 +12,8 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.net.toUri
-import id.my.nanclouder.nanhistory.BackupProgressStage
-import id.my.nanclouder.nanhistory.ImportProgressStage
+import id.my.nanclouder.nanhistory.settings.BackupProgressStage
+import id.my.nanclouder.nanhistory.settings.ImportProgressStage
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.utils.LogData

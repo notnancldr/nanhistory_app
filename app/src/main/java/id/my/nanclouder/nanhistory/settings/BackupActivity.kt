@@ -1,4 +1,4 @@
-package id.my.nanclouder.nanhistory
+package id.my.nanclouder.nanhistory.settings
 
 import android.app.Activity
 import android.content.Context
@@ -64,11 +64,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import id.my.nanclouder.nanhistory.MainActivity
+import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
+import id.my.nanclouder.nanhistory.getActivity
 import id.my.nanclouder.nanhistory.utils.readableSize
 import id.my.nanclouder.nanhistory.service.DataProcessService
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
-import id.my.nanclouder.nanhistory.utils.LegacyImport
 import kotlinx.coroutines.launch
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
