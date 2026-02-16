@@ -280,6 +280,19 @@ class SettingsActivity : NewUIComponentActivity() {
 
                 item {
                     SettingsItemCard(
+                        icon = painterResource(R.drawable.ic_cloud_upload_filled),
+                        iconDescription = "Backup",
+                        title = "Backup",
+                        description = "Backup and restore",
+                        onClick = {
+                            val intent = Intent(context, BackupActivity::class.java)
+                            context.startActivity(intent)
+                        }
+                    )
+                }
+
+                item {
+                    SettingsItemCard(
                         icon = painterResource(R.drawable.ic_delete_filled),
                         iconDescription = "Auto-delete settings",
                         title = "Auto-delete",

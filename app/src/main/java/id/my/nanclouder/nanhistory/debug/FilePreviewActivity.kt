@@ -58,6 +58,8 @@ import com.google.gson.JsonSyntaxException
 import com.google.gson.reflect.TypeToken
 import id.my.nanclouder.nanhistory.getActivity
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
+import id.my.nanclouder.nanhistory.settings.AccelerometerGraph
+import id.my.nanclouder.nanhistory.settings.parseAccelerometerData
 import java.io.File
 
 class FilePreviewActivity : ComponentActivity() {
@@ -85,17 +87,24 @@ fun FilePreview(intent: Intent) {
         intent.getStringExtra("path")?.let {
             val file = File(it)
             if (file.isFile) {
-                val fileContent = file.readText()
-                isJson = true
-                try {
-                    val string = Gson().fromJson<Any>(
-                        file.readText(),
-                        object : TypeToken<Any>() {}.type
-                    )
-                } catch (_: JsonSyntaxException) {
-                    isJson = false
+                if (file.name.endsWith(".accel")) {
+                    // Start reading accel content
+                    // Don't read text here if it's too large, but for now we read it
+                    // Logic handled in UI
+                    file.readText()
+                } else {
+                    val fileContent = file.readText()
+                    isJson = true
+                    try {
+                        Gson().fromJson<Any>(
+                            file.readText(),
+                            object : TypeToken<Any>() {}.type
+                        )
+                    } catch (_: JsonSyntaxException) {
+                        isJson = false
+                    }
+                    fileContent
                 }
-                fileContent
             } else null
         } ?: ""
     }
@@ -156,20 +165,54 @@ fun FilePreview(intent: Intent) {
         ) {
             if (lines.isNotEmpty()) {
                 Column {
-                    if (isJson) Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Pretty print")
-                        Switch(
-                            checked = prettyPrint,
-                            onCheckedChange = {
-                                prettyPrint = it
-                            }
+                    val path = intent.getStringExtra("path")
+                    if (path != null && path.endsWith(".accel")) {
+                        // Parse lines
+                        val samples = remember {
+                            val allSamples = parseAccelerometerData(content)
+                            allSamples.flatten()
+                        }
+
+                        val mode = remember {
+                            if (lines.isNotEmpty()) {
+                                val last = lines.last()
+                                if (!last.contains(",")) last else "Unknown" 
+                            } else "Unknown"
+                        }
+                        
+                        Text(
+                            "Mode: $mode",
+                            modifier = Modifier.padding(8.dp)
                         )
+
+                        AccelerometerGraph(
+                            data = samples,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .requiredHeight(300.dp)
+                                .padding(vertical = 16.dp)
+                        )
+                        
+                        Text(
+                            "Total points: ${samples.size}",
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    } else {
+                        if (isJson) Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Pretty print")
+                            Switch(
+                                checked = prettyPrint,
+                                onCheckedChange = {
+                                    prettyPrint = it
+                                }
+                            )
+                        }
+                        TextContainer(lines)
                     }
-                    TextContainer(lines)
                 }
             }
             else {

@@ -16,6 +16,20 @@ import androidx.compose.runtime.setValue
 import id.my.nanclouder.nanhistory.config.LocationIterationLogic
 import id.my.nanclouder.nanhistory.utils.transportModel.TransportModelTrainingModal
 import id.my.nanclouder.nanhistory.utils.transportModel.TransportModelTrainingScreen
+import id.my.nanclouder.nanhistory.utils.AccelerometerChange
+
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import java.io.File
+import androidx.compose.material3.Card
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.layout.requiredHeight
 
 class DeveloperOptionsActivity : SubSettingsActivity("Developer Options") {
     @Composable
@@ -85,11 +99,83 @@ class DeveloperOptionsActivity : SubSettingsActivity("Developer Options") {
                 enabled = developerModeEnabled
             )
 
+            // if (developerModeEnabled) {
+                // Aggregated Stats
+                val context = LocalContext.current
+                var aggregatedData by remember { mutableStateOf<Map<String, List<AccelerometerChange>>>(emptyMap()) }
+                
+                // Load data
+                LaunchedEffect(Unit) {
+                    val appDir = context.filesDir
+                    val accelDir = File(appDir, "accelerometer_data")
+                    if (accelDir.exists() && accelDir.isDirectory) {
+                        val files = accelDir.listFiles()?.filter { it.name.endsWith(".accel") } ?: emptyList()
+                        
+                        // Group by transport mode
+                        val grouped = files.groupBy { file ->
+                            // Read last line for transport mode
+                            try {
+                                // Basic approach: read last non-empty line. 
+                                // Note: This relies on the file ending with the mode string as per earlier plan assumption,
+                                // even though we didn't implement the writing of it in RecordService (User said it's elsewhere).
+                                // If the file doesn't have it, we might skip it or use "Unknown".
+                                // Let's try to read the last few bytes or just read lines.
+                                val lines = file.readLines().filter { it.isNotBlank() }
+                                if (lines.isNotEmpty()) {
+                                    val last = lines.last()
+                                    if (!last.contains(",")) last else "Unknown" 
+                                } else "Unknown"
+                            } catch (e: Exception) {
+                                "Error"
+                            }
+                        }
+                        
+                        val computed = grouped.mapValues { (_, modeFiles) ->
+                            val allSamples = modeFiles.flatMap { 
+                                parseAccelerometerFile(it) 
+                            }
+                            computeAverageSample(allSamples)
+                        }.filter { it.key != "Unknown" && it.key != "Error" && it.value.isNotEmpty() }
+                        
+                        aggregatedData = computed
+                    }
+                }
+                
+                if (aggregatedData.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "Typical Minute Profile",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                    
+                    aggregatedData.forEach { (mode, data) ->
+                        Card(
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(
+                                    text = mode,
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                AccelerometerGraph(
+                                    data = data,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .requiredHeight(300.dp)
+                                        .padding(top = 8.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // SettingsSwitch(
             //     title = "Always ask before auto-delete",
             //     description = "Always ask user before auto deletion happens.",
             //     configValue = Config.autoDeleteAlwaysAsk
             // )
-        }
+        // }
     }
 }

@@ -30,7 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import id.my.nanclouder.nanhistory.BackupActivity
+import id.my.nanclouder.nanhistory.settings.BackupActivity
 import id.my.nanclouder.nanhistory.TrashActivity
 import id.my.nanclouder.nanhistory.debug.DebugActivity
 import id.my.nanclouder.nanhistory.R
@@ -81,16 +81,6 @@ fun DrawerContent() {
                     selected = false,
                     onClick = {
                         val intent = Intent(context, TrashActivity::class.java)
-                        context.startActivity(intent)
-                    }
-                )
-                NavigationDrawerItem(
-                    modifier = itemModifier,
-                    icon = { Icon(painterResource(R.drawable.ic_cloud_upload_filled), "Backup") },
-                    label = { drawerItemText("Backup") },
-                    selected = false,
-                    onClick = {
-                        val intent = Intent(context, BackupActivity::class.java)
                         context.startActivity(intent)
                     }
                 )
