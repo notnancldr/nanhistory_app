@@ -88,6 +88,28 @@ class DeveloperOptionsActivity : SubSettingsActivity("Developer Options") {
             TransportModelTrainingModal()
 
             CategoryHeader(
+                icon = painterResource(R.drawable.ic_map), // Reusing existing icon or finding a suitable one
+                iconDescription = "Map Settings",
+                title = "Yearly Map Settings"
+            )
+            SettingsSlider(
+                title = "Precision (Meters)",
+                description = "Quantization grid size for path grouping. Smaller = more precise, Larger = more grouping.",
+                configValue = Config.yearlyMapPrecision,
+                valueUnit = "m",
+                valueRange = 10f..1000f,
+                steps = 98
+            )
+            SettingsSlider(
+                title = "Simplification (cm)",
+                description = "Path simplification tolerance. Higher = less points/smoother but less accurate.",
+                configValue = Config.yearlyMapSimplification,
+                valueUnit = "cm",
+                valueRange = 10f..1000f,
+                steps = 98
+            )
+
+            CategoryHeader(
                 icon = painterResource(R.drawable.ic_code),
                 iconDescription = "Dev Tools",
                 title = "Dev Tools"

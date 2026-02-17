@@ -142,6 +142,13 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <activity
+            android:name=".YearlyMapActivity"
+            android:exported="false"
+            android:label="Yearly Trip Map"
+            android:theme="@style/Theme.NanHistory" />
+
         <service
             android:name=".service.RecordTileService"
             android:label="Record Event"
