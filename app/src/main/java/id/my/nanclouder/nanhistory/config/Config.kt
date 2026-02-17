@@ -259,4 +259,11 @@ object Config {
     val autoDeleteAlwaysAsk = BooleanValue(
         "audioDeleteAlwaysAsk", Default.AUTO_DELETE_ALWAYS_ASK
     )
+
+    val yearlyMapPrecision = IntValue(
+        "yearlyMapPrecision", 10 // meters
+    )
+    val yearlyMapSimplification = IntValue(
+        "yearlyMapSimplification", 200 // cm
+    )
 }

@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.settings.BackupActivity
 import id.my.nanclouder.nanhistory.TrashActivity
+import id.my.nanclouder.nanhistory.YearlyMapActivity
 import id.my.nanclouder.nanhistory.debug.DebugActivity
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
@@ -73,6 +74,16 @@ fun DrawerContent() {
                         .padding(16.dp),
                     painter = painterResource(id = R.drawable.nanhistory_logo_1),
                     contentDescription = "NanHistory",
+                )
+                NavigationDrawerItem(
+                    modifier = itemModifier,
+                    icon = { Icon(painterResource(R.drawable.ic_map), "Yearly Map") },
+                    label = { drawerItemText("Yearly Map") },
+                    selected = false,
+                    onClick = {
+                        val intent = Intent(context, YearlyMapActivity::class.java)
+                        context.startActivity(intent)
+                    }
                 )
                 NavigationDrawerItem(
                     modifier = itemModifier,
