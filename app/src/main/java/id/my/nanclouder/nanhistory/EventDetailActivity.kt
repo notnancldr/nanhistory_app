@@ -45,6 +45,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Warning
@@ -100,7 +101,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.toHistoryEvent
-import id.my.nanclouder.nanhistory.utils.Coordinate
+import id.my.nanclouder.nanhistory.db.toLocationData
 import id.my.nanclouder.nanhistory.utils.DateFormatter
 import id.my.nanclouder.nanhistory.utils.HistoryLocationData
 import id.my.nanclouder.nanhistory.utils.TimeFormatter
@@ -108,8 +109,7 @@ import id.my.nanclouder.nanhistory.utils.getLocationData
 import id.my.nanclouder.nanhistory.utils.history.EventPoint
 import id.my.nanclouder.nanhistory.utils.history.EventRange
 import id.my.nanclouder.nanhistory.utils.history.generateEventId
-import id.my.nanclouder.nanhistory.utils.history.getFilePathFromDate
-import id.my.nanclouder.nanhistory.utils.history.validateSignature
+import id.my.nanclouder.nanhistory.utils.signature.validateSignature
 import id.my.nanclouder.nanhistory.utils.shareFile
 import id.my.nanclouder.nanhistory.service.RecordService
 import id.my.nanclouder.nanhistory.ui.AudioPlayer
@@ -165,18 +165,11 @@ class EventDetailActivity : ComponentActivity() {
         val eventId = intent.getStringExtra("eventId") ?: generateEventId()
         val path = intent.getStringExtra("path") ?: "NULL!"
         setContent {
-            var setUpdate by remember { mutableStateOf(false) }
-//            update = { setUpdate = !setUpdate }
             NanHistoryTheme {
                 DetailContent(eventId, path)
             }
         }
     }
-
-//    override fun onResume() {
-//        super.onResume()
-//        update()
-//    }
 }
 
 fun Context.getActivity(): ComponentActivity? = when (this) {
@@ -235,16 +228,16 @@ fun DetailContent_Old(eventId: String, path: String) {
     var eventLocations by remember {
         mutableStateOf<List<LocationData>>(emptyList())
     }
-    val locationAvailable = eventData?.locationPath != null
 
     var locationData by remember {
         mutableStateOf<List<HistoryLocationData>>(listOf())
     }
 
-    LaunchedEffect(eventData) {
+    LaunchedEffect(eventLocations) {
         eventLocations = eventData?.getLocations(context) ?: emptyList()
         locationData = eventLocations.getLocationData()
     }
+    val locationAvailable = eventLocations.isNotEmpty()
 
     TagDetailDialog(tagDetailDialogState)
 
@@ -485,10 +478,6 @@ fun DetailContent_Old(eventId: String, path: String) {
                                 .clickable {
                                     val intent = Intent(context, EventLocationActivity::class.java)
                                     intent.putExtra("eventId", eventData!!.id)
-                                    intent.putExtra(
-                                        "path",
-                                        getFilePathFromDate(eventData.time.toLocalDate())
-                                    )
                                     context.startActivity(intent)
                                 }
                         )
@@ -530,7 +519,10 @@ fun DetailContent_Old(eventId: String, path: String) {
                     }
 
                     if (eventData.signature.isNotBlank()) {
-                        val valid = remember { eventData.validateSignature(context = context) }
+                        var valid by remember { mutableStateOf<Boolean?>(null) }
+                        LaunchedEffect(eventData) {
+                            valid = eventData.validateSignature(context = context)
+                        }
                         Surface(
                             Modifier.clickable {
                                 showSignatureInfo = !showSignatureInfo
@@ -545,25 +537,35 @@ fun DetailContent_Old(eventId: String, path: String) {
                                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    if (valid) Icon(
+                                    if (valid == true) Icon(
                                         Icons.Rounded.CheckCircle,
                                         contentDescription = "Signed",
                                         modifier = Modifier
                                             .padding(start = 8.dp)
                                             .size(16.dp),
                                         tint = Color(0xFF008000)
-                                    ) else Icon(
+                                    ) else if (valid == false) Icon(
                                         Icons.Rounded.Warning,
                                         contentDescription = "Invalid signature",
                                         modifier = Modifier
                                             .padding(start = 8.dp)
                                             .size(16.dp),
                                         tint = Color(0xFF808000)
+                                    ) else Icon (
+                                        Icons.Rounded.MoreHoriz,
+                                        contentDescription = "Signature processing",
+                                        modifier = Modifier
+                                            .padding(start = 8.dp)
+                                            .size(16.dp),
+                                        tint = Color.Gray
                                     )
                                     Text(
                                         text =
-                                            if (valid) "This event is signed"
-                                            else "The signature of this event is invalid",
+                                            when (valid) {
+                                                true -> "This event is signed"
+                                                false -> "The signature of this event is invalid"
+                                                else -> "Processing signature"
+                                            },
                                         fontStyle = FontStyle.Italic
                                     )
                                 }
@@ -920,21 +922,14 @@ fun DetailContent_New(eventId: String, path: String) {
 
     val favorite = eventData?.favorite ?: false
 
-    var eventLocations by remember {
-        mutableStateOf<List<LocationData>>(emptyList())
-    }
-    val locationAvailable = eventData?.locationPath != null
+    val eventLocationsEntity by dao.getLocationsByEventId(eventId).collectAsState(emptyList())
+    val eventLocations = remember(eventLocationsEntity) { eventLocationsEntity.map { it.toLocationData() } }
 
-    var locationData by remember {
-        mutableStateOf<List<HistoryLocationData>>(listOf())
-    }
+    val locationData = remember(eventLocations) { eventLocations.getLocationData() }
 
     val mentionModalState = remember { mutableStateOf(MentionModalState()) }
 
-    LaunchedEffect(eventData) {
-        eventLocations = eventData?.getLocations(context) ?: emptyList()
-        locationData = eventLocations.getLocationData()
-    }
+    val locationAvailable = eventLocations.isNotEmpty()
 
     TagDetailDialog(tagDetailDialogState)
 
@@ -1228,10 +1223,6 @@ fun DetailContent_New(eventId: String, path: String) {
                                 .clickable {
                                     val intent = Intent(context, EventLocationActivity::class.java)
                                     intent.putExtra("eventId", eventData!!.id)
-                                    intent.putExtra(
-                                        "path",
-                                        getFilePathFromDate(eventData.time.toLocalDate())
-                                    )
                                     context.startActivity(intent)
                                 }
                         )
@@ -1455,8 +1446,13 @@ fun DetailContent_New(eventId: String, path: String) {
 
                     // Signature Section
                     if (eventData.signature.isNotBlank()) {
-                        val valid = remember { eventData.validateSignature(context = context) }
-                        Surface(
+                        var valid by remember { mutableStateOf<Boolean?>(null) }
+                        LaunchedEffect(eventData) {
+                            valid = eventData.validateSignature(context = context)
+                        }
+                        val currentValid = valid
+
+                        if (currentValid != null) Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp))
@@ -1478,33 +1474,33 @@ fun DetailContent_New(eventId: String, path: String) {
                                         modifier = Modifier
                                             .size(32.dp)
                                             .clip(RoundedCornerShape(8.dp)),
-                                        color = if (valid) Color(0xFF008000).copy(alpha = 0.2f) else Color(0xFF808000).copy(alpha = 0.2f)
+                                        color = if (currentValid) Color(0xFF008000).copy(alpha = 0.2f) else Color(0xFF808000).copy(alpha = 0.2f)
                                     ) {
                                         Icon(
-                                            if (valid) Icons.Rounded.CheckCircle else Icons.Rounded.Warning,
-                                            contentDescription = if (valid) "Signed" else "Invalid signature",
+                                            if (currentValid) Icons.Rounded.CheckCircle else Icons.Rounded.Warning,
+                                            contentDescription = if (currentValid) "Signed" else "Invalid signature",
                                             modifier = Modifier
                                                 .fillMaxSize()
                                                 .padding(4.dp),
-                                            tint = if (valid) Color(0xFF008000) else Color(0xFF808000)
+                                            tint = if (currentValid) Color(0xFF008000) else Color(0xFF808000)
                                         )
                                     }
                                     Text(
-                                        text = if (valid) "Event is digitally signed" else "Signature invalid",
+                                        text = if (currentValid) "Event is digitally signed" else "Signature invalid",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                                 AnimatedVisibility(visible = showSignatureInfo) {
                                     Text(
-                                        "Signature: ${eventData.signature}\nValid: $valid",
+                                        "Signature: ${eventData.signature}\nValid: $currentValid",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.padding(start = 12.dp)
                                     )
                                 }
                             }
-                        }
+                        } else ComponentPlaceholder(Modifier.fillMaxWidth().height(44.dp))
                         Box(Modifier.height(12.dp))
                     }
 

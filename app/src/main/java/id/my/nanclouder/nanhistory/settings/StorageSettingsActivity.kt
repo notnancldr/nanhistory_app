@@ -311,14 +311,14 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                         ),
                         enabled = cacheAvailable
                     ) {
-                        Text("Clear Cache")
+                        Text("Clear All Cache")
                     }
                 }
 
@@ -752,6 +752,36 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
                                 .padding(end = 8.dp)
                         )
                         Text("Clear Cache", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+
+                item {
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                withContext(Dispatchers.IO) {
+                                    id.my.nanclouder.nanhistory.ui.map.YearlyMapCacheManager.clearCache(context)
+                                }
+                                loader()
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.ic_delete),
+                            "Clear Yearly Map Cache",
+                            modifier = Modifier
+                                .size(20.dp)
+                                .padding(end = 8.dp)
+                        )
+                        Text("Clear Yearly Map Cache", style = MaterialTheme.typography.labelLarge)
                     }
                 }
 

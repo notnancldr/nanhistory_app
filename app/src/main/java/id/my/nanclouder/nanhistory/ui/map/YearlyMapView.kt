@@ -38,7 +38,12 @@ import kotlin.math.max
 import kotlin.math.min
 import android.content.Intent
 import id.my.nanclouder.nanhistory.EventDetailActivity
+import id.my.nanclouder.nanhistory.db.toHistoryEvent
 import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
+import id.my.nanclouder.nanhistory.ui.list.EventListItem
+import id.my.nanclouder.nanhistory.ui.list.TimelineEventItem
+import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
+import kotlin.math.pow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,10 +78,11 @@ fun YearlyMapView(modifier: Modifier = Modifier) {
     // Helper to calculate color based on frequency
     fun calculateFrequencyColor(count: Int, maxCount: Int): Int {
         val normalized = if (maxCount > 1) (count - 1).toFloat() / (maxCount - 1) else 0f
+        val lightness = (normalized * 1.5f - 0.75f).pow(2) + 0.5f
         // Blue (Low) -> Cyan -> Green -> Yellow -> Red (High)
         // Hue: 240 (Blue) -> 0 (Red)
-        val hue = 240f - (normalized * 240f)
-        return Color.hsl(hue, 1f, 0.5f).toArgb()
+        val hue = 240f - (normalized * 220f) - (if (count > 1) 20f else 0f)
+        return Color.hsl(hue, 1f, 0.5f * lightness).toArgb()
     }
 
     // State for map and data
@@ -131,8 +137,8 @@ fun YearlyMapView(modifier: Modifier = Modifier) {
         
         data.segments.forEach { (segment, eventIds) ->
             val polyline = Polyline(map).apply {
-                addPoint(segment.start)
-                addPoint(segment.end)
+                addPoint(segment.start.toGeoPoint())
+                addPoint(segment.end.toGeoPoint())
                 
                 val color = calculateFrequencyColor(eventIds.size, maxFreq)
                 outlinePaint.color = color
@@ -173,30 +179,33 @@ fun YearlyMapView(modifier: Modifier = Modifier) {
                 
                 LazyColumn {
                     items(selectedSegmentEventIds) { eventId ->
-                        // We need to fetch event details. Ideally passed in data or fetched here.
-                        // For now, we only have ID. Let's create a small item that fetches info or just ID.
-                        // Actually, we can fetch basic info in Logic or just launch detail.
-                        // Let's implement a simple row that loads the event title.
-                        var eventTitle by remember { mutableStateOf("Loading...") }
-                        var eventTime by remember { mutableStateOf("") }
+                        var eventData by remember { mutableStateOf<HistoryEvent?>(null) }
+                        var loaded by remember { mutableStateOf(false) }
+
+                        val constData = eventData
                         
                         LaunchedEffect(eventId) {
                             val event = dao.getEventById(eventId)
-                            eventTitle = event?.event?.title ?: "Unknown Event"
-                            eventTime = event?.event?.time?.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) ?: ""
+                            eventData = event?.toHistoryEvent()
+                            loaded = true
                         }
-                        
-                        ListItem(
-                            headlineContent = { Text(eventTitle) },
-                            supportingContent = { Text(eventTime) },
-                            modifier = Modifier.clickable {
-                                val intent = Intent(context, EventDetailActivity::class.java).apply {
-                                    putExtra("eventId", eventId)
+
+                        if (constData != null && loaded) {
+                            TimelineEventItem(
+                                constData, 
+                                Modifier.clickable {
+                                    val intent = Intent(context, EventDetailActivity::class.java)
+                                    intent.putExtra("eventId", eventId)
+                                    context.startActivity(intent)
                                 }
-                                context.startActivity(intent)
-                            }
-                        )
-                        HorizontalDivider()
+                            )
+                        }
+                        else if (loaded) {
+                            Text("Unknown event")
+                        }
+                        else {
+                            ComponentPlaceholder(Modifier.height(32.dp))
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(32.dp))
@@ -235,7 +244,7 @@ fun YearlyMapView(modifier: Modifier = Modifier) {
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = { context.getActivity()?.finish() }) {
+                    IconButton(onClick = { context.findActivity()?.finish() }) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
                     }
                 }
@@ -302,8 +311,8 @@ fun YearlyMapView(modifier: Modifier = Modifier) {
     }
 }
 
-private fun Context.getActivity(): android.app.Activity? = when (this) {
+private fun Context.findActivity(): android.app.Activity? = when (this) {
     is android.app.Activity -> this
-    is android.content.ContextWrapper -> baseContext.getActivity()
+    is android.content.ContextWrapper -> baseContext.findActivity()
     else -> null
 }

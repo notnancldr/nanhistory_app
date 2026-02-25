@@ -2,6 +2,7 @@ package id.my.nanclouder.nanhistory.db
 
 import android.content.Context
 import android.util.Log
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -23,12 +24,14 @@ import java.time.LocalDate
         DayEntity::class,
         TagEntity::class,
         EventTagCrossRef::class,
-        DayTagCrossRef::class
+        DayTagCrossRef::class,
+        LocationEntity::class
     ],
     views = [
         EventsTimeWithTag::class
     ],
-    version = 3
+    version = 4,
+    exportSchema = true
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -50,6 +53,7 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                     .addMigrations(migrations.migrations1to2)
                     .addMigrations(migrations.migrations2to3)
+                    .addMigrations(migrations.migrations3to4)
                     .build()
 
                 INSTANCE = instance

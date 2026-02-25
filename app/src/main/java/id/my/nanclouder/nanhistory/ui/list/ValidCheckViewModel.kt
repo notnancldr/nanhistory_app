@@ -4,9 +4,8 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
-import id.my.nanclouder.nanhistory.utils.history.validateSignature
+import id.my.nanclouder.nanhistory.utils.signature.validateSignature
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow

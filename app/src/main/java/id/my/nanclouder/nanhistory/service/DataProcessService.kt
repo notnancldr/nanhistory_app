@@ -18,7 +18,7 @@ import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.utils.LogData
 import id.my.nanclouder.nanhistory.utils.ServiceBroadcast
-import id.my.nanclouder.nanhistory.utils.history.migrateData
+import id.my.nanclouder.nanhistory.utils.migration.migrateData
 import id.my.nanclouder.nanhistory.utils.readableSize
 import id.my.nanclouder.nanhistory.ENCRYPTION_KEY
 import id.my.nanclouder.nanhistory.utils.LegacyImport
@@ -56,7 +56,12 @@ class DataProcessService : Service() {
         const val FILE_URI_EXTRA = "fileUri"
         const val LEGACY_IMPORT_EXTRA = "legacyImport"
 
-        private const val CURRENT_MIGRATION_CODE = 1
+        /**
+         * MIGRATIONS CODE HISTORY:
+         * * **`1`** : *Initial*
+         * * **`2`** : Location data migration from files to database.
+         */
+        private const val CURRENT_MIGRATION_CODE = 2
 
         fun checkMigration(context: Context): Boolean {
             val migrationCodeFile = File(context.filesDir, MIGRATION_CODE_FILEPATH)
@@ -75,6 +80,12 @@ class DataProcessService : Service() {
             val migrationCodeFile = File(context.filesDir, MIGRATION_CODE_FILEPATH)
             migrationCodeFile.delete()
         }
+
+        fun startMigrationService(context: Context) {
+            val intent = Intent(context, DataProcessService::class.java)
+            intent.putExtra(OPERATION_TYPE_EXTRA, OPERATION_MIGRATE)
+            context.startService(intent)
+        }
     }
 
     object ServiceState {
@@ -84,6 +95,7 @@ class DataProcessService : Service() {
         val isRunning = MutableStateFlow(false)
         val operationType = MutableStateFlow(-1)
         val isLegacyImport = MutableStateFlow(false)
+        val safeToUse = MutableStateFlow(false)
     }
 
     object BackupState {
@@ -262,7 +274,7 @@ class DataProcessService : Service() {
                                 readableSize(ServiceState.progress.value)
                             }/${readableSize(ServiceState.progressMax.value)})"
                             ImportProgressStage.Extract -> "Extracting data (${ServiceState.progress.value}/${ServiceState.progressMax.value})"
-                            ImportProgressStage.Migrate -> "Migrating data structure"
+                            ImportProgressStage.Migrate -> "${ImportState.migrationName.value ?: "Migrating"} - ${(ServiceState.progress.value * 100 / ServiceState.progressMax.value)}%"
                             ImportProgressStage.Done -> "Import complete"
                             ImportProgressStage.Error -> ServiceState.errorMessage.value
                             ImportProgressStage.Cancelled -> "Import cancelled"
@@ -270,7 +282,7 @@ class DataProcessService : Service() {
                         }
                     }
                     else {
-                        ImportState.migrationName.value
+                        "${ImportState.migrationName.value ?: "Migrating"} - ${ServiceState.progress.value}%"
                     }
                 )
                 setSmallIcon(R.drawable.ic_launcher_foreground)
@@ -285,15 +297,15 @@ class DataProcessService : Service() {
                     }
                     else if (
                         BackupState.stage.value == BackupProgressStage.Init ||
-                        ImportState.stage.value == ImportProgressStage.Init ||
-                        ImportState.stage.value == ImportProgressStage.Migrate
+                        ImportState.stage.value == ImportProgressStage.Init
                     ) {
                         setProgress(100, 0, true)
                     } else {
                         setProgress(
                             100,
-                            if (ImportState.stage.value == ImportProgressStage.Migrate) 100 else percentage,
-                            ImportState.stage.value == ImportProgressStage.Migrate)
+                            if (ImportState.stage.value == ImportProgressStage.Migrate) (ServiceState.progress.value * 100 / ServiceState.progressMax.value).toInt() else percentage,
+                            ImportState.migrationName.value == null && ImportState.stage.value == ImportProgressStage.Migrate
+                        )
                     }
                 }
             }
@@ -643,7 +655,11 @@ class DataProcessService : Service() {
                 max = 100,
                 importStage = ImportProgressStage.Migrate
             )
-            migrateData(context) { state, name ->
+            migrateData(context,
+                onSafeToUse = {
+                    ServiceState.safeToUse.value = true
+                }
+            ) { state, name ->
                 updateProgress(
                     progress = (state.progress * 100).toLong()
                 )
@@ -651,6 +667,8 @@ class DataProcessService : Service() {
             }
 
             updateProgress(importStage = ImportProgressStage.Done)
+
+            updateMigrationCode(applicationContext)
 
             val intent = Intent(ServiceBroadcast.ACTION_UPDATE_DATA)
             sendBroadcast(intent)
@@ -673,7 +691,11 @@ class DataProcessService : Service() {
         val context = applicationContext
         serviceScope.launch {
             updateProgress(importStage = ImportProgressStage.Migrate)
-            migrateData(context) { state, name ->
+            migrateData(context,
+                onSafeToUse = {
+                    ServiceState.safeToUse.value = true
+                }
+            ) { state, name ->
                 ImportState.migrationName.value = name
                 updateProgress(
                     progress = (state.progress * 100).toLong(),

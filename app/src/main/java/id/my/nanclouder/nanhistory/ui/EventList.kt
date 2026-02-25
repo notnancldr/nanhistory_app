@@ -58,7 +58,6 @@ import id.my.nanclouder.nanhistory.ui.main.EventSelectMode
 import id.my.nanclouder.nanhistory.utils.DateFormatter
 import id.my.nanclouder.nanhistory.utils.QuickScroll
 import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
-import id.my.nanclouder.nanhistory.utils.history.getFilePathFromDate
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -277,10 +276,6 @@ fun EventList(
                                                 EventDetailActivity::class.java
                                             )
                                         intent.putExtra("eventId", event.id)
-                                        intent.putExtra(
-                                            "path",
-                                            getFilePathFromDate(event.time.toLocalDate())
-                                        )
                                         context.startActivity(intent)
                                     } else {
                                         if (recording) return@listItemOnClick
@@ -316,10 +311,6 @@ fun EventList(
                                                 EventDetailActivity::class.java
                                             )
                                         intent.putExtra("eventId", event.id)
-                                        intent.putExtra(
-                                            "path",
-                                            getFilePathFromDate(event.time.toLocalDate())
-                                        )
                                         context.startActivity(intent)
                                     } else {
                                         if (recording) return@listItemOnClick

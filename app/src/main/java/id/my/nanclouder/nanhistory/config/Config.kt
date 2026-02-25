@@ -266,4 +266,7 @@ object Config {
     val yearlyMapSimplification = IntValue(
         "yearlyMapSimplification", 200 // cm
     )
+    val yearlyMapBackgroundProcessing = BooleanValue(
+        "yearlyMapBackgroundProcessing", true
+    )
 }

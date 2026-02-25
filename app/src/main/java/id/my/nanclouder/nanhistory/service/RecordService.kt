@@ -52,10 +52,8 @@ import id.my.nanclouder.nanhistory.utils.history.EventRange
 import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
 import id.my.nanclouder.nanhistory.utils.history.createLocationFile
 import id.my.nanclouder.nanhistory.utils.history.generateEventId
-import id.my.nanclouder.nanhistory.utils.history.generateSignature
-import id.my.nanclouder.nanhistory.utils.history.getFilePathFromDate
+import id.my.nanclouder.nanhistory.utils.signature.generateSignature
 import id.my.nanclouder.nanhistory.utils.history.updateModifiedTime
-import id.my.nanclouder.nanhistory.utils.matchOrNull
 import id.my.nanclouder.nanhistory.utils.readableTimeHours
 import java.io.File
 import java.io.IOException
@@ -70,17 +68,20 @@ import id.my.nanclouder.nanhistory.db.AppDao
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.toEventEntity
 import id.my.nanclouder.nanhistory.db.toHistoryEvent
+import id.my.nanclouder.nanhistory.db.toLocationData
 import id.my.nanclouder.nanhistory.utils.AccelerometerChange
 import id.my.nanclouder.nanhistory.utils.HumanShakeDetector
 import id.my.nanclouder.nanhistory.utils.average
 import id.my.nanclouder.nanhistory.utils.getLocationData
-import id.my.nanclouder.nanhistory.utils.history.EventLocationDigest
+import id.my.nanclouder.nanhistory.utils.signature.EventLocationDigest
 import id.my.nanclouder.nanhistory.utils.history.LocationData
 import id.my.nanclouder.nanhistory.utils.history.appendToLocationFile
-import id.my.nanclouder.nanhistory.utils.history.generateSignatureV1
+import id.my.nanclouder.nanhistory.utils.signature.generateSignatureV1
 import id.my.nanclouder.nanhistory.utils.history.getLocationFile
+import id.my.nanclouder.nanhistory.utils.history.insertToDatabase
 import id.my.nanclouder.nanhistory.utils.history.toLocationPath
 import id.my.nanclouder.nanhistory.utils.readLineWithNewline
+import id.my.nanclouder.nanhistory.utils.signature.generateSignatureV2
 import id.my.nanclouder.nanhistory.utils.transportModel.TransportMode
 import id.my.nanclouder.nanhistory.utils.transportModel.detectTransportMode
 import id.my.nanclouder.nanhistory.utils.transportModel.loadCalibrationModels
@@ -89,7 +90,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.isActive
@@ -139,7 +139,6 @@ class RecordService : Service() {
     private var notificationDescription = ""
 
     private val locationDigest = EventLocationDigest()
-    private var locationFileReader: RandomAccessFile? = null
 
     private lateinit var locationLogData: LogData
     private lateinit var iterationLogData: LogData
@@ -206,8 +205,6 @@ class RecordService : Service() {
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.Default + serviceJob)
 
-    private lateinit var locationPath: String
-    private lateinit var locationFile: File
     private val eventLocations: MutableList<LocationData> = mutableListOf()
     private val locationBuffer: MutableList<LocationData> = mutableListOf()
     private val iteratedLocationBuffer: MutableList<LocationData> = mutableListOf()
@@ -217,15 +214,7 @@ class RecordService : Service() {
     private val locationRetryDelayMs = 2000L
     private var locationTaskHandled = false
 
-    private fun sendStatusBroadcast(status: Int) {
-        val intent = Intent(ServiceBroadcast.ACTION_SERVICE_STATUS).apply {
-            putExtra(ServiceBroadcast.EXTRA_STATUS, status)
-            putExtra(ServiceBroadcast.EXTRA_EVENT_ID, event.id)
-            putExtra(ServiceBroadcast.EXTRA_EVENT_PATH, getFilePathFromDate(event.time.toLocalDate()))
-            putExtra(ServiceBroadcast.EXTRA_EVENT_POINT, eventPoint)
-        }
-        sendBroadcast(intent)
-    }
+    private var digestedLocations = 0
 
     private fun logService(msg: String) {
         serviceLogData.append("${
@@ -425,7 +414,7 @@ class RecordService : Service() {
 
                         this@RecordService.event.metadata["shake_to_stop"] = true
                         serviceScope.launch {
-                            dao.insertEvent(this@RecordService.event.toEventEntity())
+                            dao.updateEvent(this@RecordService.event.toEventEntity())
 
                             Log.d("RecordService", "STOP RECORD FROM SHAKE")
                             RecordState.status.value = RecordStatus.BUSY
@@ -597,12 +586,11 @@ class RecordService : Service() {
         initNotification()
         initSensors() // Add this line
 
-        // TODO
-        serviceScope.launch {
-            RecordState.status.collect {
-                Log.d("RecordService", "Status changed: $it")
-            }
-        }
+        // serviceScope.launch {
+        //     RecordState.status.collect {
+        //         Log.d("RecordService", "Status changed: $it")
+        //     }
+        // }
 
         sharedPreferences =
             applicationContext.getSharedPreferences("recordEvent", MODE_PRIVATE)
@@ -668,19 +656,15 @@ class RecordService : Service() {
             end = now,
         )
 
-        locationFile = createLocationFile(applicationContext)
-        locationPath = locationFile.toLocationPath(applicationContext)
-
         locationDigest.reset()
-        locationFileReader = null
 
-        event.locationPath = locationPath
         eventLocations.clear()
         locationBuffer.clear()
         iteratedLocationBuffer.clear()
 
         validUpdates = 0
         updates = 0
+        digestedLocations = 0
 
         locationLogData = LogData(
             path = "${LocalDate.now()}/${DateTimeFormatter.ofPattern("HH-mm-ss").format(now)}_LOCATION.log"
@@ -708,8 +692,6 @@ class RecordService : Service() {
         }
 
         accelDataFile = File(filesDir, "accelerometer_data/$time.accel")
-
-        Log.d("RecordService", "Location file initialized: $locationPath")
     }
 
     private fun startEventRecording(eventPoint: Boolean = false, eventId: String? = null, shakeToStart: Boolean = false) {
@@ -794,17 +776,12 @@ class RecordService : Service() {
 
             if (eventId != null) {
                 event = dao.getEventById(eventId)?.toHistoryEvent() ?: event
-                event.locationPath?.let {
-                    locationPath = it
-                    locationFile = File(filesDir, "locations/$locationPath")
-                    locationFileReader = if (locationFile.exists()) RandomAccessFile(locationFile, "r") else null
-                    eventLocations.addAll(
-                        // TODO: handle new format
-                        getLocationFile(locationPath, applicationContext).locations
-                    )
+                eventLocations.addAll(
+                    // TODO: handle new format
+                    event.getLocations(applicationContext)
+                )
                     // TODO: unused
-                    lastIterationIndex = eventLocations.size - 1
-                }
+                lastIterationIndex = eventLocations.size - 1
             }
 
             val collectAccel =
@@ -851,8 +828,6 @@ class RecordService : Service() {
 
             event.metadata["record_service_count"] = recordServiceCount + 1
             updates = recordUpdates.toInt()
-
-            event.locationPath = locationPath
 
             // TODO: new signing
             event.generateSignature(applicationContext, true)
@@ -913,8 +888,7 @@ class RecordService : Service() {
                 created = eventData.created,
                 modified = eventData.modified,
                 metadata = eventData.metadata,
-                audio = eventData.audio,
-                locationPath = locationPath
+                audio = eventData.audio
             )
         }
 
@@ -922,22 +896,11 @@ class RecordService : Service() {
             (event as EventRange).end = ZonedDateTime.now()
         }
 
-        if (eventLocations.isEmpty()) {
-            event.locationPath = null
-            locationFile.delete()
-        } else {
-            event.locationPath = locationPath
-        }
-
-        // if (!recordingStarted) {
-        //     event.metadata["recording_not_started"] = true
-        // }
-
         // Stop previous signature generation logic (NOPE, THIS BREAKS SIGNING SEQUENCE)
         if (signatureJob != null && signatureJob?.isActive == true) try {
             val message = "Signature took way too long to be generated"
             Log.w("RecordService", message)
-            logService("PROCESS TOO LONG: (SIGN + INSERT) in locationUpdate, STOPPING")
+            logService("PROCESS TOO LONG: (SIGN + UPDATE) in onLocationUpdate, STOPPING")
             // signatureJob?.cancel(message)
         } catch (e: Throwable) {
             Log.w("RecordService", e.message ?: "Unknown error")
@@ -969,33 +932,25 @@ class RecordService : Service() {
             // if there's already a process running
             iterateLocations(final = true)
 
-            val t2 = Instant.now()
-
-            // TODO: new signing (done)
-
             // Join to existing signatureJob
             val plusWait = signatureJob != null && signatureJob?.isActive == true
             signatureJob?.join()
 
+            val t2 = Instant.now()
+
+            val d1 = t2.toEpochMilli() - t1.toEpochMilli()
+            logService("(ITERATE_LOCATION) in stopEventRecording: ${d1}ms ${if (plusWait) "(+JOIN)" else ""}")
+
+            // TODO: new signing (done)
             // finalize signing, make sure nothing left to digest
-            if (event.locationPath != null) {
+            if (eventLocations.isNotEmpty()) {
                 processSignature(funcLabel = "stopEventRecording", noLimit = true)
             }
             else {
                 event.generateSignatureV1(applicationContext)
             }
-            event.updateModifiedTime()
 
-            dao.insertEvent(event.toEventEntity())
-            val t3 = Instant.now()
-
-            val d1 = t2.toEpochMilli() - t1.toEpochMilli()
-            val d2 = t3.toEpochMilli() - t2.toEpochMilli()
-
-            logService("(ITERATE_LOCATION) in stopEventRecording: ${d1}ms")
-            logService("(SIGN + INSERT) in stopEventRecording: ${d2}ms ${if (plusWait) "(+JOIN)" else ""}")
-
-            Log.d("RecordService", "Signing and insertion done in ${d2}ms")
+            // No update modified time, since it's also included in processSignature
 
             signatureJob = null
         }
@@ -1149,7 +1104,7 @@ class RecordService : Service() {
 
         try {
             serviceJob.cancel()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             Log.d("RecordService", "Service scope already cancelled")
         }
         // TODO
@@ -1159,7 +1114,6 @@ class RecordService : Service() {
         if (RecordState.isRecording.value && continueService && !eventPoint) {
             val restartIntent = Intent(this, this::class.java)
             restartIntent.putExtra("eventId", event.id)
-            restartIntent.putExtra("path", getFilePathFromDate(event.time.toLocalDate()))
             restartIntent.putExtra("includeAudio", false)
             restartIntent.putExtra("startedAsIdle", startedAsIdle)
             RecordState.status.value = RecordStatus.RESTARTING
@@ -1203,56 +1157,63 @@ class RecordService : Service() {
     }
 
     private suspend fun processSignature(funcLabel: String = "UNKNOWN", noLimit: Boolean = false) = withContext(Dispatchers.IO) {
-        var numberOfLines = 0
         val t1 = Instant.now()
+        var numberOfRows = 0
+
+        // Prevent processing if there is no changes
+        if (eventLocations.size <= digestedLocations) {
+            Log.d("RecordService|Signature", "eventLocations <= digestedLocations, skipping")
+            signatureJob = null
+            return@withContext
+        }
 
         // Data is appended to the list on every iteration
 
-        if (locationFileReader == null && locationFile.exists()) {
-            locationFileReader = RandomAccessFile(locationFile, "r")
-        }
+        if (eventLocations.isNotEmpty()) {
+            val isFirst = digestedLocations <= 0
+            var count = 0
+            val limit = if (noLimit) eventLocations.size else 50
 
-        if (locationFileReader != null) {
-            var data = ""
-            var currentLoop = 0
-            while (true) { // limit 50 lines read to reduce overhead
-                if (currentLoop >= 50 && !noLimit) break
+            val locations = dao.getLocationsByEventIdWithOffset(event.id, digestedLocations, limit)
+            count = locations.size
 
-                val line = locationFileReader?.readLineWithNewline()?.toString(Charsets.UTF_8)
-
-                // If read operation returned null (indicate EOF), break the loop
-                data += line ?: break
-
-                currentLoop++
-                numberOfLines++
+            val data = locations.joinToString("\n", prefix = if (isFirst || locations.isEmpty()) "" else "\n") {
+                it.toLocationData().toString()
             }
 
-            locationDigest.update(data.toByteArray())
+            Log.d("RecordService|Signature", "Digesting: --$data--")
+
+            locationDigest.update(data.encodeToByteArray())
+            digestedLocations += count
+            numberOfRows = count
+        }
+        else {
+            Log.d("RecordService|Signature", "Event locations is empty, skipping digestion")
         }
 
         val t2 = Instant.now()
 
         // TODO: new signing
-        event.signature = event.generateSignatureV1(
+        event.signature = event.generateSignatureV2(
             context = applicationContext,
             locationDigest =
-                if (locationFile.exists() && event.locationPath != null) locationDigest
+                if (eventLocations.isNotEmpty()) locationDigest
                 else null
         ).joinToString("") { "%02x".format(it) }
         event.updateModifiedTime()
 
-        dao.insertEvent(event.toEventEntity())
+        dao.updateEvent(event.toEventEntity())
         val t3 = Instant.now()
 
         val d1 = t2.toEpochMilli() - t1.toEpochMilli()
         val d2 = t3.toEpochMilli() - t2.toEpochMilli()
 
-        logService("(LOCATION_DIGEST) in $funcLabel: ${d1}ms, $numberOfLines lines")
-        logService("(SIGN + INSERT) in $funcLabel: ${d2}ms")
+        logService("(LOCATION_DIGEST) in $funcLabel: ${d1}ms, $numberOfRows rows")
+        logService("(SIGN + UPDATE) in $funcLabel: ${d2}ms")
 
         Log.d("RecordService", "Signing and insertion done in ${d2}ms")
 
-        // signatureJob = null
+         signatureJob = null
     }
 
     private fun onLocationUpdate(locations: List<Location>) {
@@ -1318,10 +1279,13 @@ class RecordService : Service() {
 
             // TODO: move this check
             if (locationBuffer.isNotEmpty() && eventPoint) {
-                locationBuffer.appendToLocationFile(locationFile)
-                eventLocations.addAll(locationBuffer)
-                locationBuffer.clear()
-                serviceScope.launch { stopEventRecording() }
+                serviceScope.launch {
+                    locationBuffer.insertToDatabase(applicationContext, event.id)
+                    eventLocations.addAll(locationBuffer)
+                    locationBuffer.clear()
+
+                    stopEventRecording()
+                }
                 return
             }
         }
@@ -1351,8 +1315,6 @@ class RecordService : Service() {
         // val signatureValidBeforeUpdate = event.validateSignature(applicationContext)
 
         event.metadata["record_updates"] = updates
-
-        event.locationPath = locationPath
         // Log.d(
         //     "RecordService",
         //     "Event signature valid: B: $signatureValidBeforeUpdate, A: ${event.validateSignature(applicationContext)}"
@@ -1372,13 +1334,14 @@ class RecordService : Service() {
         if (signatureJob != null && signatureJob?.isActive == true) {
             val message = "Event data checkpointing still in progress, skipping new checkpointing"
             Log.w("RecordService", message)
-            logService("LONG PROCESS: (WRITE_LOCATION + SIGN + INSERT) in locationUpdate, SKIPPING")
+            logService("LONG PROCESS: (WRITE_LOCATION + SIGN + UPDATE) in locationUpdate, SKIPPING")
         }
 
         // Only run this when signature is not being generated
-        signatureJob = signatureJob ?: serviceScope.launch {
-            processSignature("onLocationUpdate")
-        }
+        // signatureJob = signatureJob ?: serviceScope.launch {
+        //     processSignature("onLocationUpdate")
+        //     signatureJob = null
+        // }
 
         // Iterate locations every 10 updates
         if (updates % 10 == 0) {
@@ -1483,118 +1446,6 @@ class RecordService : Service() {
         notificationText = "Recording Event"
     }
 
-    private fun startRecording(eventPoint: Boolean = false, eventId: String? = null) {
-        val now = ZonedDateTime.now()
-
-        RecordState.currentLogic.value = Config.locationIterationLogic.get(this@RecordService).let {
-            if (it == LocationIterationLogic.Default) LocationIterationLogic.LookBehindAhead_v1
-            else it
-        }
-
-        iterationLogData.append("CURRENT ITERATION LOGIC: ${RecordState.currentLogic.value}")
-        iterationLogData.append("")
-
-        iterationLogData.save(this)
-
-
-        // If shake-to-start is enabled and not an event point, don't start vibration interval yet
-        if (!(shakeToStartEnabled && !eventPoint)) {
-            startIntervalVibration()
-        }
-
-        recordingStarted = true
-
-        serviceScope.launch {
-            this@RecordService.eventPoint = eventPoint
-
-            RecordState.status.value = if (shakeToStartEnabled && !eventPoint) RecordStatus.IDLE else RecordStatus.BUSY
-            requestTileListeningState()
-
-            // Load vibration settings
-            vibrateEnabled = Config.recordVibrateEnabled.get(this@RecordService)
-            vibrateEveryUpdate = Config.recordVibrateEveryUpdate.get(this@RecordService)
-            vibrateInterval = Config.recordVibrateInterval.get(this@RecordService)
-            vibrateDuration = Config.recordVibrateDuration.get(this@RecordService).toLong()
-
-            if (eventId != null) {
-                event = dao.getEventById(eventId)?.toHistoryEvent() ?: event
-                event.locationPath?.let {
-                    locationPath = it
-                    locationFile = File(filesDir, "locations/$locationPath")
-                    eventLocations.addAll(
-                        // TODO: handle new format
-                        getLocationFile(locationPath, applicationContext).locations
-                    )
-
-                    // TODO: unused
-                    lastIterationIndex = eventLocations.size - 1
-                }
-            }
-
-            AppDatabase.ensureDayExists(dao, event.time.toLocalDate())
-            dao.insertEvent(event.toEventEntity())
-
-            startLocationUpdates()
-
-            RecordState.eventId.value = event.id
-
-            locationLogData.append("Title: ${event.title}\n")
-            locationLogData.append("Start: $now")
-            locationLogData.append("\n")
-            locationLogData.append(
-                "TIME".padEnd(10) +
-                        "valid".padEnd(7) +
-                        "updates".padEnd(9) +
-                        "got".padEnd(5) +
-                        "current".padEnd(9) +
-                        "elapsed".padEnd(9) +
-                        "acc".padEnd(18)
-            )
-
-            locationLogData.save(applicationContext)
-
-            val recordServiceCount =
-                matchOrNull<Double>(event.metadata["record_service_count"]) ?: 0.0
-            val recordUpdates = matchOrNull<Double>(event.metadata["record_updates"]) ?: 0.0
-
-            event.metadata["record_service_count"] = recordServiceCount + 1
-            updates = recordUpdates.toInt()
-
-            event.locationPath = locationPath
-
-            // TODO: new signing
-            event.generateSignature(applicationContext, true)
-
-            if (includeAudio) startAudioRecording()
-            else if (!eventPoint && !shakeToStartEnabled) RecordState.status.value = RecordStatus.RUNNING
-
-            requestTileListeningState()
-
-            // Log shake detection status
-            Log.d("RecordService", "Shake detection enabled: $shakeDetectionEnabled, Shake to start: $shakeToStartEnabled, eventPoint: $eventPoint")
-        }
-
-        RecordState.isRecording.value = true
-    }
-
-    fun isMicAvailable(): Boolean {
-        return try {
-            MediaRecorder(applicationContext).apply {
-                setAudioSource(MediaRecorder.AudioSource.MIC)
-                setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP)
-                setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB)
-                setOutputFile("/dev/null")
-                prepare()
-                start()
-                stop()
-                release()
-            }
-            true
-        } catch (e: Exception) {
-            false
-        }
-    }
-
     private fun startAudioRecording() {
         if (!eventPoint) serviceScope.launch {
             delay(1000)
@@ -1643,10 +1494,11 @@ class RecordService : Service() {
         mediaRecorder = null
         event.audio = outputAudio
 
-        // TODO: new signing
-        event.generateSignature(applicationContext, true)
-
-        serviceScope.launch { dao.insertEvent(event.toEventEntity()) }
+        serviceScope.launch {
+            // TODO: new signing
+            event.generateSignature(applicationContext, true)
+            dao.updateEvent(event.toEventEntity())
+        }
     }
 
     private fun iterateLocations(final: Boolean = false) = runBlocking(Dispatchers.IO) {
@@ -1796,8 +1648,8 @@ class RecordService : Service() {
 
             iterationLogData.save(this@RecordService)
 
-            // Append data from iterated location buffer
-            iteratedLocationBuffer.appendToLocationFile(locationFile)
+            // Insert location data into database
+            iteratedLocationBuffer.insertToDatabase(applicationContext, event.id)
 
             signatureJob = signatureJob ?: serviceScope.launch {
                 processSignature(

@@ -1,9 +1,7 @@
 package id.my.nanclouder.nanhistory
 
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -76,10 +74,12 @@ class MainActivity : NewUIComponentActivity() {
             var showMainView by remember { mutableStateOf(false) }
             var migrationNeeded by remember { mutableStateOf(false) }
 
+            val safeToUse by DataProcessService.ServiceState.safeToUse.collectAsState()
+
             val dataProcessType by DataProcessService.ServiceState.operationType.collectAsState()
             val dataProcessIsRunning by DataProcessService.ServiceState.isRunning.collectAsState()
 
-            LaunchedEffect(dataProcessIsRunning) {
+            LaunchedEffect(safeToUse, dataProcessIsRunning) {
                 if (
                     !DataProcessService.checkMigration(this@MainActivity) &&
                     dataProcessType == DataProcessService.OPERATION_UNKNOWN &&
@@ -88,26 +88,24 @@ class MainActivity : NewUIComponentActivity() {
                     migrationNeeded = true
                     showMainView = false
 
-                    val intent = Intent(this@MainActivity, DataProcessService::class.java)
-                    intent.putExtra(DataProcessService.OPERATION_TYPE_EXTRA, DataProcessService.OPERATION_MIGRATE)
-                    startService(intent)
+                    DataProcessService.startMigrationService(this@MainActivity)
                 }
                 else if (
                     (
                         dataProcessType == DataProcessService.OPERATION_IMPORT ||
                         dataProcessType == DataProcessService.OPERATION_MIGRATE
-                    ) && dataProcessIsRunning
+                    ) && dataProcessIsRunning && !safeToUse
                 ) {
                     showMainView = false
                 }
                 else {
                     showMainView = true
                 }
-            }
 
-            if (migrationNeeded && !showMainView && !dataProcessIsRunning) {
-                migrationNeeded = false
-                showMainView = true
+                if (migrationNeeded && !showMainView && (safeToUse || !dataProcessIsRunning)) {
+                    migrationNeeded = false
+                    showMainView = true
+                }
             }
 
             NanHistoryTheme {
@@ -160,6 +158,19 @@ class MainActivity : NewUIComponentActivity() {
                 "AutoDeleteWorker",
                 ExistingPeriodicWorkPolicy.UPDATE,
                 request
+            )
+
+        // Schedule Yearly Map Update
+        // This is a OneTimeWork restricted to run only when connected to power/battery not low?
+        // Actually, for now just run it. The worker itself checks config.
+        val yearlyMapRequest = androidx.work.OneTimeWorkRequestBuilder<id.my.nanclouder.nanhistory.service.YearlyMapWorker>()
+            .build()
+
+        WorkManager.getInstance(this)
+            .enqueueUniqueWork(
+                "YearlyMapWorker",
+                androidx.work.ExistingWorkPolicy.KEEP,
+                yearlyMapRequest
             )
     }
 }

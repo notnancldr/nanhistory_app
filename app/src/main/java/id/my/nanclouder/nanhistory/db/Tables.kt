@@ -9,6 +9,8 @@ import androidx.room.Index
 import androidx.room.Junction
 import androidx.room.PrimaryKey
 import androidx.room.Relation
+import id.my.nanclouder.nanhistory.utils.Coordinate
+import id.my.nanclouder.nanhistory.utils.PersistableZonedDateTime
 import id.my.nanclouder.nanhistory.utils.history.EVENT_VERSION_NUMBER
 import id.my.nanclouder.nanhistory.utils.history.EventPoint
 import id.my.nanclouder.nanhistory.utils.history.EventRange
@@ -16,7 +18,12 @@ import id.my.nanclouder.nanhistory.utils.history.EventTypes
 import id.my.nanclouder.nanhistory.utils.history.HistoryDay
 import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
 import id.my.nanclouder.nanhistory.utils.history.HistoryTag
+import id.my.nanclouder.nanhistory.utils.history.LocationData
 import id.my.nanclouder.nanhistory.utils.history.TransportationType
+import id.my.nanclouder.nanhistory.utils.toPersistable
+import id.my.nanclouder.nanhistory.utils.toZonedDateTime
+import java.math.RoundingMode
+import java.text.DecimalFormat
 import java.time.LocalDate
 import java.time.ZonedDateTime
 
@@ -84,6 +91,76 @@ data class TagEntity(
     val tint: Color
 )
 
+/**
+ * Added since `DB v4`
+ */
+@Entity(
+    tableName = "locations",
+    foreignKeys = [
+        ForeignKey(
+            entity = EventEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["eventId"],
+            onDelete = ForeignKey.CASCADE,
+        )
+    ]
+)
+data class LocationEntity(
+    // Time information
+    @PrimaryKey val timestamp: Long,
+    val eventId: String,
+    val zoneId: String,
+
+    // Location data
+    val latitude: Double,
+    val longitude: Double,
+
+    val speed: Float? = null,
+    val bearing: Float? = null,
+    val altitude: Double? = null,
+
+    // Accuracy fields
+    val accuracy: Float? = null,
+    val speedAccuracy: Float? = null,
+    val bearingAccuracy: Float? = null,
+    val verticalAccuracy: Float? = null,
+) {
+    val location
+        get() = Coordinate(latitude, longitude)
+    val time: ZonedDateTime
+        get() = PersistableZonedDateTime(timestamp, zoneId).toZonedDateTime() ?: ZonedDateTime.now()
+
+    override fun toString(): String {
+        val formatter = DecimalFormat("#.####").apply {
+            roundingMode = RoundingMode.HALF_UP
+        }
+
+        fun formatNumber(value: Number?): String {
+            return value?.let { formatter.format(it.toDouble()) } ?: ""
+        }
+
+        return listOf(
+            time.toOffsetDateTime().toString(),
+
+            // Location
+            location.toString(),
+            formatNumber(accuracy),
+
+            // Speed
+            formatNumber(speed),
+            formatNumber(speedAccuracy),
+
+            // Bearing
+            formatNumber(bearing),
+            formatNumber(bearingAccuracy),
+
+            // Altitude
+            formatNumber(altitude),
+            formatNumber(verticalAccuracy),
+        ).joinToString("|")
+    }
+}
+
 @Entity(primaryKeys = ["eventId", "tagId"], tableName = "event_tag_cross_refs")
 data class EventTagCrossRef(
     val eventId: String,
@@ -141,6 +218,15 @@ data class DayWithTags(
     val tags: List<TagEntity>
 )
 
+data class EventWithTagsWithLocations(
+    @Embedded val eventWithTags: EventWithTags,
+
+    @Relation(
+        parentColumn = "id",      // This refers to EventEntity.id (inside EventWithTags)
+        entityColumn = "eventId"  // This refers to LocationEntity.eventId
+    )
+    val locations: List<LocationEntity>
+)
 
 
 fun HistoryTag.toTagEntity() = TagEntity(
@@ -243,4 +329,31 @@ fun DayEntity.toHistoryDay() = HistoryDay(
     date = date,
     description = description,
     favorite = favorite
+)
+
+fun LocationEntity.toLocationData() = LocationData(
+    time = PersistableZonedDateTime(timestamp, zoneId).toZonedDateTime() ?: ZonedDateTime.now(),
+    location = Coordinate(latitude, longitude),
+    speed = speed,
+    bearing = bearing,
+    altitude = altitude,
+    accuracy = accuracy,
+    speedAccuracy = speedAccuracy,
+    bearingAccuracy = bearingAccuracy,
+    verticalAccuracy = verticalAccuracy,
+)
+
+fun LocationData.toLocationEntity(eventId: String) = LocationEntity(
+    eventId = eventId,
+    timestamp = time.toPersistable().utcDateTime,
+    zoneId = time.toPersistable().zoneId,
+    latitude = location.latitude,
+    longitude = location.longitude,
+    speed = speed,
+    bearing = bearing,
+    altitude = altitude,
+    accuracy = accuracy,
+    speedAccuracy = speedAccuracy,
+    bearingAccuracy = bearingAccuracy,
+    verticalAccuracy = verticalAccuracy,
 )

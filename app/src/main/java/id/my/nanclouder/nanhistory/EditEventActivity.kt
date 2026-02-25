@@ -81,8 +81,8 @@ import id.my.nanclouder.nanhistory.utils.history.EventPoint
 import id.my.nanclouder.nanhistory.utils.history.EventRange
 import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
 import id.my.nanclouder.nanhistory.utils.history.TransportationType
-import id.my.nanclouder.nanhistory.utils.history.generateSignature
-import id.my.nanclouder.nanhistory.utils.history.validateSignature
+import id.my.nanclouder.nanhistory.utils.signature.generateSignature
+import id.my.nanclouder.nanhistory.utils.signature.validateSignature
 import id.my.nanclouder.nanhistory.utils.withHaptic
 import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
 import id.my.nanclouder.nanhistory.ui.style.DangerButtonColors
@@ -245,28 +245,28 @@ fun EditEventView_Old(eventId: String?) {
                             onClick = {
                                 Log.d("NanHistoryDebug", "SAVE BUTTON")
                                 newEvent = (
-                                        if (rangeEvent) EventRange(
-                                            title = eventTitle,
-                                            description = eventDescription,
-                                            time = time,
-                                            end = timeEnd,
-                                            transportationType = transportationType
-                                        ) else EventPoint (
-                                            title = eventTitle,
-                                            description = eventDescription,
-                                            time = time,
-                                        )
-                                        ).apply {
-                                        if (oldEvent != null) {
-                                            id = oldEvent.id
-                                            created = oldEvent.created
-                                            favorite = oldEvent.favorite
-                                            signature = oldEvent.signature
-                                            metadata = oldEvent.metadata
-                                            audio = oldEvent.audio
-                                            unknownProperties = oldEvent.unknownProperties
-                                            locationPath = oldEvent.locationPath
-                                        }
+                                    if (rangeEvent) EventRange(
+                                        title = eventTitle,
+                                        description = eventDescription,
+                                        time = time,
+                                        end = timeEnd,
+                                        transportationType = transportationType
+                                    ) else EventPoint (
+                                        title = eventTitle,
+                                        description = eventDescription,
+                                        time = time,
+                                    )
+                                    ).apply {
+                                    if (oldEvent != null) {
+                                        id = oldEvent.id
+                                        created = oldEvent.created
+                                        favorite = oldEvent.favorite
+                                        signature = oldEvent.signature
+                                        metadata = oldEvent.metadata
+                                        audio = oldEvent.audio
+                                        unknownProperties = oldEvent.unknownProperties
+                                        locationPath = oldEvent.locationPath
+                                    }
 //                                if (oldEvent is EventRange && this is EventRange) {
 //                                    locations = oldEvent.locations
 //                                }
@@ -280,12 +280,13 @@ fun EditEventView_Old(eventId: String?) {
 //                                    locations = mutableMapOf(oldEvent.time to oldEvent.location!!)
 //                                }
                                     }
-
+                                scope.launch {
                                 if (oldEvent != null && oldEvent.validateSignature(context = context)
                                     && oldEvent.signature != newEvent!!.generateSignature(context = context))
                                     invalidSignatureWarning = true
                                 else
                                     saveEvent()
+                                }
 
                             },
                             enabled = confirmButtonEnabled
@@ -724,40 +725,44 @@ fun EditEventView_New(eventId: String?) {
                         Button(
                             onClick = {
                                 newEvent = (
-                                        if (rangeEvent) EventRange(
-                                            title = eventTitle.ifBlank { if (titleIconClicked < 10) oldEvent?.title ?: "" else "" },
-                                            description = eventDescription,
-                                            time = time,
-                                            end = timeEnd,
-                                            transportationType = transportationType
-                                        ) else EventPoint(
-                                            title = eventTitle.ifBlank { if (titleIconClicked < 10) oldEvent?.title ?: "" else "" },
-                                            description = eventDescription,
-                                            time = time,
-                                        )
-                                        ).apply {
-                                        if (oldEvent != null) {
-                                            id = oldEvent.id
-                                            created = oldEvent.created
-                                            favorite = oldEvent.favorite
-                                            signature = oldEvent.signature
-                                            metadata = oldEvent.metadata
-                                            audio = oldEvent.audio
-                                            unknownProperties = oldEvent.unknownProperties
-                                            locationPath = oldEvent.locationPath
+                                    if (rangeEvent) EventRange(
+                                        title = eventTitle.ifBlank { if (titleIconClicked < 10) oldEvent?.title ?: "" else "" },
+                                        description = eventDescription,
+                                        time = time,
+                                        end = timeEnd,
+                                        transportationType = transportationType
+                                    ) else EventPoint(
+                                        title = eventTitle.ifBlank { if (titleIconClicked < 10) oldEvent?.title ?: "" else "" },
+                                        description = eventDescription,
+                                        time = time,
+                                    )
+                                    ).apply {
+                                    if (oldEvent != null) {
+                                        id = oldEvent.id
+                                        created = oldEvent.created
+                                        favorite = oldEvent.favorite
+                                        signature = oldEvent.signature
+                                        metadata = oldEvent.metadata
+                                        audio = oldEvent.audio
+                                        unknownProperties = oldEvent.unknownProperties
+                                        locationPath = oldEvent.locationPath
 
-                                            if (oldEvent.title != title) {
-                                                metadata.remove("unnamed")
-                                            }
+                                        if (oldEvent.title != title) {
+                                            metadata.remove("unnamed")
                                         }
                                     }
+                                }
 
-
-                                if (oldEvent != null && oldEvent.validateSignature(context = context)
-                                    && oldEvent.signature != newEvent!!.generateSignature(context = context))
-                                    invalidSignatureWarning = true
-                                else
-                                    saveEvent()
+                                scope.launch {
+                                    if (oldEvent != null && oldEvent.validateSignature(context = context)
+                                        && oldEvent.signature != newEvent!!.generateSignature(
+                                            context = context
+                                        )
+                                    )
+                                        invalidSignatureWarning = true
+                                    else
+                                        saveEvent()
+                                }
                             },
                             enabled = confirmButtonEnabled,
                             modifier = Modifier.height(40.dp),

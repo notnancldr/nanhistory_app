@@ -29,13 +29,16 @@ interface AppDao {
     @Delete
     suspend fun deleteEvents(events: List<EventEntity>)
 
+    @Query("UPDATE events SET locationPath = NULL WHERE id = :eventId")
+    suspend fun deleteLocationPath(eventId: String)
+
     @Query("UPDATE events SET favorite = true WHERE id = :id")
     suspend fun setFavoriteEvent(id: String)
 
     @Query("UPDATE events SET favorite = false WHERE id = :id")
     suspend fun unsetFavoriteEvent(id: String)
 
-    @Query("UPDATE events SET favorite = not favorite WHERE id = :id")
+    @Query("UPDATE events SET favorite = NOT favorite WHERE id = :id")
     suspend fun toggleFavoriteEvent(id: String)
 
     @Query("UPDATE events SET deletePermanently = :deleteTime WHERE id IN (:ids)")
@@ -191,6 +194,32 @@ interface AppDao {
     @Query("SELECT * FROM events WHERE deletePermanently IS NULL AND date BETWEEN :from AND :to ORDER BY timestamp DESC")
     fun getEventsInRange(from: String, to: String = LocalDate.MAX.toString()): Flow<List<EventWithTags>>
 
+    @Transaction
+    @Query("SELECT * FROM events WHERE (COALESCE(endTimestamp, timestamp) > :timestamp) AND deletePermanently IS NULL ORDER BY timestamp ASC")
+    suspend fun getEventsAfter(timestamp: Long): List<EventWithTags>
+
+
+    /* Location Dao */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLocation(location: LocationEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLocations(locations: List<LocationEntity>)
+
+    @Query("SELECT * FROM locations WHERE eventId = :id ORDER BY timestamp")
+    fun getLocationsByEventId(id: String): Flow<List<LocationEntity>>
+
+    @Transaction
+    @Query("SELECT * FROM events WHERE deletePermanently IS NULL")
+    fun getAllEventsWithLocations(): Flow<List<EventWithTagsWithLocations>>
+
+    @Query("SELECT COUNT(*) FROM locations WHERE eventId = :id")
+    suspend fun getLocationsCountByEventId(id: String): Int
+
+    @Query("SELECT * FROM locations WHERE eventId = :id LIMIT :limit OFFSET :offset")
+    suspend fun getLocationsByEventIdWithOffset(id: String, offset: Int, limit: Int): List<LocationEntity>
+
+
 
     /* Day Dao */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -255,7 +284,7 @@ interface AppDao {
     @Query("SELECT * FROM tags WHERE id = :tagId")
     fun getTagById(tagId: String): Flow<TagEntity?>
 
-    /* Tag Cross References */
+    /* Tag Cross-References */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertEventTagCrossRef(crossRef: EventTagCrossRef)
 
