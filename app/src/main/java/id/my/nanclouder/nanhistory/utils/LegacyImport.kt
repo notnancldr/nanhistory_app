@@ -19,7 +19,7 @@ import id.my.nanclouder.nanhistory.utils.history.EventPoint
 import id.my.nanclouder.nanhistory.utils.history.EventRange
 import id.my.nanclouder.nanhistory.utils.history.HistoryDay
 import id.my.nanclouder.nanhistory.utils.history.createLocationFile
-import id.my.nanclouder.nanhistory.utils.history.generateSignature
+import id.my.nanclouder.nanhistory.utils.signature.generateSignature
 import id.my.nanclouder.nanhistory.utils.history.safeDelete
 import id.my.nanclouder.nanhistory.utils.history.toLocationPath
 import id.my.nanclouder.nanhistory.utils.history.writeToLocationFile
@@ -127,7 +127,7 @@ object LegacyImport {
     private fun verifyLegacySignature(legacyMapped: Map<String, Any?>, signature: String): Boolean =
         getLegacySignature(legacyMapped) == signature
 
-    private fun importEvent(context: Context, legacyMapped: Map<String, Any?>): EventEntity? {
+    private suspend fun importEvent(context: Context, legacyMapped: Map<String, Any?>): EventEntity? {
         val zoneId = ZoneId.systemDefault()
         val now = ZonedDateTime.now()
 

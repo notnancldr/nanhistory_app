@@ -48,6 +48,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -85,9 +86,8 @@ import id.my.nanclouder.nanhistory.utils.history.LocationData
 import id.my.nanclouder.nanhistory.utils.history.appendToLocationFile
 import id.my.nanclouder.nanhistory.utils.history.createLocationFile
 import id.my.nanclouder.nanhistory.utils.history.generateEventId
-import id.my.nanclouder.nanhistory.utils.history.generateSignature
-import id.my.nanclouder.nanhistory.utils.history.getFilePathFromDate
-import id.my.nanclouder.nanhistory.utils.history.validateSignature
+import id.my.nanclouder.nanhistory.utils.signature.generateSignature
+import id.my.nanclouder.nanhistory.utils.signature.validateSignature
 import id.my.nanclouder.nanhistory.utils.matchOrNull
 import id.my.nanclouder.nanhistory.utils.toGeoPoint
 import java.io.File
@@ -117,7 +117,6 @@ class EventLocationActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val eventId = intent.getStringExtra("eventId") ?: generateEventId()
-        val path = intent.getStringExtra("path") ?: "NULL!"
         val startAsCutMode = intent.getBooleanExtra("cutMode", false)
         setContent {
             var setUpdate by remember { mutableStateOf(false) }
@@ -248,12 +247,16 @@ fun EventLocationView_Old(eventId: String, startAsCutMode: Boolean = false) {
 
     val recording = matchOrNull<Boolean>(eventData?.metadata?.get("recording")) ?: false
 
-    val eventLocations = eventData?.getLocations(context) ?: emptyList()
+    var eventLocations by remember { mutableStateOf(emptyList<LocationData>()) }
     val locationAvailable = eventLocations.isNotEmpty()
 
     var cutMode by rememberSaveable { mutableStateOf(startAsCutMode) }
     var cutStart by rememberSaveable { mutableStateOf<ZonedDateTime?>(null) }
     var cutEnd by rememberSaveable { mutableStateOf<ZonedDateTime?>(null) }
+
+    LaunchedEffect(eventData) {
+        eventLocations = eventData?.getLocations(context) ?: emptyList()
+    }
 
     Log.d("NanHistoryDebug", "eventData: $eventData")
 
@@ -391,13 +394,14 @@ fun EventLocationView_Old(eventId: String, startAsCutMode: Boolean = false) {
                                         event.audio = targetPath
                                     }
                                 }
-                                if (eventData.validateSignature(context = context))
-                                    event.generateSignature(context, true)
 
                                 val db = AppDatabase.getInstance(context)
                                 val dao = db.appDao()
 
                                 scope.launch {
+                                    if (eventData.validateSignature(context = context))
+                                        event.generateSignature(context, true)
+
                                     dao.insertEvent(event.toEventEntity())
                                 }
 
@@ -409,17 +413,6 @@ fun EventLocationView_Old(eventId: String, startAsCutMode: Boolean = false) {
                                 )
                                     .show()
 
-                                val resultIntent =
-                                    Intent().apply {
-                                        putExtra(
-                                            "path",
-                                            getFilePathFromDate(
-                                                event.time.toLocalDate()
-                                            )
-                                        )
-                                    }
-
-                                context.getActivity()?.setResult(2, resultIntent)
                                 if (startAsCutMode) context.getActivity()?.finish()
 
                                 // TODO
@@ -1027,12 +1020,16 @@ fun EventLocationView_New(eventId: String, startAsCutMode: Boolean = false) {
 
     val recording = matchOrNull<Boolean>(eventData?.metadata?.get("recording")) ?: false
 
-    val eventLocations = eventData?.getLocations(context) ?: emptyList()
+    var eventLocations by remember { mutableStateOf(emptyList<LocationData>()) }
     val locationAvailable = eventLocations.isNotEmpty()
 
     var cutMode by rememberSaveable { mutableStateOf(startAsCutMode) }
     var cutStart by rememberSaveable { mutableStateOf<Int?>(null) }
     var cutEnd by rememberSaveable { mutableStateOf<Int?>(null) }
+
+    LaunchedEffect(eventData) {
+        eventLocations = eventData?.getLocations(context) ?: emptyList()
+    }
 
     Log.d("NanHistoryDebug", "eventData: $eventData")
 
@@ -1199,13 +1196,14 @@ fun EventLocationView_New(eventId: String, startAsCutMode: Boolean = false) {
                                         event.audio = targetPath
                                     }
                                 }
-                                if (eventData.validateSignature(context = context))
-                                    event.generateSignature(context, true)
 
                                 val db = AppDatabase.getInstance(context)
                                 val dao = db.appDao()
 
                                 scope.launch {
+                                    if (eventData.validateSignature(context = context))
+                                        event.generateSignature(context, true)
+
                                     dao.insertEvent(event.toEventEntity())
                                 }
 
@@ -1217,17 +1215,6 @@ fun EventLocationView_New(eventId: String, startAsCutMode: Boolean = false) {
                                 )
                                     .show()
 
-                                val resultIntent =
-                                    Intent().apply {
-                                        putExtra(
-                                            "path",
-                                            getFilePathFromDate(
-                                                event.time.toLocalDate()
-                                            )
-                                        )
-                                    }
-
-                                context.getActivity()?.setResult(2, resultIntent)
                                 if (startAsCutMode) context.getActivity()?.finish()
                             },
                             enabled = cutStart != null && cutEnd != null

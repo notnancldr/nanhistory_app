@@ -15,6 +15,39 @@ const val QUERY_1_2 =
 
 const val QUERY_2_3 = "ALTER TABLE events ADD COLUMN versionNumber INTEGER NOT NULL DEFAULT 0"
 
+const val QUERY_3_4 = """
+CREATE TABLE IF NOT EXISTS `locations` (
+    -- Primary Key
+    `timestamp` INTEGER NOT NULL, 
+    
+    -- Foreign Key and Zone Info
+    `eventId` TEXT NOT NULL, 
+    `zoneId` TEXT NOT NULL, 
+    
+    -- Location Data (Required)
+    `latitude` REAL NOT NULL, 
+    `longitude` REAL NOT NULL, 
+    
+    -- Optional Fields (Nullable)
+    `speed` REAL, 
+    `bearing` REAL, 
+    `altitude` REAL, 
+    `accuracy` REAL, 
+    `speedAccuracy` REAL, 
+    `bearingAccuracy` REAL, 
+    `verticalAccuracy` REAL, 
+    
+    -- Define the Primary Key
+    PRIMARY KEY(`timestamp`), 
+    
+    -- Define the Foreign Key Constraint
+    FOREIGN KEY(`eventId`) REFERENCES `events`(`id`) 
+        ON UPDATE NO ACTION 
+        ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS `index_locations_eventId` ON `locations` (`eventId`);
+"""
+
 
 class Migrations(context: Context) {
     val migrations1to2 = object : Migration(1, 2) {
@@ -51,6 +84,26 @@ class Migrations(context: Context) {
                 logData.append(e.stackTraceToString())
 
                 Log.e("DBMigration", "Error while migrating from v2 to v3", e)
+            } finally {
+                logData.save(context)
+            }
+        }
+    }
+
+    val migrations3to4 = object : Migration(3, 4) {
+        val logData = LogData.inCommonPath("DB-MIGRATION-3to4")
+
+        override fun migrate(db: SupportSQLiteDatabase) {
+            logData.appendWithTimestamp("Starting migration v3 to v4")
+
+            try {
+                db.execSQL(QUERY_3_4)
+            } catch (e: Throwable) {
+                logData.appendWithTimestamp("==============================================")
+                logData.append("Error while migrating from v3 to v4: ${e.message ?: "unknown error"}")
+                logData.append(e.stackTraceToString())
+
+                Log.e("DBMigration", "Error while migrating from v3 to v4", e)
             } finally {
                 logData.save(context)
             }

@@ -4,11 +4,9 @@ import android.content.Context
 import id.my.nanclouder.nanhistory.db.AppDao
 import id.my.nanclouder.nanhistory.db.toHistoryEvent
 import id.my.nanclouder.nanhistory.utils.history.TransportationType
-import id.my.nanclouder.nanhistory.utils.history.LocationData
 import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
 import id.my.nanclouder.nanhistory.utils.history.EventRange
 import id.my.nanclouder.nanhistory.utils.toGeoPoint
-import java.time.ZonedDateTime
 import java.time.LocalDate
 import org.osmdroid.util.GeoPoint
 import kotlin.math.*
@@ -16,32 +14,43 @@ import kotlinx.coroutines.flow.first
 import java.time.format.DateTimeFormatter
 import android.util.Log
 
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.yield
+import kotlinx.coroutines.flow.Flow
 
-data class Segment(val start: GeoPoint, val end: GeoPoint) {
+// Serializable version of GeoPoint for storage
+data class SerializableGeoPoint(
+    val lat: Double,
+    val lon: Double
+) {
+    fun toGeoPoint() = GeoPoint(lat, lon)
+}
+
+fun GeoPoint.toSerializable() = SerializableGeoPoint(latitude, longitude)
+
+data class Segment(val start: SerializableGeoPoint, val end: SerializableGeoPoint) {
+    // Helper constructor for GeoPoints
+    constructor(start: GeoPoint, end: GeoPoint) : this(start.toSerializable(), end.toSerializable())
+    
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is Segment) return false
-        // Order shouldn't matter for valid path, but for directed path it does.
-        // For "frequency", A->B and B->A might be considered same or different.
-        // If we want to capture "trips", direction usually matters.
-        // But for visual stacking, maybe we want canonical direction?
-        // Let's stick to directed for now.
-        return start == other.start && end == other.end
+        // Undirected equality
+        return (start == other.start && end == other.end) || 
+               (start == other.end && end == other.start)
     }
     
     override fun hashCode(): Int {
-        var result = start.hashCode()
-        result = 31 * result + end.hashCode()
-        return result
+        // Order-independent hash code
+        return start.hashCode() + end.hashCode()
     }
 }
 
 data class YearlyMapData(
-    val segments: Map<Segment, List<String>>, // Segment -> List of Event IDs
-    val transportStats: Map<TransportationType, Float> // Type -> Percentage (0-1)
+    // Gson has trouble with complex map keys usually. 
+    // We will use a List of SegmentData for serialization if needed, or enable complex map key serialization.
+    // For simplicity in Logic, we keep Map. For Cache, we might map it.
+    val segments: Map<Segment, List<String>>, 
+    val transportStats: Map<TransportationType, Float> 
 )
 
 data class YearlyMapLoadingState(
@@ -51,88 +60,60 @@ data class YearlyMapLoadingState(
     val isComplete: Boolean = false
 )
 
-fun loadYearlyMapData(
+class ClusterNode(
+    val id: Int,
+    var lat: Double,
+    var lon: Double,
+    var weight: Int = 1
+) {
+    fun merge(otherLat: Double, otherLon: Double) {
+        lat = (lat * weight + otherLat) / (weight + 1)
+        lon = (lon * weight + otherLon) / (weight + 1)
+        weight++
+    }
+    fun toGeoPoint() = GeoPoint(lat, lon)
+}
+
+
+data class NodeSegment(
+    val from: Int, 
+    val to: Int
+)
+
+data class YearlyMapPersistentState(
+    val nodes: MutableList<ClusterNode> = mutableListOf(),
+    // Use String key "from,to" for easier JSON serialization of Map keys
+    val segments: MutableMap<String, MutableList<String>> = mutableMapOf(), 
+    val transportStats: MutableMap<TransportationType, Long> = mutableMapOf(), // Store durations (Long) not percentages
+    var lastEventTime: Long = 0L
+)
+
+suspend fun processEventsToState(
     context: Context,
-    dao: AppDao,
-    year: Int,
+    newEvents: List<HistoryEvent>,
+    state: YearlyMapPersistentState,
     precisionMeters: Int,
-    simplificationCm: Int
-): Flow<YearlyMapLoadingState> = flow {
-    val startTime = System.currentTimeMillis()
-    Log.d("YearlyMapDebug", "Starting loadYearlyMapData (Async) for year $year")
-
-    val startOfYear = LocalDate.of(year, 1, 1)
-    val endOfYear = LocalDate.of(year, 12, 31)
-    val formatter = DateTimeFormatter.ISO_LOCAL_DATE
+    onProgress: (Float) -> Unit = {}
+): YearlyMapPersistentState {
     
-    // 1. Fetch Events
-    val eventsFlow = dao.getEventsInRange(startOfYear.format(formatter), endOfYear.format(formatter))
-    val events = eventsFlow.first().map { it.toHistoryEvent() }
-    
-    if (events.isEmpty()) {
-        emit(YearlyMapLoadingState(isComplete = true, progress = 1f))
-        return@flow
-    }
-
-    emit(YearlyMapLoadingState(progress = 0.05f)) // 5% for fetching
-
-    // 2. Process Stats
-    val transportDuration = mutableMapOf<TransportationType, Long>()
-    var totalDuration = 0L
-    
-    events.forEach { event ->
-        val type = if (event is EventRange) event.transportationType else TransportationType.Unspecified
-        val duration = if (event is EventRange) {
-             java.time.Duration.between(event.time, event.end).toMillis()
-        } else {
-             0L
-        }
-        
-        if (duration > 0) {
-            transportDuration[type] = transportDuration.getOrDefault(type, 0L) + duration
-            totalDuration += duration
-        }
-    }
-    
-    val transportStats = if (totalDuration > 0) {
-        transportDuration.mapValues { it.value.toFloat() / totalDuration }
-    } else {
-        emptyMap()
-    }
-    
-    emit(YearlyMapLoadingState(progress = 0.10f)) // 10% for stats
-
-    // 3. Process Map Segments with Dynamic Clustering
-    
-    // Clustering structures
-    class ClusterNode(
-        val id: Int,
-        var lat: Double,
-        var lon: Double,
-        var weight: Int = 1
-    ) {
-        fun merge(otherLat: Double, otherLon: Double) {
-            lat = (lat * weight + otherLat) / (weight + 1)
-            lon = (lon * weight + otherLon) / (weight + 1)
-            weight++
-        }
-        fun toGeoPoint() = GeoPoint(lat, lon)
-    }
-
     val metersPerDegree = 111132.0
     val clusterRadiusDeg = precisionMeters / metersPerDegree
-    val cellSize = clusterRadiusDeg 
-    
-    val grid = mutableMapOf<String, MutableList<ClusterNode>>()
-    val nodes = mutableListOf<ClusterNode>()
-    var nextNodeId = 0
 
+    // Rebuild grid from existing nodes for fast lookup
+    val grid = mutableMapOf<String, MutableList<ClusterNode>>()
+    
     fun getGridKey(lat: Double, lon: Double): String =
-        "${(lat / cellSize).toLong()},${(lon / cellSize).toLong()}"
+        "${(lat / clusterRadiusDeg).toLong()},${(lon / clusterRadiusDeg).toLong()}"
+        
+    state.nodes.forEach { node ->
+        grid.computeIfAbsent(getGridKey(node.lat, node.lon)) { mutableListOf() }.add(node)
+    }
+    
+    var nextNodeId = if (state.nodes.isNotEmpty()) state.nodes.maxOf { it.id } + 1 else 0
     
     fun findNearestNode(lat: Double, lon: Double): ClusterNode? {
-        val cLatIdx = (lat / cellSize).toLong()
-        val cLonIdx = (lon / cellSize).toLong()
+        val cLatIdx = (lat / clusterRadiusDeg).toLong()
+        val cLonIdx = (lon / clusterRadiusDeg).toLong()
         var nearest: ClusterNode? = null
         var minDistSq = clusterRadiusDeg * clusterRadiusDeg
         
@@ -152,39 +133,46 @@ fun loadYearlyMapData(
         }
         return nearest
     }
-    
-    data class NodeSegment(val from: Int, val to: Int)
-    val tempSegmentMap = mutableMapOf<NodeSegment, MutableList<String>>()
-    
-    var processedEvents = 0
-    var totalPointsProcessed = 0
-    var firstLoc: GeoPoint? = null
-    
-    val totalEvents = events.size
-    
-    events.forEachIndexed { index, event ->
+
+    val totalEvents = newEvents.size
+    var processedCount = 0
+
+    newEvents.forEachIndexed { index, event ->
+        // Update stats
+        val type = if (event is EventRange) event.transportationType else TransportationType.Unspecified
+        val duration = if (event is EventRange) {
+             java.time.Duration.between(event.time, event.end).toMillis()
+        } else {
+             0L
+        }
+        if (duration > 0) {
+            state.transportStats[type] = state.transportStats.getOrDefault(type, 0L) + duration
+        }
+        
+        // Update Last Event Time
+        val eventEndTime = if (event is EventRange) event.end.toInstant().toEpochMilli() else event.time.toInstant().toEpochMilli()
+        if (eventEndTime > state.lastEventTime) {
+            state.lastEventTime = eventEndTime
+        }
+
+        // Process Locations
         val locations = event.getLocations(context)
         if (locations.isNotEmpty()) {
-            processedEvents++
             val rawPoints = locations.map { it.location.toGeoPoint() }
             
-            if (firstLoc == null && rawPoints.isNotEmpty()) {
-                firstLoc = rawPoints[0]
-            }
-            
-            val simplifiedPoints = ramerDouglasPeucker(rawPoints, simplificationCm / 100.0)
-            totalPointsProcessed += simplifiedPoints.size
+            // Resample
+            val resampledPoints = resample(rawPoints, precisionMeters.toDouble())
             
             val eventNodeIds = mutableListOf<Int>()
             
-            simplifiedPoints.forEach { p ->
+            resampledPoints.forEach { p ->
                 val existing = findNearestNode(p.latitude, p.longitude)
                 if (existing != null) {
                     existing.merge(p.latitude, p.longitude)
                     eventNodeIds.add(existing.id)
                 } else {
                     val newNode = ClusterNode(nextNodeId++, p.latitude, p.longitude)
-                    nodes.add(newNode)
+                    state.nodes.add(newNode)
                     grid.computeIfAbsent(getGridKey(newNode.lat, newNode.lon)) { mutableListOf() }.add(newNode)
                     eventNodeIds.add(newNode.id)
                 }
@@ -194,51 +182,149 @@ fun loadYearlyMapData(
                 val fromId = eventNodeIds[i]
                 val toId = eventNodeIds[i+1]
                 if (fromId != toId) {
-                    tempSegmentMap.computeIfAbsent(NodeSegment(fromId, toId)) { mutableListOf() }.add(event.id)
+                    // Canonical key (min,max) to treat directions as same segment
+                    val key = if (fromId < toId) "$fromId,$toId" else "$toId,$fromId"
+                    state.segments.computeIfAbsent(key) { mutableListOf() }.add(event.id)
                 }
             }
         }
         
-        // Emit progress every 10 events or so
-        if (index % 10 == 0 || index == totalEvents - 1) {
-            // Reconstruct Segment Map
-            // Note: This reconstruction might become expensive as nodes grow. 
-            // Optimally we'd only do this less frequently or optimize the structure.
-            // For now, let's try every 20-50 events if slow.
-            // User asked for "data already visualized while still processing".
-            
-            val currentSegmentMap = mutableMapOf<Segment, MutableList<String>>()
-            tempSegmentMap.forEach { (nodeSeg, ids) ->
-                 val nodeA = nodes[nodeSeg.from]
-                 val nodeB = nodes[nodeSeg.to]
-                 val segment = Segment(nodeA.toGeoPoint(), nodeB.toGeoPoint())
-                 currentSegmentMap.computeIfAbsent(segment) { mutableListOf() }.addAll(ids)
-            }
-            
-            val currentData = YearlyMapData(currentSegmentMap, transportStats)
-            val currentProgress = 0.10f + (0.90f * (index + 1) / totalEvents)
-            
-            emit(YearlyMapLoadingState(
-                data = currentData, 
-                progress = currentProgress,
-                firstLocation = firstLoc,
-                isComplete = false
-            ))
-            yield() // Allow cancellation/UI updates
+        processedCount++
+        if (totalEvents > 0) {
+            onProgress(index.toFloat() / totalEvents)
         }
     }
+    
+    return state
+}
 
-    // Final emission
-    val finalSegmentMap = mutableMapOf<Segment, MutableList<String>>()
-    tempSegmentMap.forEach { (nodeSeg, ids) ->
-         val nodeA = nodes[nodeSeg.from]
-         val nodeB = nodes[nodeSeg.to]
-         val segment = Segment(nodeA.toGeoPoint(), nodeB.toGeoPoint())
-         finalSegmentMap.computeIfAbsent(segment) { mutableListOf() }.addAll(ids)
+fun stateToData(state: YearlyMapPersistentState): YearlyMapData {
+    val nodeMap = state.nodes.associateBy { it.id }
+    val segmentMap = mutableMapOf<Segment, List<String>>()
+    
+    state.segments.forEach { (key, ids) ->
+        val parts = key.split(",")
+        if (parts.size == 2) {
+            val fromId = parts[0].toIntOrNull()
+            val toId = parts[1].toIntOrNull()
+            
+            val nodeA = nodeMap[fromId]
+            val nodeB = nodeMap[toId]
+            
+            if (nodeA != null && nodeB != null) {
+                val segment = Segment(nodeA.toGeoPoint(), nodeB.toGeoPoint())
+                // Merge if multiple node-segments map to same GeoPoint segment (unlikely with unique nodes, but possible if nodes overlap perfectly)
+                // Actually Segment uses Value equality on GeoPoint.
+                // We want to combine lists if segments are geometrically identical?
+                // Yes, map helper does this.
+                val existing = segmentMap[segment]
+                if (existing != null) {
+                    segmentMap[segment] = existing + ids
+                } else {
+                    segmentMap[segment] = ids
+                }
+            }
+        }
+    }
+    
+    val totalDuration = state.transportStats.values.sum()
+    val transportStats = if (totalDuration > 0) {
+        state.transportStats.mapValues { it.value.toFloat() / totalDuration }
+    } else {
+        emptyMap()
+    }
+    
+    return YearlyMapData(segmentMap, transportStats)
+}
+
+fun loadYearlyMapData(
+    context: Context,
+    dao: AppDao,
+    year: Int,
+    precisionMeters: Int,
+    simplificationCm: Int
+): Flow<YearlyMapLoadingState> = flow {
+    val startTime = System.currentTimeMillis()
+    Log.d("YearlyMapDebug", "Starting loadYearlyMapData (Async) for year $year")
+
+    val startOfYear = LocalDate.of(year, 1, 1)
+    val endOfYear = LocalDate.of(year, 12, 31)
+    val formatter = DateTimeFormatter.ISO_LOCAL_DATE
+    
+    // 1. Try Load Cache
+    var state = YearlyMapCacheManager.loadCache(context, year)
+    
+    // get first location for centering (placeholder, updated later)
+    var firstLoc: GeoPoint? = null
+
+    if (state != null) {
+        Log.d("YearlyMapDebug", "Loaded cache with ${state.nodes.size} nodes")
+        // Emit cached state immediately
+        val cachedData = stateToData(state)
+        // Try to find a first location from cache if possible? 
+        // Or just wait for events? Use first node?
+        if (state.nodes.isNotEmpty()) {
+             firstLoc = state.nodes.first().toGeoPoint()
+        }
+        
+        emit(YearlyMapLoadingState(
+            data = cachedData, 
+            progress = 0.5f, // Arbitrary "halfway" since we have data
+            firstLocation = firstLoc,
+            isComplete = false
+        ))
+    } else {
+        state = YearlyMapPersistentState()
+    }
+    
+    // 2. Fetch Events
+    val eventsFlow = dao.getEventsInRange(startOfYear.format(formatter), endOfYear.format(formatter))
+    val allEvents = eventsFlow.first().map { it.toHistoryEvent() }
+    
+    if (allEvents.isEmpty() && state!!.nodes.isEmpty()) {
+        emit(YearlyMapLoadingState(isComplete = true, progress = 1f))
+        return@flow
     }
 
+    // Filter events that are newer than cache
+    val newEvents = allEvents.filter { 
+        val eventTime = if (it is EventRange) it.end.toInstant().toEpochMilli() else it.time.toInstant().toEpochMilli()
+        eventTime > state!!.lastEventTime
+    }
+    
+    if (firstLoc == null) {
+         val firstEvent = allEvents.firstOrNull { it.locationPath != null }
+         if (firstEvent != null) {
+            val locs = firstEvent.getLocations(context)
+            if (locs.isNotEmpty()) firstLoc = locs[0].location.toGeoPoint()
+         }
+    }
+
+    if (newEvents.isNotEmpty()) {
+        Log.d("YearlyMapDebug", "Processing ${newEvents.size} new events")
+        emit(YearlyMapLoadingState(progress = if(state!!.nodes.isEmpty()) 0.05f else 0.5f, firstLocation = firstLoc)) 
+
+        processEventsToState(context, newEvents, state!!, precisionMeters) { progress ->
+            // Scale progress based on whether we started from cache or scratch
+            val baseProgress = if(state!!.nodes.isEmpty()) 0.0f else 0.5f
+            val range = 1.0f - baseProgress
+            val currentProgress = baseProgress + (progress * range) * 0.9f 
+            
+            if (currentProgress * 100 % 10 < 1) { // Emit every ~10%
+                 // Parsing state to data can be heavy
+                 // emit(YearlyMapLoadingState(data = data, ...))
+            }
+        }
+        
+        // Save Cache
+        YearlyMapCacheManager.saveCache(context, year, state!!)
+    } else {
+        Log.d("YearlyMapDebug", "No new events to process")
+    }
+    
+    val finalData = stateToData(state!!)
     emit(YearlyMapLoadingState(
-        data = YearlyMapData(finalSegmentMap, transportStats),
+        data = finalData,
         progress = 1.0f,
         firstLocation = firstLoc,
         isComplete = true
@@ -246,6 +332,44 @@ fun loadYearlyMapData(
     
     Log.d("YearlyMapDebug", "Finished async load in ${System.currentTimeMillis() - startTime}ms")
 }
+
+
+fun resample(points: List<GeoPoint>, intervalMeters: Double): List<GeoPoint> {
+    if (points.size < 2) return points
+    
+    val result = mutableListOf<GeoPoint>()
+    result.add(points[0])
+    
+    for (i in 0 until points.size - 1) {
+        val p1 = points[i]
+        val p2 = points[i+1]
+        
+        val dist = distanceMeters(p1, p2)
+        if (dist > intervalMeters) {
+            val numSegments = (dist / intervalMeters).toInt()
+            for (j in 1..numSegments) {
+                val fraction = j.toDouble() / (numSegments + 1)
+                result.add(interpolate(p1, p2, fraction))
+            }
+        }
+        result.add(p2)
+    }
+    return result
+}
+
+fun interpolate(p1: GeoPoint, p2: GeoPoint, fraction: Double): GeoPoint {
+    val lat = p1.latitude + (p2.latitude - p1.latitude) * fraction
+    val lon = p1.longitude + (p2.longitude - p1.longitude) * fraction
+    return GeoPoint(lat, lon)
+}
+
+fun distanceMeters(p1: GeoPoint, p2: GeoPoint): Double {
+    val metersPerDegree = 111132.0
+    val dy = p2.latitude - p1.latitude
+    val dx = (p2.longitude - p1.longitude) * cos(Math.toRadians((p1.latitude + p2.latitude) / 2))
+    return sqrt(dy*dy + dx*dx) * metersPerDegree
+}
+
 
 // Ramer-Douglas-Peucker algorithm implementation
 fun ramerDouglasPeucker(points: List<GeoPoint>, epsilon: Double): List<GeoPoint> {

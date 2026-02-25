@@ -100,6 +100,12 @@ class DeveloperOptionsActivity : SubSettingsActivity("Developer Options") {
                 valueRange = 10f..1000f,
                 steps = 98
             )
+            SettingsSwitch(
+                title = "Background Processing",
+                description = "Process yearly map data in background on app start.",
+                configValue = Config.yearlyMapBackgroundProcessing,
+                enabled = developerModeEnabled
+            )
             SettingsSlider(
                 title = "Simplification (cm)",
                 description = "Path simplification tolerance. Higher = less points/smoother but less accurate.",
