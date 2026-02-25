@@ -136,6 +136,9 @@ suspend fun migrateLocationData(context: Context, onUpdate: ((MigrationState) ->
                 if (signatureValid && regenerateSignature) {
                     data[HistoryEventProperty.SIGNATURE] =
                         (data as Map<String, Any>).toHistoryEvent(context)
+                            .apply {
+                                versionNumber = 0
+                            }
                             .generateSignature(context = context)
                 }
 

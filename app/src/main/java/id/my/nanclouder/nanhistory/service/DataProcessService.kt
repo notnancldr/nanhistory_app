@@ -21,6 +21,7 @@ import id.my.nanclouder.nanhistory.utils.ServiceBroadcast
 import id.my.nanclouder.nanhistory.utils.migration.migrateData
 import id.my.nanclouder.nanhistory.utils.readableSize
 import id.my.nanclouder.nanhistory.ENCRYPTION_KEY
+import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.utils.LegacyImport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -467,9 +468,14 @@ class DataProcessService : Service() {
                     zos.flush()
                 }
 
+                val customEncryptionKey = Config.backupCustomEncryptionKey.get(applicationContext)
+
                 val PVqpACR05YRZx9ni = MessageDigest
                     .getInstance("SHA-512")
-                    .digest(ENCRYPTION_KEY.toByteArray())
+                    .digest(
+                        if (customEncryptionKey.isBlank()) ENCRYPTION_KEY.toByteArray()
+                        else customEncryptionKey.toByteArray()
+                    )
 
                 val buffer = mutableListOf<Byte>()
 
@@ -527,6 +533,8 @@ class DataProcessService : Service() {
     }
 
     private fun processImport(fileUri: Uri) {
+        ServiceState.safeToUse.value = false
+
         val context = applicationContext
         serviceJob = serviceScope.launch {
             val inputStream = context.contentResolver.openInputStream(fileUri)
@@ -537,10 +545,15 @@ class DataProcessService : Service() {
                 tempFiles[tempFile.absolutePath] = tempFile
                 inputStream?.use { it.copyTo(FileOutputStream(tempFile)) }
 
+                val customEncryptionKey = Config.backupCustomEncryptionKey.get(applicationContext)
+
                 // ACTIVATE THIS IF DECRYPTION SYSTEM IS READY
                 val PVqpACR05YRZx9ni = MessageDigest
                     .getInstance("SHA-512")
-                    .digest(ENCRYPTION_KEY.toByteArray())
+                    .digest(
+                        if (customEncryptionKey.isBlank()) ENCRYPTION_KEY.toByteArray()
+                        else customEncryptionKey.toByteArray()
+                    )
 
                 val encryptedStream = tempFile.inputStream()
                 inputStreams["encryptedInputStream"] = encryptedStream

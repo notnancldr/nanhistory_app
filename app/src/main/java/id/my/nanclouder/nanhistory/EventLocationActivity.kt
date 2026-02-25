@@ -75,6 +75,7 @@ import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.toEventEntity
 import id.my.nanclouder.nanhistory.db.toHistoryEvent
+import id.my.nanclouder.nanhistory.db.toLocationEntity
 import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import id.my.nanclouder.nanhistory.utils.Coordinate
@@ -110,6 +111,7 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.Polyline
+import androidx.core.net.toUri
 
 class EventLocationActivity : ComponentActivity() {
     var update: () -> Unit = {}
@@ -283,41 +285,28 @@ fun EventLocationView_Old(eventId: String, startAsCutMode: Boolean = false) {
                         IconButton(
                             onClick = {
                                 // TODO
-                                val event =
+                                val newEvent =
                                     EventRange(
                                         title =
                                             "Cut of ${eventData.title}",
                                         description =
-                                            eventData
-                                                .description +
-                                                    if (eventData
-                                                            .description
-                                                            .isBlank()
-                                                    )
-                                                        ""
-                                                    else
-                                                        "\n" +
-                                                                "Cut of ${eventData.title}",
+                                            eventData.description +
+                                                if (eventData.description.isBlank()) ""
+                                                else "\n" + "Cut of ${eventData.title}",
                                         time = cutStart!!,
                                         favorite =
                                             eventData.favorite,
                                         tags = eventData.tags,
                                         end = cutEnd!!,
                                         locationDescriptions =
-                                            eventData
-                                                .locationDescriptions
+                                            eventData.locationDescriptions
                                                 .filter {
-                                                    it.key >=
-                                                            cutStart!! &&
-                                                            it.key <=
-                                                            cutEnd!!
+                                                    it.key >= cutStart!! &&
+                                                    it.key <= cutEnd!!
                                                 }
                                                 .toMutableMap(),
-                                        metadata =
-                                            eventData.metadata,
-                                        versionNumber =
-                                            eventData
-                                                .versionNumber
+                                        metadata = eventData.metadata,
+                                        versionNumber = eventData.versionNumber
                                     )
                                         .apply {
                                             metadata["original_event_id"] =
@@ -333,47 +322,26 @@ fun EventLocationView_Old(eventId: String, startAsCutMode: Boolean = false) {
                                                     .end
                                                     .toOffsetDateTime()
                                                     .toString()
-                                            if (metadata["root_event_id"] ==
-                                                null
-                                            )
-                                                metadata[
-                                                    "root_event_id"] =
-                                                    eventData.id
-                                            if (metadata[
-                                                    "root_event_time"] ==
-                                                null
-                                            )
-                                                metadata[
-                                                    "root_event_time"] =
+                                            if (metadata["root_event_id"] == null)
+                                                metadata["root_event_id"] = eventData.id
+                                            if (metadata["root_event_time"] == null)
+                                                metadata["root_event_time"] =
                                                     eventData
                                                         .time
                                                         .toOffsetDateTime()
                                                         .toString()
-                                            if (metadata[
-                                                    "root_event_end"] ==
-                                                null
-                                            )
-                                                metadata[
-                                                    "root_event_end"] =
+                                            if (metadata["root_event_end"] == null)
+                                                metadata["root_event_end"] =
                                                     eventData
                                                         .end
                                                         .toOffsetDateTime()
                                                         .toString()
                                         }
-                                val locationFile =
-                                    createLocationFile(context, event.time)
                                 val locationsData =
-                                    eventLocations.filter {
-                                        it.time >= cutStart!! &&
-                                                it.time <= cutEnd!!
+                                    eventLocations.mapNotNull {
+                                        if (it.time >= cutStart!! && it.time <= cutEnd!!) return@mapNotNull null
+                                        it.toLocationEntity(newEvent.id)
                                     }
-                                locationFile.delete()
-                                locationsData.appendToLocationFile(locationFile)
-                                event.locationPath =
-                                    locationFile.absolutePath.removePrefix(
-                                        File(context.filesDir, "locations")
-                                            .absolutePath + "/"
-                                    )
 
                                 if (eventData.audio != null) {
                                     val audioFile =
@@ -391,7 +359,7 @@ fun EventLocationView_Old(eventId: String, startAsCutMode: Boolean = false) {
                                         )
                                         audioFile.copyTo(targetFile)
 
-                                        event.audio = targetPath
+                                        newEvent.audio = targetPath
                                     }
                                 }
 
@@ -400,15 +368,16 @@ fun EventLocationView_Old(eventId: String, startAsCutMode: Boolean = false) {
 
                                 scope.launch {
                                     if (eventData.validateSignature(context = context))
-                                        event.generateSignature(context, true)
+                                        newEvent.generateSignature(context, true)
 
-                                    dao.insertEvent(event.toEventEntity())
+                                    dao.insertEvent(newEvent.toEventEntity())
+                                    dao.insertLocations(locationsData)
                                 }
 
                                 cutMode = false
                                 Toast.makeText(
                                     context,
-                                    "${event.title} has been saved",
+                                    "${newEvent.title} has been saved",
                                     Toast.LENGTH_SHORT
                                 )
                                     .show()
@@ -890,9 +859,7 @@ fun MapHistoryView_Old(
                                         return@handler
                                     }
                                     val gmmIntentUri =
-                                        Uri.parse(
-                                            "geo:$stringLocation?q=$stringLocation"
-                                        ) // Replace with your latitude &
+                                        "geo:$stringLocation?q=$stringLocation".toUri() // Replace with your latitude &
                                     // longitude
                                     val mapIntent =
                                         Intent(Intent.ACTION_VIEW, gmmIntentUri)
