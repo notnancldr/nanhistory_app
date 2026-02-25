@@ -17,14 +17,14 @@ suspend fun migrateData(context: Context, onSafeToUse: () -> Unit, onUpdate: ((M
     // Initialize migration state
     onUpdate(MigrationState(0f, true), "")
 
-    // Migrations here
-    migrateLocationData(context) { onUpdate(it, "locationData") }
-    migrateToDatabase(context) { onUpdate(it, "toDatabase") }
-
     // Tell the service that the application finally safe to use while the migration
     // while the migration can be continued on background
     onSafeToUse()
     Log.d("NanHistoryDebug", "MIGRATING... [SAFE TO USE]")
+
+    // Migrations here
+    migrateLocationData(context) { onUpdate(it, "locationData") }
+    migrateToDatabase(context) { onUpdate(it, "toDatabase") }
 
     // Safe to use while migrations
     migrateLocationToDatabase(context) { onUpdate(it, "locationToDatabase") }

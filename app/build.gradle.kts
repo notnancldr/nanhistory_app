@@ -34,6 +34,8 @@ android {
     namespace = "id.my.nanclouder.nanhistory"
     compileSdk = 35
 
+    flavorDimensions += "version"
+
     defaultConfig {
         applicationId = "id.my.nanclouder.nanhistory"
         minSdk = 31
@@ -44,9 +46,6 @@ android {
         val now = ZonedDateTime.now()
         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ssXXX")
         val buildTime = now.format(formatter)
-
-        buildConfigField("String", "ENCRYPTION_KEY", env("ENCRYPTION_KEY", "6VaEaqHzAzptmbdLYFWF5fnWFoBr4Raf"))
-        buildConfigField("String", "LEGACY_ENCRYPTION_KEY", env("LEGACY_ENCRYPTION_KEY", "gWn88Iezr1ZwPqxLYkQ3Zv2w4uTI0Eu5"))
 
         buildConfigField(
             "String",
@@ -62,7 +61,7 @@ android {
 
     buildTypes {
         release {
-            versionNameSuffix = "r"
+            versionNameSuffix = "-r"
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -71,8 +70,38 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
         debug {
-            versionNameSuffix = "d"
+            versionNameSuffix = "-d"
             applicationIdSuffix = ".dev"
+        }
+    }
+
+    productFlavors {
+        create("public") {
+            dimension = "version"
+            applicationIdSuffix = ".pub"
+            versionNameSuffix = "-pub"
+
+            // Public flavor uses generic encryption key
+            buildConfigField("String", "ENCRYPTION_KEY", "\"6VaEaqHzAzptmbdLYFWF5fnWFoBr4Raf\"")
+            buildConfigField("String", "LEGACY_ENCRYPTION_KEY", "\"gWn88Iezr1ZwPqxLYkQ3Zv2w4uTI0Eu5\"")
+        }
+        create("private") {
+            dimension = "version"
+            applicationIdSuffix = ".private"
+            versionNameSuffix = "-pvt"
+
+            // Private flavor uses custom encryption key defined in .env
+            buildConfigField("String", "ENCRYPTION_KEY", env("ENCRYPTION_KEY", "6VaEaqHzAzptmbdLYFWF5fnWFoBr4Raf"))
+            buildConfigField("String", "LEGACY_ENCRYPTION_KEY", env("LEGACY_ENCRYPTION_KEY", "gWn88Iezr1ZwPqxLYkQ3Zv2w4uTI0Eu5"))
+        }
+
+        // Original config (without suffix on applicationId and versionName)
+        create("plain") {
+            dimension = "version"
+
+            // Using same encryption key as private flavor
+            buildConfigField("String", "ENCRYPTION_KEY", env("ENCRYPTION_KEY", "6VaEaqHzAzptmbdLYFWF5fnWFoBr4Raf"))
+            buildConfigField("String", "LEGACY_ENCRYPTION_KEY", env("LEGACY_ENCRYPTION_KEY", "gWn88Iezr1ZwPqxLYkQ3Zv2w4uTI0Eu5"))
         }
     }
 

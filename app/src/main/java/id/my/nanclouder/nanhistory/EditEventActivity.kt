@@ -142,7 +142,12 @@ fun EditEventView_Old(eventId: String?) {
             // newEvent!!.save(context)
             scope.launch {
                 AppDatabase.ensureDayExists(dao, newEvent!!.time.toLocalDate())
-                dao.insertEvent(newEvent!!.toEventEntity())
+                if (oldEvent != null) {
+                    dao.updateEvent(newEvent!!.toEventEntity())
+                }
+                else {
+                    dao.insertEvent(newEvent!!.toEventEntity())
+                }
             }
 
             context.getActivity()?.setResult(1)
@@ -610,7 +615,12 @@ fun EditEventView_New(eventId: String?) {
 
             scope.launch {
                 AppDatabase.ensureDayExists(dao, newEvent!!.time.toLocalDate())
-                dao.insertEvent(newEvent!!.toEventEntity())
+                if (oldEvent != null) {
+                    dao.updateEvent(newEvent!!.toEventEntity())
+                }
+                else {
+                    dao.insertEvent(newEvent!!.toEventEntity())
+                }
             }
 
             context.getActivity()?.setResult(1)

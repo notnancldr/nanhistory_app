@@ -29,6 +29,8 @@ object Config {
         const val DEVELOPER_SHOW_DETECTED_TRANSPORT = false
         const val DEVELOPER_COLLECT_ACCELEROMETER = false
 
+        const val BACKUP_CUSTOM_ENCRYPTION_KEY = ""
+
         const val SERVICE_MAX_DURATION = 900
         const val SERVICE_RESTART_ENABLED = true
         const val LOCATION_ACCURACY_THRESHOLD = 20
@@ -129,6 +131,20 @@ object Config {
         fun getState() = getFlow().collectAsState(get(LocalContext.current))
     }
 
+    class StringValue internal constructor(val name: String, private val default: String) {
+        fun get(context: Context) =
+            (getConfig(context)[name] as? String) ?: default
+        fun getCache() =
+            (_currentCache[name] as? String) ?: default
+        fun set(context: Context, value: String) =
+            setConfig(context, name, value)
+        fun getFlow() = getConfigFlow().map {
+            (it[name] as? String) ?: default
+        }
+        @Composable
+        fun getState() = getFlow().collectAsState(get(LocalContext.current))
+    }
+
     class EnumValue<E : Enum<E>> internal constructor(
         val name: String,
         private val default: E,
@@ -184,6 +200,11 @@ object Config {
     val developerCollectAccelerometer = BooleanValue(
         "developerCollectAccelerometer", Default.DEVELOPER_COLLECT_ACCELEROMETER
     )
+
+    val backupCustomEncryptionKey = StringValue(
+        "backupCustomEncryptionKey", Default.BACKUP_CUSTOM_ENCRYPTION_KEY
+    )
+
 
     val serviceRestartEnabled = BooleanValue(
         "serviceRestartEnabled", Default.SERVICE_RESTART_ENABLED
