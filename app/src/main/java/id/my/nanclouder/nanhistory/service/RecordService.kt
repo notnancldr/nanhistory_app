@@ -116,6 +116,7 @@ class RecordService : Service() {
     object RecordState {
         val isRecording = MutableStateFlow(false)
         val isRunning = MutableStateFlow(false)
+        val isSaving = MutableStateFlow(false)
         val eventId = MutableStateFlow<String?>(null)
         val status = MutableStateFlow(RecordStatus.READY)
         val currentLogic = MutableStateFlow(LocationIterationLogic.Default)
@@ -217,9 +218,7 @@ class RecordService : Service() {
     private var digestedLocations = 0
 
     private fun logService(msg: String) {
-        serviceLogData.append("${
-            DateTimeFormatter.ofPattern("HH:mm:ss").format(ZonedDateTime.now())
-        }   $msg")
+        serviceLogData.appendWithTimestamp(msg)
         serviceLogData.save(applicationContext)
     }
 
@@ -865,6 +864,8 @@ class RecordService : Service() {
         notificationText = "Saving event..."
         updateNotification(recording = false)
 
+        RecordState.isSaving.value = true
+
         Log.d("RecordService", "Service [stopEventRecording]")
         resetLocationRetry()
         fusedLocationProviderClient.removeLocationUpdates(locationCallback)
@@ -964,6 +965,8 @@ class RecordService : Service() {
             RecordState.status.value = RecordStatus.IDLE
             RecordState.eventId.value = null
         }
+
+        RecordState.isSaving.value = false
 
         // RecordState.isRunning.value is still true at this point,
         // set to false in stopRecordService()
@@ -1235,6 +1238,12 @@ class RecordService : Service() {
                 RecordStatus.BUSY -> "BUSY"
                 else -> "[BELOW RESTARTING]"
             })
+            return
+        }
+
+        if (RecordState.isSaving.value) {
+            Log.w("RecordService", "locationUpdate while isSaving")
+            logService("UPDATE WHILE isSaving! ABORTING")
             return
         }
 

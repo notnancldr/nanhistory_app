@@ -51,6 +51,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidthIn
 import androidx.compose.foundation.layout.size
@@ -59,6 +60,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
@@ -165,6 +167,7 @@ import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.toHistoryTag
 import id.my.nanclouder.nanhistory.db.toTagEntity
 import id.my.nanclouder.nanhistory.getActivity
+import id.my.nanclouder.nanhistory.service.RecordService.RecordState
 import id.my.nanclouder.nanhistory.utils.history.HistoryTag
 import id.my.nanclouder.nanhistory.utils.withHaptic
 import id.my.nanclouder.nanhistory.service.RecordTileService
@@ -767,6 +770,8 @@ fun MainView() {
                         previousRecordState = recordStatus
                     }
 
+                    val serviceIsRunning by RecordState.isRunning.collectAsState(false)
+
                     Log.d("NanHistoryDebug", "RECORD STATUS: $recordStatus")
 
                     val record = record@{ eventPoint: Boolean ->
@@ -824,28 +829,43 @@ fun MainView() {
                         Icon(painterResource(R.drawable.ic_add), "Add event button")
                     }
 
-                    FloatingActionButton(
-                        interactionSource = interactionSource,
-                        onClick = {
-                            // Handled by interactionSource
+                    Box {
+                        FloatingActionButton(
+                            interactionSource = interactionSource,
+                            onClick = {
+                                // Handled by interactionSource
+                            }
+                        ) {
+                            val color =
+                                if (recordButtonDisabled) Color(0x80808080)
+                                else if (recordStatus >= RecordStatus.RUNNING) MaterialTheme.colorScheme.error
+                                else LocalContentColor.current
+                            if (recordStatus == RecordStatus.RUNNING)
+                                Icon(
+                                    painterResource(R.drawable.ic_stop_filled),
+                                    "Record event button",
+                                    tint = color
+                                )
+                            else
+                                Icon(
+                                    painterResource(R.drawable.ic_circle_filled),
+                                    "Record event button",
+                                    tint = color
+                                )
                         }
-                    ) {
-                        val color =
-                            if (recordButtonDisabled) Color(0x80808080)
-                            else if (recordStatus >= RecordStatus.IDLE) MaterialTheme.colorScheme.error
-                            else LocalContentColor.current
-                        if (recordStatus == RecordStatus.RUNNING)
-                            Icon(
-                                painterResource(R.drawable.ic_stop_filled),
-                                "Record event button",
-                                tint = color
-                            )
-                        else
-                            Icon(
-                                painterResource(R.drawable.ic_circle_filled),
-                                "Record event button",
-                                tint = color
-                            )
+                        if (serviceIsRunning) Box(
+                            Modifier
+                                .size(14.dp)
+                                .align(Alignment.TopEnd)
+                                .background(Color(0xFF008000), CircleShape)
+                                .border(
+                                    2.dp,
+                                    if (isSystemInDarkTheme()) MaterialTheme.colorScheme.surface
+                                    else MaterialTheme.colorScheme.surface,
+                                    CircleShape
+                                )
+                                // .offset((-8).dp, (-8).dp)
+                        )
                     }
                 }
             },
