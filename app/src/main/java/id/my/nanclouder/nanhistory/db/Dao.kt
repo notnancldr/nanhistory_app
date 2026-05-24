@@ -206,17 +206,24 @@ interface AppDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLocations(locations: List<LocationEntity>)
 
+    @Delete
+    suspend fun deleteLocation(location: LocationEntity)
+
+    @Delete
+    suspend fun deleteLocations(locations: List<LocationEntity>)
+
+
     @Query("SELECT * FROM locations WHERE eventId = :id ORDER BY timestamp")
     fun getLocationsByEventId(id: String): Flow<List<LocationEntity>>
 
     @Transaction
-    @Query("SELECT * FROM events WHERE deletePermanently IS NULL")
+    @Query("SELECT * FROM events WHERE deletePermanently IS NULL ORDER BY timestamp")
     fun getAllEventsWithLocations(): Flow<List<EventWithTagsWithLocations>>
 
-    @Query("SELECT COUNT(*) FROM locations WHERE eventId = :id")
+    @Query("SELECT COUNT(*) FROM locations WHERE eventId = :id ORDER BY timestamp")
     suspend fun getLocationsCountByEventId(id: String): Int
 
-    @Query("SELECT * FROM locations WHERE eventId = :id LIMIT :limit OFFSET :offset")
+    @Query("SELECT * FROM locations WHERE eventId = :id ORDER BY timestamp ASC LIMIT :limit OFFSET :offset")
     suspend fun getLocationsByEventIdWithOffset(id: String, offset: Int, limit: Int): List<LocationEntity>
 
 

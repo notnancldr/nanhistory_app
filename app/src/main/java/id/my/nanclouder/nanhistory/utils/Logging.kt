@@ -48,18 +48,18 @@ class LogData(
     /**
      * Append plain text to buffer
      * @param data Data to be saved into log
-     * @param end The char at the end of the appended log, default: `\n`
+     * @param end The char at the end of the appended log, null for no trailing char, default: `\n`
      */
-    fun append(data: String, end: Char = '\n') {
-        changes += data + end
+    fun append(data: String, end: Char? = '\n') {
+        changes += data + (end ?: "")
     }
 
     /**
      * Append to buffer with timestamp format: `yyyy-MM-dd HH:mm:ss`
      * @param data Data to be saved into log
-     * @param end The char at the end of the appended log, default: `\n`
+     * @param end The char at the end of the appended log, null for no trailing char, default: `\n`
      */
-    fun appendWithTimestamp(data: String, end: Char = '\n') {
+    fun appendWithTimestamp(data: String, end: Char? = '\n') {
         val now = ZonedDateTime.now()
         val formattedDate = DateTimeFormatter
             .ofPattern("yyyy-MM-dd HH:mm:ss")

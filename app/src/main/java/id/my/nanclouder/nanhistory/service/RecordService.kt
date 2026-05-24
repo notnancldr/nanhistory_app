@@ -45,12 +45,10 @@ import id.my.nanclouder.nanhistory.config.LocationIterationLogic
 import id.my.nanclouder.nanhistory.utils.Coordinate
 import id.my.nanclouder.nanhistory.utils.LogData
 import id.my.nanclouder.nanhistory.utils.RecordStatus
-import id.my.nanclouder.nanhistory.utils.ServiceBroadcast
 import id.my.nanclouder.nanhistory.utils.TimeFormatterWithSecond
 import id.my.nanclouder.nanhistory.utils.history.EventPoint
 import id.my.nanclouder.nanhistory.utils.history.EventRange
 import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
-import id.my.nanclouder.nanhistory.utils.history.createLocationFile
 import id.my.nanclouder.nanhistory.utils.history.generateEventId
 import id.my.nanclouder.nanhistory.utils.signature.generateSignature
 import id.my.nanclouder.nanhistory.utils.history.updateModifiedTime
@@ -69,19 +67,17 @@ import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.toEventEntity
 import id.my.nanclouder.nanhistory.db.toHistoryEvent
 import id.my.nanclouder.nanhistory.db.toLocationData
+import id.my.nanclouder.nanhistory.db.toLocationEntity
 import id.my.nanclouder.nanhistory.utils.AccelerometerChange
 import id.my.nanclouder.nanhistory.utils.HumanShakeDetector
 import id.my.nanclouder.nanhistory.utils.average
 import id.my.nanclouder.nanhistory.utils.getLocationData
 import id.my.nanclouder.nanhistory.utils.signature.EventLocationDigest
 import id.my.nanclouder.nanhistory.utils.history.LocationData
-import id.my.nanclouder.nanhistory.utils.history.appendToLocationFile
 import id.my.nanclouder.nanhistory.utils.signature.generateSignatureV1
-import id.my.nanclouder.nanhistory.utils.history.getLocationFile
 import id.my.nanclouder.nanhistory.utils.history.insertToDatabase
-import id.my.nanclouder.nanhistory.utils.history.toLocationPath
-import id.my.nanclouder.nanhistory.utils.readLineWithNewline
 import id.my.nanclouder.nanhistory.utils.signature.generateSignatureV2
+import id.my.nanclouder.nanhistory.utils.signature.validateSignature
 import id.my.nanclouder.nanhistory.utils.transportModel.TransportMode
 import id.my.nanclouder.nanhistory.utils.transportModel.detectTransportMode
 import id.my.nanclouder.nanhistory.utils.transportModel.loadCalibrationModels
@@ -92,11 +88,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import java.io.RandomAccessFile
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import kotlin.math.abs
@@ -413,7 +409,7 @@ class RecordService : Service() {
 
                         this@RecordService.event.metadata["shake_to_stop"] = true
                         serviceScope.launch {
-                            dao.updateEvent(this@RecordService.event.toEventEntity())
+                            // dao.updateEvent(this@RecordService.event.toEventEntity())
 
                             Log.d("RecordService", "STOP RECORD FROM SHAKE")
                             RecordState.status.value = RecordStatus.BUSY
@@ -562,7 +558,7 @@ class RecordService : Service() {
     private fun startIntervalVibration() {
         if (!vibrateEnabled || vibrateDuration <= 0 || vibrateEveryUpdate) return
 
-        vibrationJob = serviceScope.launch {
+        vibrationJob = serviceScope.launch(Dispatchers.Main) {
             while (isActive) {
                 delay(vibrateInterval * 1000L)
                 if (isActive) {
@@ -945,7 +941,7 @@ class RecordService : Service() {
             // TODO: new signing (done)
             // finalize signing, make sure nothing left to digest
             if (eventLocations.isNotEmpty()) {
-                processSignature(funcLabel = "stopEventRecording", noLimit = true)
+                processSignature(funcLabel = "stopEventRecording", final = true)
             }
             else {
                 event.generateSignatureV1(applicationContext)
@@ -967,6 +963,8 @@ class RecordService : Service() {
         }
 
         RecordState.isSaving.value = false
+
+        delay(2000L)
 
         // RecordState.isRunning.value is still true at this point,
         // set to false in stopRecordService()
@@ -1159,25 +1157,40 @@ class RecordService : Service() {
         stopSelf()
     }
 
-    private suspend fun processSignature(funcLabel: String = "UNKNOWN", noLimit: Boolean = false) = withContext(Dispatchers.IO) {
+    // Track digested string
+    var signedStr = "";
+
+    private suspend fun processSignature(funcLabel: String = "UNKNOWN", final: Boolean = false) = withContext(Dispatchers.IO) {
+        logService("ENTERING processSignature(funcLabel = $funcLabel, final = $final), digestedLocations: $digestedLocations")
         val t1 = Instant.now()
         var numberOfRows = 0
 
         // Prevent processing if there is no changes
-        if (eventLocations.size <= digestedLocations) {
+        if (eventLocations.size <= digestedLocations && !final) {
             Log.d("RecordService|Signature", "eventLocations <= digestedLocations, skipping")
+            logService("Skipping digest in $funcLabel, final: $final, digestedLocations: $digestedLocations, locations: ${eventLocations.size}, locationBuffer: ${locationBuffer.size}, iteratedBuffer: ${iteratedLocationBuffer.size}")
             signatureJob = null
             return@withContext
         }
+
+
 
         // Data is appended to the list on every iteration
 
         if (eventLocations.isNotEmpty()) {
             val isFirst = digestedLocations <= 0
             var count = 0
-            val limit = if (noLimit) eventLocations.size else 50
+            val limit = if (final) eventLocations.size else 50
 
-            val locations = dao.getLocationsByEventIdWithOffset(event.id, digestedLocations, limit)
+            val locations = dao.getLocationsByEventIdWithOffset(event.id, digestedLocations, limit).let {
+                if (final) it // All locations are final, process all of them
+                else {
+                    val locationBufferTimestamps = locationBuffer.map { location -> location.toLocationEntity(event.id).timestamp }
+                    it.filterNot { location ->
+                        locationBufferTimestamps.contains(location.timestamp)
+                    }
+                } // Exclude still-in-buffer locations
+            }
             count = locations.size
 
             val data = locations.joinToString("\n", prefix = if (isFirst || locations.isEmpty()) "" else "\n") {
@@ -1187,6 +1200,7 @@ class RecordService : Service() {
             Log.d("RecordService|Signature", "Digesting: --$data--")
 
             locationDigest.update(data.encodeToByteArray())
+            signedStr += data
             digestedLocations += count
             numberOfRows = count
         }
@@ -1216,7 +1230,70 @@ class RecordService : Service() {
 
         Log.d("RecordService", "Signing and insertion done in ${d2}ms")
 
-         signatureJob = null
+        // This section of code was used for debugging (signature validation debug)
+
+        // if (event.validateSignature(applicationContext)) {
+        //     logService("Event still signed properly")
+        // } else {
+        //     if (!signedStr.contains("[IT GETS WRONG FROM HERE]")) {
+        //         signedStr += "[IT GETS WRONG FROM HERE]"
+        //     }
+        //     logService("")
+        //     logService("[DEBUG] ????????????? BUG? ?????????????")
+        //     logService("[DEBUG] digestedLocations: $digestedLocations")
+        //     logService("[DEBUG] ")
+        //     logService("[DEBUG] SIGNED LOCATION STRING:")
+        //     for (line in signedStr.split("\n")) {
+        //         logService("[DEBUG] $line")
+        //     }
+        //     logService("[DEBUG] ")
+        //     logService("[DEBUG] EXPECTED:")
+        //     serviceLogData.appendWithTimestamp("[DEBUG] ", null)
+
+        //     var expected = ""
+
+        //     dao.getLocationsByEventId(event.id).first().forEachIndexed { index, data ->
+        //         if (index > 0) {
+        //             expected += "\n"
+        //             serviceLogData.append("")
+        //             serviceLogData.appendWithTimestamp("[DEBUG] ", null)
+        //         }
+        //         expected += data.toString()
+        //         serviceLogData.append(data.toString(), null)
+        //     }
+        //     serviceLogData.append("\n")
+
+        //     if (final) {
+        //         val reportSigned = LogData.inCommonPath("REPORT_SIGNED")
+        //         val reportExpect = LogData.inCommonPath("REPORT_EXPECT")
+
+        //         reportSigned.append(signedStr, null)
+        //         reportSigned.save(applicationContext)
+
+        //         reportExpect.append(expected, null)
+        //         reportExpect.save(applicationContext)
+        //     }
+
+        //     val timings = longArrayOf(
+        //         0L,
+        //         2000L,
+        //         100L,  // gap
+        //         2000L,
+        //     )
+
+        //     val amplitudes = intArrayOf(
+        //         0,
+        //         VibrationEffect.DEFAULT_AMPLITUDE,
+        //         0,
+        //         VibrationEffect.DEFAULT_AMPLITUDE,
+        //     )
+
+        //     val doubleEffect = VibrationEffect.createWaveform(timings, amplitudes, -1)
+
+        //     vibrator.vibrate(doubleEffect)
+        // }
+
+        signatureJob = null
     }
 
     private fun onLocationUpdate(locations: List<Location>) {
@@ -1255,6 +1332,9 @@ class RecordService : Service() {
         var hasValidUpdate = false
 
         val zoneId = Calendar.getInstance().timeZone.toZoneId()
+
+        val newLocations = mutableListOf<LocationData>()
+
         for (location in locations) {
             if (location.latitude != 0.0 && location.longitude != 0.0) {
                 Log.d(
@@ -1271,20 +1351,21 @@ class RecordService : Service() {
             hasValidUpdate = true
 
             val time = ZonedDateTime.ofInstant(Instant.ofEpochMilli(location.time), zoneId)
-            locationBuffer.add(
-                LocationData(
-                    time = time,
-                    location = Coordinate(location.latitude, location.longitude),
-                    speed = if (location.hasSpeed()) location.speed else null,
-                    bearing = if (location.hasBearing()) location.bearing else null,
-                    altitude = if (location.hasAltitude()) location.altitude else null,
 
-                    accuracy = if (location.hasAccuracy()) location.accuracy else null,
-                    speedAccuracy = if (location.hasSpeedAccuracy()) location.speedAccuracyMetersPerSecond else null,
-                    bearingAccuracy = if (location.hasBearingAccuracy()) location.bearingAccuracyDegrees else null,
-                    verticalAccuracy = if (location.hasVerticalAccuracy()) location.verticalAccuracyMeters else null
-                )
+            val newLocationData = LocationData(
+                time = time,
+                location = Coordinate(location.latitude, location.longitude),
+                speed = if (location.hasSpeed()) location.speed else null,
+                bearing = if (location.hasBearing()) location.bearing else null,
+                altitude = if (location.hasAltitude()) location.altitude else null,
+
+                accuracy = if (location.hasAccuracy()) location.accuracy else null,
+                speedAccuracy = if (location.hasSpeedAccuracy()) location.speedAccuracyMetersPerSecond else null,
+                bearingAccuracy = if (location.hasBearingAccuracy()) location.bearingAccuracyDegrees else null,
+                verticalAccuracy = if (location.hasVerticalAccuracy()) location.verticalAccuracyMeters else null
             )
+            locationBuffer.add(newLocationData)
+            newLocations.add(newLocationData)
 
             // TODO: move this check
             if (locationBuffer.isNotEmpty() && eventPoint) {
@@ -1297,6 +1378,20 @@ class RecordService : Service() {
                 }
                 return
             }
+
+            // serviceScope.launch {
+            //     dao.insertLocation(newLocationData.toLocationEntity(event.id))
+            // }
+        }
+
+        if (!RecordState.isRecording.value) {
+            Log.w("RecordService", "locationUpdate when not recording")
+            logService("UPDATE WHEN NOT RECORDING in onLocationUpdate, SKIPPING")
+            return
+        }
+
+        serviceScope.launch {
+            dao.insertLocations(newLocations.map { it.toLocationEntity(event.id) })
         }
 
         updates++
@@ -1514,9 +1609,7 @@ class RecordService : Service() {
         val minimumDistance = Config.locationMinimumDistance.get(applicationContext)
 
         val appendToLog = { text: String ->
-            val now = DateTimeFormatter.ofPattern("HH:mm:ss").format(ZonedDateTime.now())
-
-            iterationLogData.append("$now    $text") // Use space 4 for readability
+            iterationLogData.appendWithTimestamp(text)
         }
 
         if (event is EventRange) {
@@ -1608,6 +1701,7 @@ class RecordService : Service() {
                     // Remove key if it's too close to the previous location
                     if (!check) {
                         locationBuffer.remove(item)
+                        dao.deleteLocation(item.toLocationEntity(event.id))
                         lastIterationIndex--
                         Log.d("RecordService", "Location doesn't satisfy the condition, removed $item (lastIteration: $lastIterationIndex)")
                         continue
@@ -1636,9 +1730,14 @@ class RecordService : Service() {
                 else it.dropLast(5)
             }
 
-            locationBuffer.removeAll(moved.dropLast(1))  // Keep the last one (A)
+            if (!final) {
+                locationBuffer.removeAll(moved.dropLast(1))  // Keep the last one (A)
+            }
+            else {
+                locationBuffer.clear()
+            }
 
-            if ((eventLocations.size + iteratedLocationBuffer.size) > 0) {
+            if ((eventLocations.size + iteratedLocationBuffer.size) > 0 && !final) {
                 iteratedLocationBuffer.addAll(moved.drop(1)) // Exclude the overlap (B) (only if location still empty)
             }
             else {
@@ -1658,17 +1757,25 @@ class RecordService : Service() {
             iterationLogData.save(this@RecordService)
 
             // Insert location data into database
-            iteratedLocationBuffer.insertToDatabase(applicationContext, event.id)
-
-            signatureJob = signatureJob ?: serviceScope.launch {
-                processSignature(
-                    funcLabel = "iterateLocations"
-                )
-                signatureJob = null
-            }
+            // TODO: remove this after DB-direct implementation
+            // iteratedLocationBuffer.insertToDatabase(applicationContext, event.id)
 
             // Append to main location list
             eventLocations.addAll(iteratedLocationBuffer)
+
+            // I forgot that if `final` was true, it skipped the signature processing
+            // when this was still running
+            if (final && signatureJob?.isActive == true) {
+                signatureJob?.join()
+            }
+
+            signatureJob = signatureJob ?: serviceScope.launch {
+                processSignature(
+                    funcLabel = "iterateLocations",
+                    final // << this was the culprit that I've missed
+                )
+                signatureJob = null
+            }
 
             // Clear iterated location buffer
             iteratedLocationBuffer.clear()
