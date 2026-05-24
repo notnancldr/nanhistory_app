@@ -212,7 +212,7 @@ fun DetailContent_Old(eventId: String, path: String) {
 
     val recordEventId by RecordService.RecordState.eventId.collectAsState()
     val recordRunning by RecordService.RecordState.isRecording.collectAsState()
-    val recording = recordEventId == eventData?.id && recordRunning
+    val isRecording = recordEventId == eventData?.id && recordRunning
 
     var tagDialogState by remember { mutableStateOf(false) }
 
@@ -278,7 +278,7 @@ fun DetailContent_Old(eventId: String, path: String) {
                             onClick = {
                                 scope.launch { dao.toggleFavoriteEvent(eventId) }
                             },
-                            enabled = !recording
+                            enabled = !isRecording
                         ) {
                             if (favorite) Icon(
                                 painterResource(R.drawable.ic_favorite_filled), "",
@@ -294,7 +294,7 @@ fun DetailContent_Old(eventId: String, path: String) {
                                 intent.putExtra("eventId", eventId)
                                 context.startActivity(intent)
                             },
-                            enabled = !recording
+                            enabled = !isRecording
                         ) {
                             Icon(Icons.Rounded.Edit, "Edit")
                         }
@@ -348,7 +348,7 @@ fun DetailContent_Old(eventId: String, path: String) {
                                         context.startActivity(intent)
                                         // TODO
                                     },
-                                    enabled = !recording
+                                    enabled = !isRecording
                                 )
                                 DropdownMenuItem(
                                     leadingIcon = {
@@ -360,7 +360,7 @@ fun DetailContent_Old(eventId: String, path: String) {
                                         Text("Delete")
                                     },
                                     onClick = { deleteDialogState = true; menuExpanded = false },
-                                    enabled = !recording,
+                                    enabled = !isRecording,
                                     colors = MenuItemColors(
                                         textColor = MaterialTheme.colorScheme.error,
                                         leadingIconColor = MaterialTheme.colorScheme.error,
@@ -378,7 +378,7 @@ fun DetailContent_Old(eventId: String, path: String) {
                             .padding(8.dp)
                     )
                 },
-                colors = if (recording) TopAppBarDefaults.largeTopAppBarColors(
+                colors = if (isRecording) TopAppBarDefaults.largeTopAppBarColors(
                     scrolledContainerColor = MaterialTheme.colorScheme.errorContainer,
                     titleContentColor = MaterialTheme.colorScheme.error
                 ) else TopAppBarDefaults.largeTopAppBarColors()
@@ -402,7 +402,7 @@ fun DetailContent_Old(eventId: String, path: String) {
                     .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (eventData != null && !recording) {
+                if (eventData != null && !isRecording) {
                     if (eventData.tags.isNotEmpty()) {
                         val isTagMoreThanOne = eventData.tags.size > 1
                         Text(
@@ -518,7 +518,7 @@ fun DetailContent_Old(eventId: String, path: String) {
                         )
                     }
 
-                    if (eventData.signature.isNotBlank()) {
+                    if (eventData.signature.isNotBlank() && !isRecording) {
                         var valid by remember { mutableStateOf<Boolean?>(null) }
                         LaunchedEffect(eventData) {
                             valid = eventData.validateSignature(context = context)
@@ -910,7 +910,7 @@ fun DetailContent_New(eventId: String, path: String) {
 
     val recordEventId by RecordService.RecordState.eventId.collectAsState()
     val recordRunning by RecordService.RecordState.isRecording.collectAsState()
-    val recording = recordEventId == eventData?.id && recordRunning
+    val isRecording = recordEventId == eventData?.id && recordRunning
 
     var tagDialogState by remember { mutableStateOf(false) }
 
@@ -972,7 +972,7 @@ fun DetailContent_New(eventId: String, path: String) {
                             onClick = {
                                 scope.launch { dao.toggleFavoriteEvent(eventId) }
                             },
-                            enabled = !recording
+                            enabled = !isRecording
                         ) {
                             if (favorite) Icon(
                                 painterResource(R.drawable.ic_favorite_filled), "",
@@ -988,7 +988,7 @@ fun DetailContent_New(eventId: String, path: String) {
                                 intent.putExtra("eventId", eventId)
                                 context.startActivity(intent)
                             },
-                            enabled = !recording
+                            enabled = !isRecording
                         ) {
                             Icon(Icons.Rounded.Edit, "Edit")
                         }
@@ -1041,7 +1041,7 @@ fun DetailContent_New(eventId: String, path: String) {
                                                 }
                                         context.startActivity(intent)
                                     },
-                                    enabled = !recording
+                                    enabled = !isRecording
                                 )
                                 DropdownMenuItem(
                                     leadingIcon = {
@@ -1054,7 +1054,7 @@ fun DetailContent_New(eventId: String, path: String) {
                                         Text("Delete", color = MaterialTheme.colorScheme.error)
                                     },
                                     onClick = { deleteDialogState = true; menuExpanded = false },
-                                    enabled = !recording
+                                    enabled = !isRecording
                                 )
                             }
                         }
@@ -1064,7 +1064,7 @@ fun DetailContent_New(eventId: String, path: String) {
                             .padding(8.dp)
                     )
                 },
-                colors = if (recording) TopAppBarDefaults.largeTopAppBarColors(
+                colors = if (isRecording) TopAppBarDefaults.largeTopAppBarColors(
                     scrolledContainerColor = MaterialTheme.colorScheme.errorContainer,
                     titleContentColor = MaterialTheme.colorScheme.error
                 ) else TopAppBarDefaults.largeTopAppBarColors()
@@ -1078,7 +1078,7 @@ fun DetailContent_New(eventId: String, path: String) {
                 .verticalScroll(scrollState)
         ) {
 
-            if (recording) {
+            if (isRecording) {
                 RecordingIndicatorBar()
             }
 
@@ -1138,7 +1138,7 @@ fun DetailContent_New(eventId: String, path: String) {
             }
 
             // Tags Section
-            if (eventData != null && !recording) {
+            if (eventData != null && !isRecording) {
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1445,7 +1445,7 @@ fun DetailContent_New(eventId: String, path: String) {
 
 
                     // Signature Section
-                    if (eventData.signature.isNotBlank()) {
+                    if (eventData.signature.isNotBlank() && !isRecording) {
                         var valid by remember { mutableStateOf<Boolean?>(null) }
                         LaunchedEffect(eventData) {
                             valid = eventData.validateSignature(context = context)
