@@ -2,7 +2,6 @@ package id.my.nanclouder.nanhistory.ui.map
 
 import android.content.Context
 import android.graphics.Paint
-import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,22 +24,17 @@ import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import java.time.Year
-import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Polyline
-import kotlin.math.max
-import kotlin.math.min
 import android.content.Intent
-import id.my.nanclouder.nanhistory.EventDetailActivity
+import id.my.nanclouder.nanhistory.activity.eventDetail.EventDetailActivity
 import id.my.nanclouder.nanhistory.db.toHistoryEvent
 import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
-import id.my.nanclouder.nanhistory.ui.list.EventListItem
 import id.my.nanclouder.nanhistory.ui.list.TimelineEventItem
 import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
 import kotlin.math.pow

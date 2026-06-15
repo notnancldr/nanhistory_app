@@ -58,8 +58,8 @@ import kotlin.math.roundToInt
 fun BoxScope.QuickScroll(
     listState: LazyListState
 ) {
-    val newUI = Config.appearanceNewUI.get(LocalContext.current)
-    if (newUI) {
+    val useOldUi = Config.appearanceOldUi.get(LocalContext.current)
+    if (!useOldUi) {
         EnhancedQuickScroll(listState)
     } else {
         QuickScroll_Old(listState)

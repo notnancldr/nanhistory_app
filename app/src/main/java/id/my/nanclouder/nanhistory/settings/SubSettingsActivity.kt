@@ -1,7 +1,6 @@
 package id.my.nanclouder.nanhistory.settings
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Column
@@ -9,7 +8,6 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -24,7 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import id.my.nanclouder.nanhistory.getActivity
+import id.my.nanclouder.nanhistory.activity.eventDetail.getActivity
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import id.my.nanclouder.nanhistory.utils.NewUIComponentActivity
 

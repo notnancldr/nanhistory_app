@@ -1,5 +1,6 @@
-package id.my.nanclouder.nanhistory
+package id.my.nanclouder.nanhistory.activity
 
+import android.Manifest
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.OnBackPressedCallback
@@ -19,10 +20,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.service.DataProcessService
+import id.my.nanclouder.nanhistory.service.YearlyMapWorker
 import id.my.nanclouder.nanhistory.ui.DataProcessDialog
 import id.my.nanclouder.nanhistory.ui.main.MainView
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
@@ -121,24 +125,24 @@ class MainActivity : NewUIComponentActivity() {
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             requestPermissions(arrayOf(
-                android.Manifest.permission.ACCESS_BACKGROUND_LOCATION,
-                android.Manifest.permission.ACCESS_FINE_LOCATION,
-                android.Manifest.permission.ACCESS_COARSE_LOCATION,
-                android.Manifest.permission.POST_NOTIFICATIONS,
+                Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.POST_NOTIFICATIONS,
             ), 100)
         }
         else {
             requestPermissions(arrayOf(
-                android.Manifest.permission.ACCESS_BACKGROUND_LOCATION,
-                android.Manifest.permission.ACCESS_FINE_LOCATION,
-                android.Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
             ), 100)
         }
         requestPermissions(arrayOf(
-            android.Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+            Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
         ), 101)
         requestPermissions(arrayOf(
-            android.Manifest.permission.WAKE_LOCK,
+            Manifest.permission.WAKE_LOCK,
         ), 102)
     }
 
@@ -163,13 +167,13 @@ class MainActivity : NewUIComponentActivity() {
         // Schedule Yearly Map Update
         // This is a OneTimeWork restricted to run only when connected to power/battery not low?
         // Actually, for now just run it. The worker itself checks config.
-        val yearlyMapRequest = androidx.work.OneTimeWorkRequestBuilder<id.my.nanclouder.nanhistory.service.YearlyMapWorker>()
+        val yearlyMapRequest = OneTimeWorkRequestBuilder<YearlyMapWorker>()
             .build()
 
         WorkManager.getInstance(this)
             .enqueueUniqueWork(
                 "YearlyMapWorker",
-                androidx.work.ExistingWorkPolicy.KEEP,
+                ExistingWorkPolicy.KEEP,
                 yearlyMapRequest
             )
     }

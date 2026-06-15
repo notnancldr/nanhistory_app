@@ -41,8 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import id.my.nanclouder.nanhistory.R
-import id.my.nanclouder.nanhistory.getActivity
-import id.my.nanclouder.nanhistory.ui.TagDetailDialogState
+import id.my.nanclouder.nanhistory.activity.eventDetail.getActivity
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import java.io.File
 

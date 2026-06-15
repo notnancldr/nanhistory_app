@@ -37,14 +37,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.boundsInParent
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -56,7 +53,7 @@ import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonSyntaxException
 import com.google.gson.reflect.TypeToken
-import id.my.nanclouder.nanhistory.getActivity
+import id.my.nanclouder.nanhistory.activity.eventDetail.getActivity
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import id.my.nanclouder.nanhistory.settings.AccelerometerGraph
 import id.my.nanclouder.nanhistory.settings.parseAccelerometerData

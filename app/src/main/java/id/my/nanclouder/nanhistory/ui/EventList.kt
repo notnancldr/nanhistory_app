@@ -1,6 +1,7 @@
 package id.my.nanclouder.nanhistory.ui
 
 import android.content.Intent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -12,18 +13,24 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
@@ -44,12 +51,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import id.my.nanclouder.nanhistory.EventDetailActivity
+import id.my.nanclouder.nanhistory.activity.EditEventActivity
+import id.my.nanclouder.nanhistory.activity.eventDetail.EventDetailActivity
 import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.service.RecordService
 import id.my.nanclouder.nanhistory.state.SelectionState
-import id.my.nanclouder.nanhistory.ui.MentionModalState
 import id.my.nanclouder.nanhistory.ui.list.EventListHeader
 import id.my.nanclouder.nanhistory.ui.list.EventListItem
 import id.my.nanclouder.nanhistory.ui.list.TimelineEventItem
@@ -251,14 +258,48 @@ fun EventList(
 
                     val recordEventId by RecordService.RecordState.eventId.collectAsState()
 
-                    val selected = selectedItems.contains(event)
+                    val isSelected = selectedItems.contains(event)
                     val recording = recordEventId == event.id
 
-                    val newUI by Config.appearanceNewUI.getState()
+                    val useOldUi by Config.appearanceOldUi.getState()
 
-                    if (newUI) TimelineEventItem(
+                    @Composable
+                    fun AddNextToEventButton(
+                        isPrevious: Boolean
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.Start,
+                            modifier = Modifier
+                                .padding(8.dp)
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    val intent = Intent(context, EditEventActivity::class.java)
+                                    intent.putExtra(
+                                        if (isPrevious) "previousEventOf" else "nextEventOf",
+                                        event.id
+                                    )
+                                    selectionState.reset()
+                                    context.startActivity(intent)
+                                }
+                            ) {
+                                Icon(Icons.Rounded.Add, "Add Event")
+                                Box(Modifier.width(8.dp))
+                                Text("New Event")
+                            }
+                        }
+                    }
+
+                    AnimatedVisibility(
+                        visible = selectedItems.size == 1 && isSelected,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        AddNextToEventButton(true)
+                    }
+
+                    if (!useOldUi) TimelineEventItem(
                         event,
-                        selected = selected,
+                        selected = isSelected,
                         recording = recording,
                         isFirst = isFirst,
                         isLast = isLast,
@@ -279,7 +320,7 @@ fun EventList(
                                         context.startActivity(intent)
                                     } else {
                                         if (recording) return@listItemOnClick
-                                        if (selected) selectionState.deselect(event)
+                                        if (isSelected) selectionState.deselect(event)
                                         else selectionState.select(event)
                                     }
                                 },
@@ -288,7 +329,7 @@ fun EventList(
                                     haptic.performHapticFeedback(
                                         HapticFeedbackType.LongPress
                                     )
-                                    if (selected) selectionState.deselect(event)
+                                    if (isSelected) selectionState.deselect(event)
                                     else selectionState.select(event)
                                 }
                             )
@@ -296,7 +337,7 @@ fun EventList(
                     )
                     else EventListItem(
                         event,
-                        selected = selected,
+                        selected = isSelected,
                         recording = recording,
                         tagDetailDialogState = tagDetailDialogState,
                         modifier = Modifier
@@ -314,7 +355,7 @@ fun EventList(
                                         context.startActivity(intent)
                                     } else {
                                         if (recording) return@listItemOnClick
-                                        if (selected) selectionState.deselect(event)
+                                        if (isSelected) selectionState.deselect(event)
                                         else selectionState.select(event)
                                     }
                                 },
@@ -324,12 +365,19 @@ fun EventList(
                                     haptic.performHapticFeedback(
                                         HapticFeedbackType.LongPress
                                     )
-                                    if (selected) selectionState.deselect(event)
+                                    if (isSelected) selectionState.deselect(event)
                                     else selectionState.select(event)
                                 }
                             )
                             .zIndex(-1f),
                     )
+
+                    AnimatedVisibility(
+                        visible = selectedItems.size == 1 && isSelected,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        AddNextToEventButton(false)
+                    }
                 }
             }
             item {

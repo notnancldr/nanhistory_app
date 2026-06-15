@@ -55,10 +55,13 @@ object Config {
         const val AUDIO_ENCODING_BITRATE = 128
         const val AUDIO_SAMPLING_RATE = 44
 
-        const val APPEARANCE_NEW_UI = false
+        const val APPEARANCE_OLD_UI = false
 
         const val AUTO_DELETE_NOTIFY_USER = true
         const val AUTO_DELETE_ALWAYS_ASK = false
+
+        const val GRAPH_COLORS = "[]"
+        const val GRAPH_SAVED = "[]"
     }
 
     private fun readOrCreateNew(context: Context): String {
@@ -260,8 +263,8 @@ object Config {
         "includeAudioRecord", Default.INCLUDE_AUDIO_RECORD
     )
 
-    val appearanceNewUI = BooleanValue(
-        "appearanceNewUI", Default.APPEARANCE_NEW_UI
+    val appearanceOldUi = BooleanValue(
+        "appearanceOldUi", Default.APPEARANCE_OLD_UI
     )
 
     val audioStereoChannel = BooleanValue(
@@ -289,5 +292,12 @@ object Config {
     )
     val yearlyMapBackgroundProcessing = BooleanValue(
         "yearlyMapBackgroundProcessing", true
+    )
+
+    val graphColors = StringValue(
+        "graphColors", Default.GRAPH_COLORS
+    )
+    val graphSaved = StringValue(
+        "graphSaved", Default.GRAPH_SAVED
     )
 }

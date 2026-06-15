@@ -38,7 +38,7 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
-import id.my.nanclouder.nanhistory.MainActivity
+import id.my.nanclouder.nanhistory.activity.MainActivity
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.config.LocationIterationLogic
@@ -77,7 +77,6 @@ import id.my.nanclouder.nanhistory.utils.history.LocationData
 import id.my.nanclouder.nanhistory.utils.signature.generateSignatureV1
 import id.my.nanclouder.nanhistory.utils.history.insertToDatabase
 import id.my.nanclouder.nanhistory.utils.signature.generateSignatureV2
-import id.my.nanclouder.nanhistory.utils.signature.validateSignature
 import id.my.nanclouder.nanhistory.utils.transportModel.TransportMode
 import id.my.nanclouder.nanhistory.utils.transportModel.detectTransportMode
 import id.my.nanclouder.nanhistory.utils.transportModel.loadCalibrationModels
@@ -88,7 +87,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -795,8 +793,16 @@ class RecordService : Service() {
                     .joinToString(",")
             }
 
+            val eventExists = dao.getEventById(event.id) != null
+
             AppDatabase.ensureDayExists(dao, event.time.toLocalDate())
-            dao.insertEvent(event.toEventEntity())
+
+            if (!eventExists) {
+                dao.insertEvent(event.toEventEntity())
+            }
+            else {
+                dao.updateEvent(event.toEventEntity())
+            }
 
             // Start location updates
             // Stopped from stopEventRecording
@@ -1162,6 +1168,11 @@ class RecordService : Service() {
 
     private suspend fun processSignature(funcLabel: String = "UNKNOWN", final: Boolean = false) = withContext(Dispatchers.IO) {
         logService("ENTERING processSignature(funcLabel = $funcLabel, final = $final), digestedLocations: $digestedLocations")
+
+        val currentEventLocations = eventLocations.toList()
+        val currentLocationBuffer = locationBuffer.toList()
+        val currentDigestedLocations = digestedLocations
+
         val t1 = Instant.now()
         var numberOfRows = 0
 
@@ -1177,15 +1188,15 @@ class RecordService : Service() {
 
         // Data is appended to the list on every iteration
 
-        if (eventLocations.isNotEmpty()) {
-            val isFirst = digestedLocations <= 0
+        if (currentEventLocations.isNotEmpty()) {
+            val isFirst = currentDigestedLocations <= 0
             var count = 0
-            val limit = if (final) eventLocations.size else 50
+            val limit = if (final) currentEventLocations.size else 50
 
-            val locations = dao.getLocationsByEventIdWithOffset(event.id, digestedLocations, limit).let {
+            val locations = dao.getLocationsByEventIdWithOffset(event.id, currentDigestedLocations, limit).let {
                 if (final) it // All locations are final, process all of them
                 else {
-                    val locationBufferTimestamps = locationBuffer.map { location -> location.toLocationEntity(event.id).timestamp }
+                    val locationBufferTimestamps = currentLocationBuffer.map { location -> location.toLocationEntity(event.id).timestamp }
                     it.filterNot { location ->
                         locationBufferTimestamps.contains(location.timestamp)
                     }
@@ -1391,7 +1402,12 @@ class RecordService : Service() {
         }
 
         serviceScope.launch {
+            val currentEventData = event
             dao.insertLocations(newLocations.map { it.toLocationEntity(event.id) })
+            if (currentEventData is EventRange) {
+                currentEventData.end = ZonedDateTime.now()
+                dao.updateEvent(currentEventData.toEventEntity())
+            }
         }
 
         updates++

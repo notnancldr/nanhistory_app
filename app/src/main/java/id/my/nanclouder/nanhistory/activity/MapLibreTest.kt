@@ -1,4 +1,4 @@
-package id.my.nanclouder.nanhistory
+package id.my.nanclouder.nanhistory.activity
 //
 //import android.content.Context
 //import android.content.ContextWrapper

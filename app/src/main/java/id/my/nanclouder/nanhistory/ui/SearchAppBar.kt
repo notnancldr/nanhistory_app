@@ -73,8 +73,8 @@ fun SearchAppBar(
     showTags: Boolean = true,
     onChange: ((String, List<String>) -> Unit)? = null
 ) {
-    val newUI = Config.appearanceNewUI.get(LocalContext.current)
-    if (newUI) {
+    val useOldUi = Config.appearanceOldUi.get(LocalContext.current)
+    if (!useOldUi) {
         SearchAppBar_New(
             viewModel = viewModel,
             onSearch = onSearch,

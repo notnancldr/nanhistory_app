@@ -77,8 +77,8 @@ import java.io.File
 class StorageSettingsActivity : SubSettingsActivity("Storage") {
     @Composable
     override fun ColumnScope.Content() {
-        val newUI = Config.appearanceNewUI.getCache()
-        if (newUI) NewUI()
+        val useOldUi = Config.appearanceOldUi.getCache()
+        if (!useOldUi) NewUI()
         else OldUI()
     }
 

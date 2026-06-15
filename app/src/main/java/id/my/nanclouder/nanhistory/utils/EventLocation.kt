@@ -1,7 +1,7 @@
 package id.my.nanclouder.nanhistory.utils
 
-import id.my.nanclouder.nanhistory.calculateDistance
-import id.my.nanclouder.nanhistory.calculateSpeed
+import id.my.nanclouder.nanhistory.activity.calculateDistance
+import id.my.nanclouder.nanhistory.activity.calculateSpeed
 import id.my.nanclouder.nanhistory.utils.history.LocationData
 import org.osmdroid.util.GeoPoint
 import java.time.ZonedDateTime

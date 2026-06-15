@@ -78,10 +78,10 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import id.my.nanclouder.nanhistory.MainActivity
+import id.my.nanclouder.nanhistory.activity.MainActivity
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
-import id.my.nanclouder.nanhistory.getActivity
+import id.my.nanclouder.nanhistory.activity.eventDetail.getActivity
 import id.my.nanclouder.nanhistory.utils.readableSize
 import id.my.nanclouder.nanhistory.service.DataProcessService
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
@@ -113,8 +113,8 @@ enum class ImportProgressStage {
 
 @Composable
 fun BackupView() {
-    val newUI = Config.appearanceNewUI.getCache()
-    if (newUI) BackupView_New() else BackupView_Old()
+    val useOldUi = Config.appearanceOldUi.getCache()
+    if (!useOldUi) BackupView_New() else BackupView_Old()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -37,7 +37,7 @@
         android:theme="@style/Theme.NanHistory"
         tools:targetApi="34">
         <activity
-            android:name=".TrashActivity"
+            android:name=".activity.TrashActivity"
             android:exported="false"
             android:label="@string/title_activity_deleted_event"
             android:theme="@style/Theme.NanHistory" />
@@ -47,7 +47,7 @@
             android:label="@string/title_activity_backup"
             android:theme="@style/Theme.NanHistory" />
         <activity
-            android:name=".EventLocationActivity"
+            android:name=".activity.EventLocationActivity"
             android:exported="false"
             android:label="@string/title_activity_event_location"
             android:theme="@style/Theme.NanHistory" />
@@ -144,7 +144,7 @@
             android:foregroundServiceType="dataSync" />
 
         <activity
-            android:name=".YearlyMapActivity"
+            android:name=".activity.YearlyMapActivity"
             android:exported="false"
             android:label="Yearly Trip Map"
             android:theme="@style/Theme.NanHistory" />
@@ -165,17 +165,17 @@
         </service>
 
         <activity
-            android:name=".EditEventActivity"
+            android:name=".activity.EditEventActivity"
             android:exported="false"
             android:label="@string/title_activity_edit_event"
             android:theme="@style/Theme.NanHistory" />
         <activity
-            android:name=".EventDetailActivity"
+            android:name=".activity.eventDetail.EventDetailActivity"
             android:exported="false"
             android:label="@string/title_activity_event_detail"
             android:theme="@style/Theme.NanHistory" />
         <activity
-            android:name=".TagDetailActivity"
+            android:name=".activity.TagDetailActivity"
             android:exported="false"
             android:label="@string/title_activity_tag_detail"
             android:theme="@style/Theme.NanHistory" />
@@ -185,7 +185,7 @@
 <!--            android:label="MapLibreTest"-->
 <!--            android:theme="@style/Theme.NanHistory" />-->
         <activity
-            android:name=".MainActivity"
+            android:name=".activity.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:theme="@style/Theme.NanHistory">

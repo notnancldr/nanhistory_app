@@ -29,6 +29,17 @@ interface AppDao {
     @Delete
     suspend fun deleteEvents(events: List<EventEntity>)
 
+    @Query("UPDATE events SET type = 'Point' WHERE id = :eventId")
+    suspend fun forceEventPoint(eventId: String)
+
+    @Query("SELECT * FROM events WHERE timestamp < (SELECT timestamp FROM events WHERE id = :eventId) " +
+            "ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getPreviousEvent(eventId: String): EventEntity
+
+    @Query("SELECT * FROM events WHERE timestamp > (SELECT timestamp FROM events WHERE id = :eventId) " +
+            "ORDER BY timestamp ASC LIMIT 1")
+    suspend fun getNextEvent(eventId: String): EventEntity
+
     @Query("UPDATE events SET locationPath = NULL WHERE id = :eventId")
     suspend fun deleteLocationPath(eventId: String)
 

@@ -45,9 +45,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import id.my.nanclouder.nanhistory.EventDetailActivity
+import id.my.nanclouder.nanhistory.activity.eventDetail.EventDetailActivity
 import id.my.nanclouder.nanhistory.db.AppDatabase
-import id.my.nanclouder.nanhistory.getActivity
+import id.my.nanclouder.nanhistory.activity.eventDetail.getActivity
 import id.my.nanclouder.nanhistory.utils.getAttachmentPath
 import id.my.nanclouder.nanhistory.utils.readableSize
 import id.my.nanclouder.nanhistory.ui.AudioPlayer

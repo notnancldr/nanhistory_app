@@ -114,7 +114,7 @@ import com.github.skydoves.colorpicker.compose.HsvColorPicker
 import com.github.skydoves.colorpicker.compose.rememberColorPickerController
 import id.my.nanclouder.nanhistory.settings.ImportProgressStage
 import id.my.nanclouder.nanhistory.R
-import id.my.nanclouder.nanhistory.TagDetailActivity
+import id.my.nanclouder.nanhistory.activity.TagDetailActivity
 import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.DayTagCrossRef
@@ -130,7 +130,6 @@ import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
@@ -179,8 +178,8 @@ fun RequestMultiplePermissions(
 
 @Composable
 fun AudioPlayer(path: String) {
-    val newUI = Config.appearanceNewUI.getCache()
-    if (newUI) AudioPlayer_New(path)
+    val useOldUi = Config.appearanceOldUi.getCache()
+    if (!useOldUi) AudioPlayer_New(path)
     else AudioPlayer_Old(path)
 }
 
@@ -576,6 +575,45 @@ fun ComponentPlaceholder(modifier: Modifier = Modifier) {
 }
 
 @Composable
+fun <T, R> R.WithSkeleton(
+    value: T?,
+    modifier: Modifier = Modifier,
+    component: @Composable R.(T) -> Unit,
+) {
+    if (value == null) {
+        ComponentPlaceholder(modifier)
+    } else {
+        component(value)
+    }
+}
+
+@Composable
+fun <R> R.WithSkeleton(
+    isLoading: Boolean,
+    modifier: Modifier = Modifier,
+    component: @Composable R.() -> Unit,
+) {
+    if (isLoading) {
+        ComponentPlaceholder(modifier)
+    } else {
+        component()
+    }
+}
+
+@Composable
+fun WithSkeleton(
+    modifier: Modifier = Modifier,
+    value: Any?,
+    component: @Composable () -> Unit,
+) {
+    if (value == null) {
+        ComponentPlaceholder(modifier)
+    } else {
+        component()
+    }
+}
+
+@Composable
 fun ColorIcon(color: Color, modifier: Modifier = Modifier) {
     Canvas(
         modifier = modifier.size(24.dp)
@@ -605,8 +643,8 @@ fun TagPickerDialog(
     eventIds: List<String> = emptyList(),
     dayDates: List<LocalDate> = emptyList(),
 ) {
-    val newUI = Config.appearanceNewUI.get(LocalContext.current)
-    if (newUI) {
+    val useOldUi = Config.appearanceOldUi.get(LocalContext.current)
+    if (!useOldUi) {
         TagPickerDialog_New(
             state = state,
             onDismissRequest = onDismissRequest,
@@ -648,9 +686,11 @@ fun TagPickerDialog_New(
         val db = AppDatabase.getInstance(context)
         val dao = db.appDao()
 
-        val tagList by dao.getAllTags().map {
-            it.map { tag -> tag.toHistoryTag() }
-        }.collectAsState(emptyList())
+        val tagFlow by dao.getAllTags().collectAsState(emptyList())
+
+        val tagList = tagFlow.map {
+            it.toHistoryTag()
+        }
 
         var oldSelected by remember { mutableStateOf<List<String>?>(null) }
         val selectedItems = remember { mutableStateListOf<HistoryTag>() }
@@ -945,9 +985,8 @@ fun TagPickerDialog_Old(
         val db = AppDatabase.getInstance(context)
         val dao = db.appDao()
 
-        val tagList by dao.getAllTags().map {
-            it.map { tag -> tag.toHistoryTag() }
-        }.collectAsState(emptyList())
+        val tagFlow by dao.getAllTags().collectAsState(emptyList())
+        val tagList = tagFlow.map { it.toHistoryTag() }
 
         // val selectedItems by dao.getTagIdsMatchingAllEventIds(eventIds)
         //     .collectAsState(emptyList())
@@ -1146,8 +1185,8 @@ fun TagEditorDialog(
     modifier: Modifier = Modifier,
     tagId: String? = null
 ) {
-    val newUI = Config.appearanceNewUI.get(LocalContext.current)
-    if (newUI) {
+    val useOldUi = Config.appearanceOldUi.get(LocalContext.current)
+    if (!useOldUi) {
         TagEditorDialog_New(
             state = state,
             onDismissRequest = onDismissRequest,

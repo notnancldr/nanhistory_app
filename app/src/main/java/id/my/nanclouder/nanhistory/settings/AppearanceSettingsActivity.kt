@@ -5,14 +5,10 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 
 class AppearanceSettingsActivity : SubSettingsActivity("Appearance") {
     @Composable
@@ -27,7 +23,7 @@ class AppearanceSettingsActivity : SubSettingsActivity("Appearance") {
             SettingsSwitch(
                 title = "Enable New UI",
                 description = "Use new UI for application appearance",
-                configValue = Config.appearanceNewUI,
+                configValue = Config.appearanceOldUi,
                 onUpdated = { _ ->
                     recreate()
                 }

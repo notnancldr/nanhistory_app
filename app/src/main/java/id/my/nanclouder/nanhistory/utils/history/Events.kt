@@ -10,6 +10,7 @@ import id.my.nanclouder.nanhistory.db.toLocationEntity
 import id.my.nanclouder.nanhistory.utils.Coordinate
 import id.my.nanclouder.nanhistory.utils.getAudioFile
 import id.my.nanclouder.nanhistory.utils.getLocationFile
+import id.my.nanclouder.nanhistory.utils.signature.validateSignature
 import id.my.nanclouder.nanhistory.utils.toCoordinate
 import kotlinx.coroutines.flow.first
 import java.io.File
@@ -328,6 +329,7 @@ suspend fun HistoryEvent.safeDelete(context: Context, deleteAttachments: Boolean
         audioFile.delete()
     }
 
+    // TODO: location file cannot exist after migration
     // Backward compatibility
     if (currentLocationPath != null && deleteAttachments) {
         val locationFile = getLocationFile(context, currentLocationPath)

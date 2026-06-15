@@ -20,7 +20,7 @@ import id.my.nanclouder.nanhistory.utils.LogData
 import id.my.nanclouder.nanhistory.utils.ServiceBroadcast
 import id.my.nanclouder.nanhistory.utils.migration.migrateData
 import id.my.nanclouder.nanhistory.utils.readableSize
-import id.my.nanclouder.nanhistory.ENCRYPTION_KEY
+import id.my.nanclouder.nanhistory.activity.ENCRYPTION_KEY
 import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.utils.LegacyImport
 import kotlinx.coroutines.CoroutineScope

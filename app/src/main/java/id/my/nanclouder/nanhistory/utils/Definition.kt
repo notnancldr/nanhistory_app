@@ -64,7 +64,7 @@ fun Coordinate.toGeoPoint(): GeoPoint {
 }
 
 inline fun <reified T> matchOrNull(value: Any?): T? =
-    if (value is T) value else null
+    value as? T
 
 fun String.toCoordinateOrNull(): Coordinate? {
     val parts = this.split(",", limit = 2)

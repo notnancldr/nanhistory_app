@@ -1,9 +1,8 @@
-package id.my.nanclouder.nanhistory
+package id.my.nanclouder.nanhistory.activity
 
 import android.content.Intent
 import android.graphics.Paint
 import android.location.Location
-import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -63,11 +62,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -112,6 +113,13 @@ import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.Polyline
 import androidx.core.net.toUri
+import id.my.nanclouder.nanhistory.R
+import id.my.nanclouder.nanhistory.activity.eventDetail.getActivity
+import id.my.nanclouder.nanhistory.activity.eventDetail.ui.toBoundingBox
+import kotlin.collections.get
+import kotlin.collections.iterator
+import kotlin.math.abs
+import kotlin.math.sqrt
 
 class EventLocationActivity : ComponentActivity() {
     var update: () -> Unit = {}
@@ -226,8 +234,8 @@ fun calculateAccuracyColor(accuracy: Float?): Color {
 
 @Composable
 fun EventLocationView(eventId: String, startAsCutMode: Boolean = false) {
-    val newUI = Config.appearanceNewUI.getCache()
-    if (newUI) EventLocationView_New(eventId, startAsCutMode)
+    val useOldUi = Config.appearanceOldUi.getCache()
+    if (!useOldUi) EventLocationView_New(eventId, startAsCutMode)
     else EventLocationView_Old(eventId, startAsCutMode)
 }
 
@@ -575,7 +583,7 @@ fun MapHistoryView_Old(
                     icon = context.getDrawable(R.drawable.ic_location_start)
                     setOnMarkerClickListener { _, _ ->
                         setCutPoint(locations.keys.first())
-                        true
+                        false
                     }
                 }
             val markerEnd =
@@ -584,7 +592,7 @@ fun MapHistoryView_Old(
                     icon = context.getDrawable(R.drawable.ic_location_end)
                     setOnMarkerClickListener { _, _ ->
                         setCutPoint(locations.keys.last())
-                        true
+                        false
                     }
                 }
 
@@ -697,7 +705,7 @@ fun MapHistoryView_Old(
 
                                 setOnMarkerClickListener { _, _ ->
                                     setCutPoint(shownKey)
-                                    true
+                                    false
                                 }
                             }
                         )
@@ -1401,7 +1409,7 @@ fun MapHistoryView_New(
                     icon = context.getDrawable(R.drawable.ic_location_start)
                     setOnMarkerClickListener { _, _ ->
                         if (cutMode) setCutPoint(0)
-                        true
+                        false
                     }
                 }
             val markerEnd =
@@ -1410,7 +1418,7 @@ fun MapHistoryView_New(
                     icon = context.getDrawable(R.drawable.ic_location_end)
                     setOnMarkerClickListener { _, _ ->
                         setCutPoint(locations.size - 1)
-                        true
+                        false
                     }
                 }
 
@@ -1670,7 +1678,7 @@ fun MapHistoryView_New(
 
                                 setOnMarkerClickListener { _, _ ->
                                     if (cutMode) setCutPoint(shownKey)
-                                    true
+                                    false
                                 }
                             }
                         )
@@ -1932,7 +1940,7 @@ fun MapHistoryView_New(
 
                         Button(
                             onClick = handler@{
-                                val location = locations[selectedFirstKey]
+                                val location = locations.getOrNull(selectedFirstKey)?.location
                                 val stringLocation = location?.toString()
                                 if (stringLocation == null) {
                                     Toast.makeText(
@@ -1944,9 +1952,7 @@ fun MapHistoryView_New(
                                     return@handler
                                 }
                                 val gmmIntentUri =
-                                    Uri.parse(
-                                        "geo:$stringLocation?q=$stringLocation"
-                                    )
+                                    "geo:$stringLocation?q=$stringLocation".toUri()
                                 val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
                                 mapIntent.setPackage("com.google.android.apps.maps")
 
@@ -2031,8 +2037,8 @@ fun MapHistoryView_New(
                                 color = MaterialTheme.colorScheme.primary,
                                 fontWeight =
                                     if (maxDetail)
-                                        androidx.compose.ui.text.font.FontWeight.Bold
-                                    else androidx.compose.ui.text.font.FontWeight.Normal
+                                        FontWeight.Bold
+                                    else FontWeight.Normal
                             )
                         }
                     }
@@ -2312,15 +2318,14 @@ fun calculateAccelerationColor(acceleration: Int): Color {
     // Using quadratic easing: saturation = abs(normalized)^0.5 for smooth transition
     val saturation =
         when {
-            kotlin.math.abs(normalized) > 0.5f -> 1f // Fully saturated at extremes
+            abs(normalized) > 0.5f -> 1f // Fully saturated at extremes
             else ->
-                kotlin.math
-                    .sqrt(kotlin.math.abs(normalized) * 2f)
+                sqrt(abs(normalized) * 2f)
                     .coerceIn(0f, 1f) // Smooth transition to center
         }
 
     // Brightness curve: darker at extremes, brighter in center
-    val brightness = 1f - (kotlin.math.abs(normalized) * 0.3f) // Ranges from 1.0 to 0.7
+    val brightness = 1f - (abs(normalized) * 0.3f) // Ranges from 1.0 to 0.7
 
     return Color.hsv(hue, saturation, brightness)
 }
@@ -2350,7 +2355,7 @@ fun calculateTimeColor(
 
 @Composable
 private fun InfoChip(
-    icon: androidx.compose.ui.graphics.painter.Painter,
+    icon: Painter,
     label: String,
     color: Color = MaterialTheme.colorScheme.onSurfaceVariant
 ) {

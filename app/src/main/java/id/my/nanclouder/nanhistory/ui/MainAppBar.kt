@@ -1,6 +1,5 @@
 package id.my.nanclouder.nanhistory.ui
 
-import android.graphics.drawable.Icon
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,8 +29,8 @@ fun MainAppBar(
     navigationIcon: @Composable (() -> Unit)? = null,
     actions: @Composable (RowScope.() -> Unit)? = null,
 ) {
-    val newUI = Config.appearanceNewUI.get(LocalContext.current)
-    if (newUI) {
+    val useOldUi = Config.appearanceOldUi.get(LocalContext.current)
+    if (!useOldUi) {
         ModernTopAppBar(
             title = title,
             scrollBehavior = scrollBehavior,

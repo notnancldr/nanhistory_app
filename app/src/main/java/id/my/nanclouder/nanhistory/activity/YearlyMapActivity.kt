@@ -1,6 +1,5 @@
-package id.my.nanclouder.nanhistory
+package id.my.nanclouder.nanhistory.activity
 
-import android.content.Context
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.padding
