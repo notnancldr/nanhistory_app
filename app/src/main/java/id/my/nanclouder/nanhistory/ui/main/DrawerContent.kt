@@ -30,9 +30,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import id.my.nanclouder.nanhistory.settings.BackupActivity
-import id.my.nanclouder.nanhistory.TrashActivity
-import id.my.nanclouder.nanhistory.YearlyMapActivity
+import id.my.nanclouder.nanhistory.activity.TrashActivity
+import id.my.nanclouder.nanhistory.activity.YearlyMapActivity
 import id.my.nanclouder.nanhistory.debug.DebugActivity
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config

@@ -27,8 +27,8 @@ fun SelectionAppBar(
     onCancel: () -> Unit,
     actions: @Composable (RowScope.() -> Unit)
 ) {
-    val newUI = Config.appearanceNewUI.get(LocalContext.current)
-    if (newUI) {
+    val useOldUi = Config.appearanceOldUi.get(LocalContext.current)
+    if (!useOldUi) {
         ModernSelectionAppBar(selectedItems, onCancel, actions)
     } else {
         SelectionAppBar_Old(selectedItems, onCancel, actions = actions)

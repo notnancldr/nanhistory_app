@@ -51,7 +51,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidthIn
 import androidx.compose.foundation.layout.size
@@ -137,9 +136,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
-import id.my.nanclouder.nanhistory.EditEventActivity
-import id.my.nanclouder.nanhistory.ListFilters
-import id.my.nanclouder.nanhistory.NanHistoryPages
+import id.my.nanclouder.nanhistory.activity.EditEventActivity
+import id.my.nanclouder.nanhistory.activity.ListFilters
+import id.my.nanclouder.nanhistory.activity.NanHistoryPages
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.utils.RecordStatus
@@ -162,11 +161,11 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.ZonedDateTime
 import androidx.core.net.toUri
-import id.my.nanclouder.nanhistory.TagDetailActivity
+import id.my.nanclouder.nanhistory.activity.TagDetailActivity
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.toHistoryTag
 import id.my.nanclouder.nanhistory.db.toTagEntity
-import id.my.nanclouder.nanhistory.getActivity
+import id.my.nanclouder.nanhistory.activity.eventDetail.getActivity
 import id.my.nanclouder.nanhistory.service.RecordService.RecordState
 import id.my.nanclouder.nanhistory.utils.history.HistoryTag
 import id.my.nanclouder.nanhistory.utils.withHaptic
@@ -180,7 +179,6 @@ import id.my.nanclouder.nanhistory.ui.SelectableButton
 import id.my.nanclouder.nanhistory.ui.TagEditorDialog
 import id.my.nanclouder.nanhistory.ui.TagPickerDialog
 import id.my.nanclouder.nanhistory.utils.QuickScroll
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.stream.consumeAsFlow
 
 fun MutableList<HistoryFileData>.insertSorted(data: HistoryFileData) {
@@ -281,12 +279,12 @@ fun requestAddTile(context: Context, onResult: ((Int) -> Unit)? = null) {
 
 @Composable
 fun UISwitchButton() {
-    val newUI by Config.appearanceNewUI.getState()
+    val useOldUi by Config.appearanceOldUi.getState()
     val context = LocalContext.current
 
-    if (newUI) TextButton(
+    if (!useOldUi) TextButton(
         onClick = {
-            Config.appearanceNewUI.set(context, false)
+            Config.appearanceOldUi.set(context, true)
             context.getActivity()?.recreate()
         }
     ) {
@@ -306,7 +304,7 @@ fun UISwitchButton() {
     }
     else TextButton(
         onClick = {
-            Config.appearanceNewUI.set(context, true)
+            Config.appearanceOldUi.set(context, false)
             context.getActivity()?.recreate()
         }
     ) {
@@ -488,7 +486,7 @@ fun MainView() {
     val selectedDays by favoriteDaySelectionState.selectedItems.collectAsState(emptyList())
     val selectedTags by tagListSelectionState.selectedItems.collectAsState(emptyList())
 
-    val selectedItemsSize by when (selectedPage) {
+    val selectedItemsSizeFlow by when (selectedPage) {
         NanHistoryPages.Events -> eventsSelectionState.selectedItems
         NanHistoryPages.Favorite -> {
             if (selectedFavorite == 0) favoriteEventSelectionState.selectedItems
@@ -496,7 +494,9 @@ fun MainView() {
         }
         NanHistoryPages.Tags -> tagListSelectionState.selectedItems
         NanHistoryPages.Search -> searchSelectionState.selectedItems
-    }.map { it.size }.collectAsState(0)
+    }.collectAsState(emptyList())
+
+    val selectedItemsSize = selectedItemsSizeFlow.size
 
     val selectionMode by when (selectedPage) {
         NanHistoryPages.Events -> eventsSelectionState.isSelectionMode
@@ -541,11 +541,17 @@ fun MainView() {
 
     val topBarAnimationDuration = 300
 
-    val tryNewUI = {
-        val config = Config.appearanceNewUI
+    val backToOldUi = {
+        val config = Config.appearanceOldUi
         config.set(context, true)
 
         context.getActivity()?.recreate()
+    }
+
+    val setNewUIDialogShown = {
+        qsSharedPreferences.edit {
+            putBoolean("newDefaultUiDialogShown", true)
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -577,12 +583,9 @@ fun MainView() {
         }
 
         // Show new UI dialog on first launch
-        val newUIDialogShown = qsSharedPreferences.getBoolean("newUIDialogShown", false)
-        if (!newUIDialogShown) {
+        val newUiDialogShown = qsSharedPreferences.getBoolean("newDefaultUiDialogShown", false)
+        if (!newUiDialogShown) {
             showNewUIDialog = true
-            qsSharedPreferences.edit {
-                putBoolean("newUIDialogShown", true)
-            }
         }
     }
 
@@ -683,15 +686,15 @@ fun MainView() {
             },
             title = {
                 Text(
-                    "Try Out New UI",
+                    "New UI is Now Applied by Default",
                     style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                    fontWeight = FontWeight.Bold
                 )
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "We've refreshed the interface with a modern, sleek design for a better experience. You can still use the old UI, but some new features won't be available.",
+                        "We've refreshed the interface with a modern, sleek design for a better experience. You can still use the old UI, but some features (including the old ones) might be missing due to old UI support that has been dropped.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Surface(
@@ -715,22 +718,24 @@ fun MainView() {
             dismissButton = {
                 TextButton(
                     onClick = {
+                        backToOldUi()
+                        setNewUIDialogShown()
                         showNewUIDialog = false
                     }
                 ) {
-                    Text("Not Now")
+                    Text("Back to Old UI")
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        tryNewUI()
+                        setNewUIDialogShown()
                         showNewUIDialog = false
                     },
                     modifier = Modifier.height(40.dp),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Try It Out", style = MaterialTheme.typography.labelLarge)
+                    Text("Continue", style = MaterialTheme.typography.labelLarge)
                 }
             }
         )
@@ -1241,8 +1246,8 @@ fun MainView() {
                             }
 
                             val selector = @Composable {
-                                val newUI = Config.appearanceNewUI.get(context)
-                                if (newUI) selector_new()
+                                val useOldUi = Config.appearanceOldUi.get(context)
+                                if (!useOldUi) selector_new()
                                 else selector_old()
                             }
 
@@ -1466,8 +1471,8 @@ private fun TagList(
     lazyListState: LazyListState = rememberLazyListState(),
     selectionState: SelectionState<HistoryTag>
 ) {
-    val newUI = Config.appearanceNewUI.get(LocalContext.current)
-    if (newUI) {
+    val useOldUi = Config.appearanceOldUi.get(LocalContext.current)
+    if (!useOldUi) {
         ModernTagList(
             lazyListState = lazyListState,
             selectionState = selectionState
@@ -1498,9 +1503,8 @@ private fun ModernTagList(
     val selectionMode by selectionState.isSelectionMode.collectAsState(false)
     val selectedItems by selectionState.selectedItems.collectAsState(emptyList())
 
-    val tags by dao.getAllTags().map {
-        it.map { tag -> tag.toHistoryTag() }
-    }.collectAsState(emptyList())
+    val tagsFlow by dao.getAllTags().collectAsState(emptyList())
+    val tags = tagsFlow.map { it.toHistoryTag() }
 
     if (tags.isNotEmpty()) Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -1723,9 +1727,8 @@ private fun TagList_Old(
     val selectionMode by selectionState.isSelectionMode.collectAsState(false)
     val selectedItems by selectionState.selectedItems.collectAsState(emptyList())
 
-    val tags by dao.getAllTags().map {
-        it.map { tag -> tag.toHistoryTag() }
-    }.collectAsState(emptyList())
+    val tagsFlow by dao.getAllTags().collectAsState(emptyList())
+    val tags = tagsFlow.map { it.toHistoryTag() }
 
     if (tags.isNotEmpty()) Box(Modifier.fillMaxSize()) {
         LazyColumn(

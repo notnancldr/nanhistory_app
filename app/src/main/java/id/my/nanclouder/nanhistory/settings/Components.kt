@@ -12,9 +12,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowDropDown
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -30,7 +27,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -75,8 +71,8 @@ fun SettingsSlider(
     steps: Int = 1,
     icon: Painter? = null,
 ) {
-    val newUI by Config.appearanceNewUI.getState()
-    if (newUI) SettingsSlider_New(
+    val useOldUi by Config.appearanceOldUi.getState()
+    if (!useOldUi) SettingsSlider_New(
         modifier = modifier,
         configValue = configValue,
         title = title,
@@ -249,8 +245,8 @@ fun SettingsNumInput(
     valueRange: IntRange = 0..1,
     icon: Painter? = null,
 ) {
-    val newUI by Config.appearanceNewUI.getState()
-    if (newUI) SettingsNumInput_New(
+    val useOldUi by Config.appearanceOldUi.getState()
+    if (!useOldUi) SettingsNumInput_New(
         modifier = modifier,
         configValue = configValue,
         title = title,
@@ -440,8 +436,8 @@ fun SettingsSwitch(
     icon: Painter? = null,
     onUpdated: ((Boolean) -> Unit)? = null
 ) {
-    val newUI by Config.appearanceNewUI.getState()
-    if (newUI) SettingsSwitch_New(
+    val useOldUi by Config.appearanceOldUi.getState()
+    if (!useOldUi) SettingsSwitch_New(
         modifier = modifier,
         configValue = configValue,
         title = title,
@@ -680,8 +676,8 @@ fun <E : Enum<E>> SettingsDropdown(
 
 @Composable
 fun CategoryHeader(icon: Painter, iconDescription: String, title: String) {
-    val newUI by Config.appearanceNewUI.getState()
-    if (newUI) CategoryHeader_New(icon = icon, iconDescription = iconDescription, title = title)
+    val useOldUi by Config.appearanceOldUi.getState()
+    if (!useOldUi) CategoryHeader_New(icon = icon, iconDescription = iconDescription, title = title)
     else CategoryHeader_Old(icon = icon, iconDescription = iconDescription, title = title)
 }
 
@@ -728,8 +724,8 @@ fun CategoryHeader_New(icon: Painter, iconDescription: String, title: String) {
 
 @Composable
 fun BarChart(segments: List<Pair<Float, Color>>, modifier: Modifier = Modifier, threshold: Float = 5f) {
-    val newUI by Config.appearanceNewUI.getState()
-    if (newUI) BarChart_New(segments = segments, modifier = modifier, threshold = threshold)
+    val useOldUi by Config.appearanceOldUi.getState()
+    if (!useOldUi) BarChart_New(segments = segments, modifier = modifier, threshold = threshold)
     else BarChart_Old(segments = segments, modifier = modifier, threshold = threshold)
 }
 

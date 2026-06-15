@@ -8,11 +8,11 @@ open class NewUIComponentActivity : ComponentActivity() {
     private var lastKnownNewUI = false
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        lastKnownNewUI = Config.appearanceNewUI.get(this)
+        lastKnownNewUI = Config.appearanceOldUi.get(this)
     }
     override fun onResume() {
         super.onResume()
-        if (lastKnownNewUI != Config.appearanceNewUI.get(this)) {
+        if (lastKnownNewUI != Config.appearanceOldUi.get(this)) {
             recreate()
         }
     }

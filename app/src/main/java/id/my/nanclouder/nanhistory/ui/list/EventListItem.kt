@@ -399,22 +399,28 @@ fun TimelineEventItem(
                         //     )
                         // }
                          else if (eventData is EventRange) {
-                             Icon(
-                                 painter = painterResource(
-                                     transportationType?.iconId ?: R.drawable.ic_arrow_range
-                                 ),
-                                 contentDescription = "Range Event",
-                                 modifier = Modifier
-                                     .size(
-                                         if (transportationType == TransportationType.Unspecified) 16.dp
-                                         else 18.dp
-                                     )
-                                     .rotate(
-                                         if (transportationType == TransportationType.Unspecified) 90f
-                                         else 0f
+                             val currentTransportationType = transportationType
+                             if (currentTransportationType != null && currentTransportationType != TransportationType.Unspecified) {
+                                 Icon(
+                                     painter = painterResource(
+                                         currentTransportationType.iconId!!
                                      ),
-                                 tint = timelineActiveDotColor
-                             )
+                                     contentDescription = "Range Event",
+                                     modifier = Modifier
+                                         .size(18.dp),
+                                     tint = timelineActiveDotColor
+                                 )
+                             }
+                             else {
+                                 Icon(
+                                     painter = painterResource(R.drawable.ic_arrow_range),
+                                     contentDescription = "Range Event",
+                                     modifier = Modifier
+                                         .size(16.dp)
+                                         .rotate(90f),
+                                     tint = timelineActiveDotColor
+                                 )
+                             }
                          }
                     }
                 }
@@ -590,14 +596,8 @@ fun TimelineEventItem(
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween,
-                                    modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    val question =
-                                        when ((eventData as? EventRange)?.transportationType) {
-                                            TransportationType.Walk -> "Is this correct?\nYou were walking"
-                                            else -> "Is this correct?\nYou were using ${(eventData as? EventRange)?.transportationType?.name?.lowercase()}"
-                                        }
-
+                                    val question = "Is this transportation mode correct?"
                                     Text(
                                         text = question,
                                         style = MaterialTheme.typography.bodySmall,

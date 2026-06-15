@@ -2,7 +2,6 @@ package id.my.nanclouder.nanhistory.settings
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.clickable
@@ -39,7 +38,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
@@ -48,7 +46,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
-import id.my.nanclouder.nanhistory.getActivity
+import id.my.nanclouder.nanhistory.activity.eventDetail.getActivity
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import id.my.nanclouder.nanhistory.utils.NewUIComponentActivity
 
@@ -68,8 +66,8 @@ class SettingsActivity : NewUIComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun View() {
-        val newUI = Config.appearanceNewUI.getCache()
-        if (newUI) View_New()
+        val useOldUi = Config.appearanceOldUi.getCache()
+        if (!useOldUi) View_New()
         else View_Old()
     }
 

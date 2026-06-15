@@ -81,8 +81,8 @@ fun EventListHeader(
     onExpandButtonClicked: (() -> Unit)? = null,
     onFavoriteChanged: (Boolean) -> Unit,
 ) {
-    val newUI = Config.appearanceNewUI.getCache()
-    if (newUI) EventListHeader_New(
+    val useOldUi = Config.appearanceOldUi.getCache()
+    if (!useOldUi) EventListHeader_New(
         historyDay = historyDay,
         eventCount = eventCount,
         modifier = modifier,

@@ -1,4 +1,4 @@
-package id.my.nanclouder.nanhistory
+package id.my.nanclouder.nanhistory.activity
 
 import android.os.Bundle
 import android.util.Log
@@ -67,8 +67,12 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import id.my.nanclouder.nanhistory.R
+import id.my.nanclouder.nanhistory.activity.eventDetail.getActivity
 import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.toEventEntity
@@ -110,8 +114,8 @@ class EditEventActivity : ComponentActivity() {
 
 @Composable
 fun EditEventView(eventId: String?) {
-    val newUI = Config.appearanceNewUI.getCache()
-    if (newUI) EditEventView_New(eventId)
+    val useOldUi = Config.appearanceOldUi.getCache()
+    if (!useOldUi) EditEventView_New(eventId)
     else EditEventView_Old(eventId)
 }
 
@@ -862,7 +866,7 @@ fun EditEventView_New(eventId: String?) {
                                     Text(
                                         "Text Formatting Guide",
                                         style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                                        fontWeight = FontWeight.SemiBold
                                     )
                                     Text(
                                         "Applies to Title and Description only",
@@ -925,7 +929,7 @@ fun EditEventView_New(eventId: String?) {
                                     Text(
                                         "Range Event",
                                         style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                                        fontWeight = FontWeight.SemiBold
                                     )
                                     Text(
                                         if (rangeEvent) "Time range" else "Single point in time",
@@ -970,7 +974,7 @@ fun EditEventView_New(eventId: String?) {
                                 Text(
                                     if (rangeEvent) "Start Time" else "Time",
                                     style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                                    fontWeight = FontWeight.SemiBold
                                 )
                             }
 
@@ -1050,7 +1054,7 @@ fun EditEventView_New(eventId: String?) {
                                     Text(
                                         "End Time",
                                         style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                                        fontWeight = FontWeight.SemiBold
                                     )
                                 }
 
@@ -1253,7 +1257,7 @@ private fun FormattingGuideItem(syntax: String, description: String) {
             Text(
                 syntax,
                 style = MaterialTheme.typography.labelSmall,
-                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                fontFamily = FontFamily.Monospace,
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                 color = MaterialTheme.colorScheme.primary
             )
