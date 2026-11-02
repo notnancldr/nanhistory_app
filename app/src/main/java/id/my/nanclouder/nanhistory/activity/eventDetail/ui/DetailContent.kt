@@ -192,9 +192,11 @@ fun DetailContent(eventId: String, path: String) {
 
     val favorite = eventData?.favorite ?: false
 
-    val eventLocationsEntity by dao.getLocationsByEventId(eventId).collectAsState(null)
+    val eventLocationsEntity by dao.getLocationsByEventIdCapped(eventId).collectAsState(null)
     val eventLocations =
         remember(eventLocationsEntity) { eventLocationsEntity?.map { it.toLocationData() } }
+
+    val locationCount by dao.getLocationCount(eventId).collectAsState(0)
 
     val locationData = remember { mutableStateListOf<HistoryLocationData>() }
 
@@ -293,16 +295,14 @@ fun DetailContent(eventId: String, path: String) {
                                     )
                                 }
                             }
+
+
+
                             DropdownMenu(
-                                shape = RoundedCornerShape(16.dp),
-                                modifier = Modifier.padding(4.dp),
                                 expanded = menuExpanded,
                                 onDismissRequest = { menuExpanded = false }
                             ) {
-                                val itemModifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
                                 DropdownMenuItem(
-                                    modifier = itemModifier,
                                     leadingIcon = {
                                         Icon(
                                             Icons.Outlined.Info,
@@ -314,7 +314,6 @@ fun DetailContent(eventId: String, path: String) {
                                     onClick = { showInfo = true; menuExpanded = false }
                                 )
                                 if (eventData.audio != null) DropdownMenuItem(
-                                    modifier = itemModifier,
                                     leadingIcon = {
                                         Icon(
                                             Icons.Outlined.Share,
@@ -332,7 +331,6 @@ fun DetailContent(eventId: String, path: String) {
                                     }
                                 )
                                 if (eventData is EventRange) DropdownMenuItem(
-                                    modifier = itemModifier,
                                     leadingIcon = {
                                         Icon(
                                             painterResource(R.drawable.ic_content_cut),
@@ -354,7 +352,6 @@ fun DetailContent(eventId: String, path: String) {
                                     enabled = !isRecording
                                 )
                                 if (isBroken) DropdownMenuItem(
-                                    modifier = itemModifier,
                                     leadingIcon = {
                                         BadgedBox(
                                             badge = {
@@ -374,7 +371,6 @@ fun DetailContent(eventId: String, path: String) {
                                     enabled = !isRecording
                                 )
                                 DropdownMenuItem(
-                                    modifier = itemModifier,
                                     leadingIcon = {
                                         Icon(
                                             painterResource(R.drawable.ic_delete), "Delete",
@@ -1047,8 +1043,8 @@ fun DetailContent(eventId: String, path: String) {
                 @Suppress("Deprecation")
                 InfoCard("Location Data", eventData.locationPath ?: "—")
 
-                if (eventData is EventRange && locationAvailable == true) {
-                    InfoCard("Location Points", eventLocations.size.toString())
+                if (eventData is EventRange && locationCount > 0) {
+                    InfoCard("Location Points", "$locationCount")
                 }
                 InfoCard("Event Version", eventData.versionNumber.toString())
 

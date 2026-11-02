@@ -1,6 +1,8 @@
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import com.android.build.api.dsl.ApplicationExtension
 
 val dotenv = Properties().apply {
     val envFile = rootProject.file(".env")
@@ -14,12 +16,11 @@ fun env(key: String, defaultValue: String = ""): String =
 
 plugins {
     alias(libs.plugins.androidApplication)
-    alias(libs.plugins.jetbrainsKotlinAndroid)
     alias(libs.plugins.compose.compiler)
     id("com.google.devtools.ksp")
 }
 
-android {
+configure<ApplicationExtension> {
     val versionCodeFile = File("versionCode.txt")
     val incrementFile = File("increment.txt")
     val increment = !(if (incrementFile.exists()) incrementFile.readText().isBlank() else true)
@@ -32,7 +33,7 @@ android {
     versionCodeFile.writeText(fileVersionCode.toString())
     incrementFile.writeText("")
     namespace = "id.my.nanclouder.nanhistory"
-    compileSdk = 35
+    compileSdk = 37
 
     flavorDimensions += "version"
 
@@ -109,9 +110,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    kotlinOptions {
-        jvmTarget = "11"
-    }
     buildFeatures {
         compose = true
         buildConfig = true
@@ -126,6 +124,12 @@ android {
     }
     lint {
         baseline = file("lint-baseline.xml")
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.fromTarget("11")
     }
 }
 
@@ -146,6 +150,7 @@ dependencies {
     // implementation(libs.ffmpeg.kit.full.v602)
     implementation(libs.compose.colorpicker)
     implementation(libs.android.sdk.v1151)
+    implementation(libs.androidx.compose.animation)
     implementation(libs.google.accompanist.permissions)
     implementation(libs.androidx.activity)
     implementation(libs.osmdroid.android)

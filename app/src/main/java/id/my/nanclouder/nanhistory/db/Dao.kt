@@ -227,6 +227,25 @@ interface AppDao {
     @Query("SELECT * FROM locations WHERE eventId = :id ORDER BY timestamp")
     fun getLocationsByEventId(id: String): Flow<List<LocationEntity>>
 
+    @Query(
+        "WITH filtered AS ( " +
+                "  SELECT *, " +
+                "         ROW_NUMBER() OVER (ORDER BY timestamp) AS rn, " +
+                "         COUNT(*) OVER () AS total_count " +
+                "  FROM locations " +
+                "  WHERE eventId = :id " +
+                ") " +
+                "SELECT * FROM filtered " +
+                "WHERE (rn % MAX(ROUND(CAST(total_count AS REAL) / :cap), 1) = 0) " +
+                "   OR rn = 1 " +
+                "   OR rn = total_count " +
+                "ORDER BY timestamp"
+    )
+    fun getLocationsByEventIdCapped(id: String, cap: Int = 200): Flow<List<LocationEntity>>
+
+    @Query("SELECT COUNT(*) FROM locations WHERE eventId = :id")
+    fun getLocationCount(id: String): Flow<Int>
+
     @Transaction
     @Query("SELECT * FROM events WHERE deletePermanently IS NULL ORDER BY timestamp")
     fun getAllEventsWithLocations(): Flow<List<EventWithTagsWithLocations>>

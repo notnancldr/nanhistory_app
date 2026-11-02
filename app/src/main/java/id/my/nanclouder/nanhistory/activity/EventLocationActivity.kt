@@ -72,6 +72,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.toEventEntity
@@ -579,8 +580,9 @@ fun MapHistoryView_Old(
                 }
             val markerStart =
                 Marker(mapViewObj).apply {
+                    val drawable = ContextCompat.getDrawable(context, R.drawable.ic_location_start)
                     position = geoPoints.first()
-                    icon = context.getDrawable(R.drawable.ic_location_start)
+                    icon = drawable
                     setOnMarkerClickListener { _, _ ->
                         setCutPoint(locations.keys.first())
                         false
@@ -588,8 +590,9 @@ fun MapHistoryView_Old(
                 }
             val markerEnd =
                 Marker(mapViewObj).apply {
+                    val drawable = ContextCompat.getDrawable(context, R.drawable.ic_location_end)
                     position = geoPoints.last()
-                    icon = context.getDrawable(R.drawable.ic_location_end)
+                    icon = drawable
                     setOnMarkerClickListener { _, _ ->
                         setCutPoint(locations.keys.last())
                         false
@@ -696,12 +699,10 @@ fun MapHistoryView_Old(
                     }) {
                         mapViewObj?.overlays?.add(
                             Marker(mapViewObj).apply {
+                                val drawable = ContextCompat.getDrawable(context, R.drawable.ic_map_touch_point)
                                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                                 position = shownCoordinate
-                                icon =
-                                    context.getDrawable(
-                                        R.drawable.ic_map_touch_point
-                                    )
+                                icon = drawable
 
                                 setOnMarkerClickListener { _, _ ->
                                     setCutPoint(shownKey)
@@ -713,17 +714,19 @@ fun MapHistoryView_Old(
                 if (cutTime1 != null)
                     mapViewObj?.overlays?.add(
                         Marker(mapViewObj).apply {
+                            val drawable = ContextCompat.getDrawable(context, R.drawable.ic_map_stop_point)
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                             position = locations[cutTime1]!!.toGeoPoint()
-                            icon = context.getDrawable(R.drawable.ic_map_stop_point)
+                            icon = drawable
                         }
                     )
                 if (cutTime2 != null)
                     mapViewObj?.overlays?.add(
                         Marker(mapViewObj).apply {
+                            val drawable = ContextCompat.getDrawable(context, R.drawable.ic_map_stop_point)
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                             position = locations[cutTime2]!!.toGeoPoint()
-                            icon = context.getDrawable(R.drawable.ic_map_stop_point)
+                            icon = drawable
                         }
                     )
             }
@@ -1405,8 +1408,9 @@ fun MapHistoryView_New(
                 }
             val markerStart =
                 Marker(mapViewObj).apply {
+                    val drawable = ContextCompat.getDrawable(context, R.drawable.ic_location_start)
                     position = geoPoints.first()
-                    icon = context.getDrawable(R.drawable.ic_location_start)
+                    icon = drawable
                     setOnMarkerClickListener { _, _ ->
                         if (cutMode) setCutPoint(0)
                         false
@@ -1414,8 +1418,9 @@ fun MapHistoryView_New(
                 }
             val markerEnd =
                 Marker(mapViewObj).apply {
+                    val drawable = ContextCompat.getDrawable(context, R.drawable.ic_location_end)
                     position = geoPoints.last()
-                    icon = context.getDrawable(R.drawable.ic_location_end)
+                    icon = drawable
                     setOnMarkerClickListener { _, _ ->
                         setCutPoint(locations.size - 1)
                         false
@@ -1669,12 +1674,10 @@ fun MapHistoryView_New(
                     for ((shownKey, shownCoordinate) in shownLocations) {
                         mapViewObj?.overlays?.add(
                             Marker(mapViewObj).apply {
+                                val drawable = ContextCompat.getDrawable(context, R.drawable.ic_map_touch_point)
                                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                                 position = shownCoordinate.location.toGeoPoint()
-                                icon =
-                                    context.getDrawable(
-                                        R.drawable.ic_map_touch_point
-                                    )
+                                icon = drawable
 
                                 setOnMarkerClickListener { _, _ ->
                                     if (cutMode) setCutPoint(shownKey)
@@ -1731,17 +1734,19 @@ fun MapHistoryView_New(
                 if (cutIndex1 != null)
                     mapViewObj?.overlays?.add(
                         Marker(mapViewObj).apply {
+                            val drawable = ContextCompat.getDrawable(context, R.drawable.ic_map_stop_point)
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                             position = locations[cutIndex1!!].location.toGeoPoint()
-                            icon = context.getDrawable(R.drawable.ic_map_stop_point)
+                            icon = drawable
                         }
                     )
                 if (cutIndex2 != null)
                     mapViewObj?.overlays?.add(
                         Marker(mapViewObj).apply {
+                            val drawable = ContextCompat.getDrawable(context, R.drawable.ic_map_stop_point)
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                             position = locations[cutIndex2!!].location.toGeoPoint()
-                            icon = context.getDrawable(R.drawable.ic_map_stop_point)
+                            icon = drawable
                         }
                     )
             }
