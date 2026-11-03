@@ -48,6 +48,9 @@ sequenceDiagram
    - `RecordService` MUST declare and pass `ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION | ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE`.
    - `DataProcessService` MUST declare and pass `ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC`.
 3. **Android 12+ / 14 Restrictions**: Foreground services cannot be started while the app is in the background without an approved exemption.
+4. **Power & Wake Lock Scoping**: `RecordService` partial wake lock is strictly bounded to active recording (`startEventRecording()` with a 4-hour timeout) and released when recording stops or transitions to idle.
+5. **Two-Stage Shake Detection**: In idle or shake-enabled mode, only the wake-up accelerometer is registered with hardware FIFO batching (~20 Hz, 3s latency). The gyroscope is dynamically registered only for a 1.5-second confirmation window when acceleration exceeds the threshold.
+6. **Notification Optimization & Chronometer**: `RecordService` uses `RemoteViews.setChronometer()` for elapsed duration rendering directly in SystemUI, eliminating CPU wake-ups from app-side timers. Notification channels use `IMPORTANCE_LOW` with `setOnlyAlertOnce(true)`. Notification redraws are suppressed when the device screen is off.
 
 ---
 

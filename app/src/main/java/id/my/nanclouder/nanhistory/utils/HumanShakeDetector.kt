@@ -21,6 +21,14 @@ class HumanShakeDetector {
     }
 
     /**
+     * Checks if current acceleration is high enough to warrant spinning up gyro confirmation.
+     */
+    fun isPotentialShake(ax: Float, ay: Float, az: Float): Boolean {
+        val magnitude = sqrt(ax * ax + ay * ay + az * az)
+        return magnitude >= accelThreshold
+    }
+
+    /**
      * Returns true if a human shake is detected.
      * Tuned for less sensitivity to avoid false positives.
      */

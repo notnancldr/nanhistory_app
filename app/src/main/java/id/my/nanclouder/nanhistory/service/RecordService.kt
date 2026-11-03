@@ -7,18 +7,20 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.BitmapFactory
 import android.location.Location
 import android.media.MediaRecorder
-import android.os.Handler
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.SystemClock
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.os.VibrationEffect
@@ -170,8 +172,16 @@ class RecordService : Service() {
     private lateinit var actionPendingIntent: PendingIntent
     private lateinit var notificationPendingIntent: PendingIntent
 
-    private lateinit var handler: Handler
-    private var runnable: Runnable? = null
+    private var isScreenOn = true
+    private val screenStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_ON -> isScreenOn = true
+                Intent.ACTION_SCREEN_OFF -> isScreenOn = false
+            }
+        }
+    }
+
     private var vibrationJob: Job? = null
     private var signatureJob: Job? = null
 
@@ -196,6 +206,8 @@ class RecordService : Service() {
     // Track if we've received both sensor types at least once
     private var hasAccelData = false
     private var hasGyroData = false
+    private var isGyroscopeRegistered = false
+    private var gyroConfirmationJob: Job? = null
 
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.Default + serviceJob)
@@ -288,10 +300,25 @@ class RecordService : Service() {
                 }
             }
 
+            val eventTimestampMs = event.timestamp / 1_000_000L
+
             when (event.sensor.type) {
                 Sensor.TYPE_ACCELEROMETER -> {
                     lastAccelValues = event.values.copyOf()
                     hasAccelData = true
+
+                    // If gyro is not registered, check if acceleration candidate warrants spinning up gyro confirmation
+                    if (shakeDetectionEnabled && !isGyroscopeRegistered) {
+                        if (
+                            shakeDetector.isPotentialShake(
+                                lastAccelValues[0],
+                                lastAccelValues[1],
+                                lastAccelValues[2]
+                            )
+                        ) {
+                            startGyroConfirmation()
+                        }
+                    }
                 }
                 Sensor.TYPE_GYROSCOPE -> {
                     lastGyroValues = event.values.copyOf()
@@ -299,8 +326,8 @@ class RecordService : Service() {
                 }
             }
 
-            // Only check for shake when we have received both sensor types
-            if (shakeDetectionEnabled && hasAccelData && hasGyroData) {
+            // Only check for shake when gyro confirmation is active and we have data from both sensors
+            if (shakeDetectionEnabled && isGyroscopeRegistered && hasAccelData && hasGyroData) {
                 val isShakeDetected = shakeDetector.update(
                     ax = lastAccelValues[0],
                     ay = lastAccelValues[1],
@@ -308,13 +335,15 @@ class RecordService : Service() {
                     gx = lastGyroValues[0],
                     gy = lastGyroValues[1],
                     gz = lastGyroValues[2],
-                    timestampMs = System.currentTimeMillis()
+                    timestampMs = eventTimestampMs
                 )
 
                 val intervalFromPrevious = Instant.now().toEpochMilli() - lastShakeDetected.toEpochMilli()
 
                 // When shake detected and no ongoing cooldown
                 if (isShakeDetected && intervalFromPrevious > currentShakeCooldown && RecordState.status.value != RecordStatus.BUSY) {
+                    stopGyroConfirmation()
+
                     // Update cooldown
                     lastShakeDetected = Instant.now()
 
@@ -329,27 +358,8 @@ class RecordService : Service() {
                         // Use default cooldown
 
                         // Perform confirmation vibration
-                        val timings = longArrayOf(
-                            0L, 500L,
-                            500L, 500L,
-                            500L, 500L,
-                            500L, 500L,
-                            500L, 500L,
-                            500L, 500L,
-                            500L, 500L,
-                            500L, 500L,
-                            500L, 500L,
-                            500L, 500L,
-                        )
+                        val timings = longArrayOf(0L, 100L, 80L, 100L)
                         val amplitudes = intArrayOf(
-                            0, VibrationEffect.DEFAULT_AMPLITUDE,
-                            0, VibrationEffect.DEFAULT_AMPLITUDE,
-                            0, VibrationEffect.DEFAULT_AMPLITUDE,
-                            0, VibrationEffect.DEFAULT_AMPLITUDE,
-                            0, VibrationEffect.DEFAULT_AMPLITUDE,
-                            0, VibrationEffect.DEFAULT_AMPLITUDE,
-                            0, VibrationEffect.DEFAULT_AMPLITUDE,
-                            0, VibrationEffect.DEFAULT_AMPLITUDE,
                             0, VibrationEffect.DEFAULT_AMPLITUDE,
                             0, VibrationEffect.DEFAULT_AMPLITUDE,
                         )
@@ -376,30 +386,10 @@ class RecordService : Service() {
                         // Cooldown after stopping recording (override default)
                         currentShakeCooldown = 10_000L
 
-                        val timings = longArrayOf(
-                            0L,    // no delay before start
-                            200L,  // vibrate #1
-                            100L,  // gap #1
-                            200L,  // vibrate #2
-                            100L,  // gap #2
-                            200L,  // vibrate #3
-                            100L,  // gap #3
-                            200L,  // vibrate #4
-                            100L,  // gap #4
-                            200L,  // vibrate #5
-                        )
-
+                        val timings = longArrayOf(0L, 100L, 80L, 100L)
                         val amplitudes = intArrayOf(
-                            0,
-                            VibrationEffect.DEFAULT_AMPLITUDE,
-                            0,
-                            VibrationEffect.DEFAULT_AMPLITUDE,
-                            0,
-                            VibrationEffect.DEFAULT_AMPLITUDE,
-                            0,
-                            VibrationEffect.DEFAULT_AMPLITUDE,
-                            0,
-                            VibrationEffect.DEFAULT_AMPLITUDE,
+                            0, VibrationEffect.DEFAULT_AMPLITUDE,
+                            0, VibrationEffect.DEFAULT_AMPLITUDE,
                         )
 
                         val effect = VibrationEffect.createWaveform(timings, amplitudes, -1)
@@ -435,7 +425,8 @@ class RecordService : Service() {
 
     private fun initSensors() {
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        accelerometerSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        accelerometerSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER, true)
+            ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         gyroscopeSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
 
         when {
@@ -448,6 +439,36 @@ class RecordService : Service() {
             else -> {
                 Log.d("RecordService", "Sensors initialized successfully")
             }
+        }
+    }
+
+    private fun startGyroConfirmation() {
+        if (isGyroscopeRegistered || gyroscopeSensor == null) return
+        isGyroscopeRegistered = true
+        hasGyroData = false
+        sensorManager.registerListener(
+            sensorEventListener,
+            gyroscopeSensor,
+            SensorManager.SENSOR_DELAY_GAME
+        )
+        gyroConfirmationJob?.cancel()
+        gyroConfirmationJob = serviceScope.launch {
+            delay(1500L)
+            stopGyroConfirmation()
+        }
+    }
+
+    private fun stopGyroConfirmation() {
+        gyroConfirmationJob?.cancel()
+        gyroConfirmationJob = null
+        if (isGyroscopeRegistered) {
+            try {
+                sensorManager.unregisterListener(sensorEventListener, gyroscopeSensor)
+            } catch (e: Exception) {
+                Log.w("RecordService", "Error unregistering gyro: ${e.message}")
+            }
+            isGyroscopeRegistered = false
+            hasGyroData = false
         }
     }
 
@@ -475,19 +496,10 @@ class RecordService : Service() {
         // Higher sensitivity value = higher accel threshold = less sensitive
         val sensitivity = Config.recordShakeSensitivity.get(applicationContext)
 
-        // Map config sensitivity (1-5) to thresholds
-        // Sensitivity 1: very sensitive (15m/s²)
-        // Sensitivity 2: sensitive (18m/s²)
-        // Sensitivity 3: medium (22m/s²)
-        // Sensitivity 4: less sensitive (28m/s²)
-        // Sensitivity 5: very insensitive (35m/s²)
-        shakeDetector.accelThreshold = (10f - sensitivity * 4.5f).coerceIn(12f, 40f)
-
-        // Gyro threshold scales with sensitivity too
-        shakeDetector.gyroThreshold = (10f - sensitivity * 0.5f).coerceIn(2.5f, 5.0f)
-
-        // Duration and direction changes also scale
-        shakeDetector.minDurationMs = (400L - sensitivity * 5).coerceAtLeast(150L)
+        // Fixed sensitivity mapping (Sensitivity 1 = hardest/40f, 5 = easiest/12f)
+        shakeDetector.accelThreshold = (12f + (5 - sensitivity) * 7f).coerceIn(12f, 40f)
+        shakeDetector.gyroThreshold = (2.0f + (5 - sensitivity) * 1.25f).coerceIn(2.0f, 7.0f)
+        shakeDetector.minDurationMs = (400L - sensitivity * 50L).coerceAtLeast(150L)
         shakeDetector.minDirectionChanges = (4 - (sensitivity - 1) / 2).coerceAtLeast(2)
 
         Log.d(
@@ -499,23 +511,21 @@ class RecordService : Service() {
                     "minDirectionChanges=${shakeDetector.minDirectionChanges}"
         )
 
+        // Register wake-up accelerometer with hardware batching (3s FIFO latency)
         sensorManager.registerListener(
             sensorEventListener,
             accelerometerSensor,
-            SensorManager.SENSOR_DELAY_GAME
-        )
-        sensorManager.registerListener(
-            sensorEventListener,
-            gyroscopeSensor,
-            SensorManager.SENSOR_DELAY_GAME
+            SensorManager.SENSOR_DELAY_UI,
+            3_000_000
         )
 
-        Log.d("RecordService", "Shake detection started successfully")
+        Log.d("RecordService", "Shake detection started successfully (Stage 1)")
         shakeDetectionRegistered = true
     }
 
     private fun stopShakeDetection() {
         try {
+            stopGyroConfirmation()
             sensorManager.unregisterListener(sensorEventListener)
             shakeDetector.reset()
             hasAccelData = false
@@ -576,6 +586,12 @@ class RecordService : Service() {
     override fun onCreate() {
         super.onCreate()
 
+        val screenFilter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+        }
+        registerReceiver(screenStateReceiver, screenFilter)
+
         initNotification()
         initSensors() // Add this line
 
@@ -590,8 +606,7 @@ class RecordService : Service() {
         val now = ZonedDateTime.now()
 
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyApp::WakeLock")
-        wakeLock.acquire()
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "NanHistory::RecordWakeLock")
 
         // Initialize vibrator
         vibrator = let {
@@ -696,48 +711,7 @@ class RecordService : Service() {
         initializeRecording()
         event.metadata["shake_to_start"] = shakeToStart
 
-        // Only assign runnable when it isn't initialized
-        runnable = runnable ?: object : Runnable {
-            private var lastBoundary = -1L
-            override fun run() {
-                if (!RecordState.isRecording.value) {
-                    Log.d("Looper", "Service no is longer running, runnable returned")
-                    return
-                }
-
-                val instantNow = Instant.now()
-                val currentBoundary = instantNow.toEpochMilli() / 500
-                Log.d("Looper", "Time counter loop")
-
-                // Only update every 500ms, and align precisely to 500ms boundary
-                if (currentBoundary == lastBoundary) {
-                    val nextBoundaryMs = (currentBoundary + 1) * 500
-                    val delayToNextBoundary = nextBoundaryMs - instantNow.toEpochMilli()
-
-                    handler.postDelayed(
-                        this,
-                        if (delayToNextBoundary > 100) 100L else delayToNextBoundary
-                    )
-                    return
-                }
-
-                val timeElapsed = Duration.between(event.time.toInstant(), instantNow)
-                val currentNotificationTitle = readableTimeHours(timeElapsed)
-                val currentNotificationText =
-                    if (RecordState.status.value == RecordStatus.IDLE) "Waiting for Trigger"
-                    else "Recording Event"
-
-
-                Log.d("Looper", "Updating notification...")
-                updateNotification(currentNotificationTitle, currentNotificationText)
-                lastBoundary = currentBoundary
-
-                handler.postDelayed(this, 100)
-            }
-        }
-
-        // Runnable should've been initialized at this point
-        handler.post(runnable!!)
+        updateNotification(text = "Recording Event")
 
         val now = ZonedDateTime.now()
 
@@ -755,6 +729,10 @@ class RecordService : Service() {
         }
 
         recordingStarted = true
+
+        if (::wakeLock.isInitialized && !wakeLock.isHeld) {
+            wakeLock.acquire(4 * 60 * 60 * 1000L)
+        }
 
         serviceScope.launch {
             this@RecordService.eventPoint = eventPoint
@@ -848,9 +826,6 @@ class RecordService : Service() {
     }
 
     private suspend fun stopEventRecording() {
-        runnable?.let {
-            handler.removeCallbacks(it)
-        }
         stopIntervalVibration()
 
         if (!continueService) {
@@ -969,6 +944,10 @@ class RecordService : Service() {
         }
 
         RecordState.isSaving.value = false
+
+        if (::wakeLock.isInitialized && wakeLock.isHeld) {
+            wakeLock.release()
+        }
 
         delay(2000L)
 
@@ -1090,10 +1069,6 @@ class RecordService : Service() {
 
         if (::wakeLock.isInitialized && wakeLock.isHeld) {
             wakeLock.release()
-        }
-
-        runnable?.let {
-            handler.removeCallbacks(it)
         }
 
         // Stop shake detection only when the service is stopped
@@ -1497,11 +1472,6 @@ class RecordService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Make sure the handler doesn't get initialized more than once
-        if (!::handler.isInitialized) {
-            handler = Handler(mainLooper)
-        }
-
         maxDuration = Config.serviceMaxDuration.get(applicationContext)
 
         if (intent == null) Log.d("RecordService", "Received null intent")
@@ -1518,16 +1488,16 @@ class RecordService : Service() {
     private fun initNotification() {
         val channelId = "nanhistory_record"
         val channelName = "Record Event"
-        val importance = NotificationManager.IMPORTANCE_HIGH
+        val importance = NotificationManager.IMPORTANCE_LOW
 
         val debugChannelId = "nanhistory_record_debug"
         val debugChannelName = "Service Debug"
-        val debugImportance = NotificationManager.IMPORTANCE_HIGH
+        val debugImportance = NotificationManager.IMPORTANCE_LOW
 
         val channel = NotificationChannel(channelId, channelName, importance).apply {
             description = "Record service notifications"
-            enableLights(true)
-            enableVibration(true)
+            enableLights(false)
+            enableVibration(false)
         }
         val debugChannel = NotificationChannel(debugChannelId, debugChannelName, debugImportance)
 
@@ -1795,6 +1765,7 @@ class RecordService : Service() {
 
             // Clear iterated location buffer
             iteratedLocationBuffer.clear()
+            updateNotification()
         }
     }
 
@@ -1802,23 +1773,20 @@ class RecordService : Service() {
         title: String,
         text: String,
         locations: String = "",
-        recording: Boolean = RecordState.isRecording.value,
-        iconActive: Boolean? = false
+        recording: Boolean = RecordState.isRecording.value
     ): Notification {
-        val iconActive = iconActive ?: false
-
         val notificationBuilder = NotificationCompat.Builder(this, "nanhistory_record")
             // .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
             .setSilent(true)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
 
         val iconId =
             if (!recording) R.drawable.ic_my_location
-            else if (!iconActive) R.drawable.ic_empty
             else R.drawable.ic_my_location_filled
 
         val bitmap = BitmapFactory.decodeResource(resources, iconId)
@@ -1828,8 +1796,16 @@ class RecordService : Service() {
 
         if (recording) {
             val customView = RemoteViews(packageName, R.layout.record_notification).apply {
-
-                setTextViewText(R.id.notification_title, title)
+                val baseElapsedRealtime = if (::event.isInitialized) {
+                    val elapsedMs = Duration.between(
+                        event.time.toInstant(),
+                        Instant.now()
+                    ).toMillis()
+                    SystemClock.elapsedRealtime() - elapsedMs
+                } else {
+                    SystemClock.elapsedRealtime()
+                }
+                setChronometer(R.id.notification_title, baseElapsedRealtime, null, true)
                 setTextViewText(R.id.notification_message, text)
                 if (locations.isNotBlank()) {
                     setTextViewText(R.id.notification_locations, locations)
@@ -1897,13 +1873,18 @@ class RecordService : Service() {
             notificationTitle,
             notificationText,
             locations = if (devMode) "($locationSize, $bufferSize)" else "($locationSize)",
-            recording = recording,
-            iconActive = Instant.now().toEpochMilli() % 1000 >= 500
+            recording = recording
         )
 
-        if (notify) notificationManager.notify(
-            1, notification
-        )
+        if (notify) {
+            // Suppress notification redraws when screen is off during active recording
+            if (!isScreenOn && RecordState.isRecording.value && !RecordState.isSaving.value) {
+                return
+            }
+            notificationManager.notify(
+                1, notification
+            )
+        }
     }
 
     private fun debugNotification(title: String? = null, text: String? = null, separate: Boolean = false) {
@@ -2076,6 +2057,12 @@ class RecordService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+
+        try {
+            unregisterReceiver(screenStateReceiver)
+        } catch (e: Exception) {
+            Log.w("RecordService", "Error unregistering screenStateReceiver: ${e.message}")
+        }
 
         if (RecordState.status.value != RecordStatus.READY && RecordState.status.value != RecordStatus.RESTARTING) {
             stopRecordService()
