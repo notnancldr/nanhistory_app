@@ -256,6 +256,102 @@ interface AppDao {
     @Query("SELECT * FROM locations WHERE eventId = :id ORDER BY timestamp ASC LIMIT :limit OFFSET :offset")
     suspend fun getLocationsByEventIdWithOffset(id: String, offset: Int, limit: Int): List<LocationEntity>
 
+    @Query(
+        "SELECT MIN(latitude) AS minLat, MAX(latitude) AS maxLat, " +
+            "MIN(longitude) AS minLon, MAX(longitude) AS maxLon " +
+            "FROM locations WHERE eventId = :id"
+    )
+    suspend fun getLocationBoundsByEventId(id: String): EventLocationBounds?
+
+    @Query("SELECT * FROM locations WHERE eventId = :id ORDER BY timestamp ASC LIMIT 1")
+    suspend fun getFirstLocationByEventId(id: String): LocationEntity?
+
+    @Query("SELECT * FROM locations WHERE eventId = :id ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getLastLocationByEventId(id: String): LocationEntity?
+
+    @Query(
+        "WITH filtered AS ( " +
+            "  SELECT *, ROW_NUMBER() OVER (ORDER BY timestamp ASC) AS rn " +
+            "  FROM locations " +
+            "  WHERE eventId = :id " +
+            "    AND latitude BETWEEN :minLat AND :maxLat " +
+            "    AND longitude BETWEEN :minLon AND :maxLon " +
+            ") " +
+            "SELECT * FROM filtered " +
+            "WHERE (rn % :step = 0) OR rn = 1 " +
+            "ORDER BY timestamp ASC"
+    )
+    suspend fun getRenderedLocations(
+        id: String,
+        minLat: Double,
+        maxLat: Double,
+        minLon: Double,
+        maxLon: Double,
+        step: Int
+    ): List<LocationEntity>
+
+    @Query(
+        "SELECT * FROM locations " +
+            "WHERE eventId = :id AND timestamp BETWEEN :startTime AND :endTime " +
+            "ORDER BY timestamp ASC"
+    )
+    suspend fun getLocationsBetweenTimestamps(
+        id: String,
+        startTime: Long,
+        endTime: Long
+    ): List<LocationEntity>
+
+    @Query(
+        "SELECT MIN(l.latitude) AS minLat, MAX(l.latitude) AS maxLat, " +
+            "MIN(l.longitude) AS minLon, MAX(l.longitude) AS maxLon " +
+            "FROM locations l " +
+            "INNER JOIN events e ON l.eventId = e.id " +
+            "WHERE e.deletePermanently IS NULL " +
+            "  AND (:startDate IS NULL OR e.date >= :startDate) " +
+            "  AND (:endDate IS NULL OR e.date <= :endDate)"
+    )
+    suspend fun getLocationBoundsInRange(
+        startDate: String?,
+        endDate: String?
+    ): EventLocationBounds?
+
+    @Query(
+        "WITH filtered AS ( " +
+            "  SELECT l.*, ROW_NUMBER() OVER (PARTITION BY l.eventId ORDER BY l.timestamp ASC) AS rn " +
+            "  FROM locations l " +
+            "  INNER JOIN events e ON l.eventId = e.id " +
+            "  WHERE e.deletePermanently IS NULL " +
+            "    AND (:startDate IS NULL OR e.date >= :startDate) " +
+            "    AND (:endDate IS NULL OR e.date <= :endDate) " +
+            "    AND l.latitude BETWEEN :minLat AND :maxLat " +
+            "    AND l.longitude BETWEEN :minLon AND :maxLon " +
+            ") " +
+            "SELECT * FROM filtered " +
+            "WHERE (rn % :step = 0) OR rn = 1 " +
+            "ORDER BY eventId, timestamp ASC"
+    )
+    suspend fun getRenderedYearlyLocations(
+        startDate: String?,
+        endDate: String?,
+        minLat: Double,
+        maxLat: Double,
+        minLon: Double,
+        maxLon: Double,
+        step: Int
+    ): List<LocationEntity>
+
+    @Query(
+        "SELECT * FROM events " +
+            "WHERE deletePermanently IS NULL " +
+            "  AND (:startDate IS NULL OR date >= :startDate) " +
+            "  AND (:endDate IS NULL OR date <= :endDate) " +
+            "ORDER BY date DESC"
+    )
+    suspend fun getEventsInDateRange(
+        startDate: String?,
+        endDate: String?
+    ): List<EventEntity>
+
 
 
     /* Day Dao */

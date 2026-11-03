@@ -103,6 +103,10 @@ data class TagEntity(
             childColumns = ["eventId"],
             onDelete = ForeignKey.CASCADE,
         )
+    ],
+    indices = [
+        Index("eventId", "timestamp"),
+        Index("importance")
     ]
 )
 data class LocationEntity(
@@ -124,6 +128,9 @@ data class LocationEntity(
     val speedAccuracy: Float? = null,
     val bearingAccuracy: Float? = null,
     val verticalAccuracy: Float? = null,
+
+    // Adaptive LOD importance score
+    val importance: Float? = null,
 ) {
     val location
         get() = Coordinate(latitude, longitude)
@@ -226,6 +233,13 @@ data class EventWithTagsWithLocations(
         entityColumn = "eventId"  // This refers to LocationEntity.eventId
     )
     val locations: List<LocationEntity>
+)
+
+data class EventLocationBounds(
+    val minLat: Double?,
+    val maxLat: Double?,
+    val minLon: Double?,
+    val maxLon: Double?
 )
 
 

@@ -101,6 +101,7 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
         var audioSize by rememberSaveable { mutableLongStateOf(0L) }
         var otherSize by rememberSaveable { mutableLongStateOf(0L) }
         var dataSize by rememberSaveable { mutableLongStateOf(0L) }
+        var corridorCacheSize by rememberSaveable { mutableLongStateOf(0L) }
 
         var isLoading by rememberSaveable { mutableStateOf(true) }
 
@@ -143,6 +144,9 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
                         .filter { file -> file.isFile }
                         .map { file -> file.length() }.sum()
                 }
+
+                corridorCacheSize = id.my.nanclouder.nanhistory.ui.map.YearlyMapCacheManager
+                    .getCorridorCacheSize(context)
 
                 isLoading = false
             }
@@ -569,6 +573,7 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
         var audioSize by rememberSaveable { mutableLongStateOf(0L) }
         var otherSize by rememberSaveable { mutableLongStateOf(0L) }
         var dataSize by rememberSaveable { mutableLongStateOf(0L) }
+        var corridorCacheSize by rememberSaveable { mutableLongStateOf(0L) }
 
         var isLoading by rememberSaveable { mutableStateOf(true) }
 
@@ -611,6 +616,9 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
                         .filter { file -> file.isFile }
                         .map { file -> file.length() }.sum()
                 }
+
+                corridorCacheSize = id.my.nanclouder.nanhistory.ui.map.YearlyMapCacheManager
+                    .getCorridorCacheSize(context)
 
                 isLoading = false
             }
@@ -756,11 +764,18 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
                 }
 
                 item {
+                    val label = androidx.compose.ui.res.stringResource(
+                        R.string.clear_corridor_map_cache_btn,
+                        readableSize(corridorCacheSize)
+                    )
                     Button(
                         onClick = {
                             scope.launch {
                                 withContext(Dispatchers.IO) {
-                                    id.my.nanclouder.nanhistory.ui.map.YearlyMapCacheManager.clearCache(context)
+                                    id.my.nanclouder.nanhistory.ui.map.YearlyMapCacheManager
+                                        .clearAllCorridorCaches(context)
+                                    id.my.nanclouder.nanhistory.db.AppDatabase.getInstance(context)
+                                        .corridorNetworkDao().deleteAllCorridorNetworks()
                                 }
                                 loader()
                             }
@@ -768,6 +783,7 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp),
+                        enabled = corridorCacheSize > 0L,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -776,12 +792,12 @@ class StorageSettingsActivity : SubSettingsActivity("Storage") {
                     ) {
                         Icon(
                             painterResource(R.drawable.ic_delete),
-                            "Clear Yearly Map Cache",
+                            label,
                             modifier = Modifier
                                 .size(20.dp)
                                 .padding(end = 8.dp)
                         )
-                        Text("Clear Yearly Map Cache", style = MaterialTheme.typography.labelLarge)
+                        Text(label, style = MaterialTheme.typography.labelLarge)
                     }
                 }
 

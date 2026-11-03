@@ -14,11 +14,7 @@ class YearlyMapActivity : NewUIComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             NanHistoryTheme {
-                Scaffold { paddingValues ->
-                    YearlyMapView(
-                        modifier = Modifier.padding(paddingValues)
-                    )
-                }
+                YearlyMapView()
             }
         }
     }

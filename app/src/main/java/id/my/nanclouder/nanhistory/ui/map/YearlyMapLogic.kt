@@ -281,7 +281,7 @@ fun loadYearlyMapData(
     val eventsFlow = dao.getEventsInRange(startOfYear.format(formatter), endOfYear.format(formatter))
     val allEvents = eventsFlow.first().map { it.toHistoryEvent() }
     
-    if (allEvents.isEmpty() && state!!.nodes.isEmpty()) {
+    if (allEvents.isEmpty() && state.nodes.isEmpty()) {
         emit(YearlyMapLoadingState(isComplete = true, progress = 1f))
         return@flow
     }
@@ -289,7 +289,7 @@ fun loadYearlyMapData(
     // Filter events that are newer than cache
     val newEvents = allEvents.filter { 
         val eventTime = if (it is EventRange) it.end.toInstant().toEpochMilli() else it.time.toInstant().toEpochMilli()
-        eventTime > state!!.lastEventTime
+        eventTime > state.lastEventTime
     }
     
     if (firstLoc == null) {
@@ -302,11 +302,11 @@ fun loadYearlyMapData(
 
     if (newEvents.isNotEmpty()) {
         Log.d("YearlyMapDebug", "Processing ${newEvents.size} new events")
-        emit(YearlyMapLoadingState(progress = if(state!!.nodes.isEmpty()) 0.05f else 0.5f, firstLocation = firstLoc)) 
+        emit(YearlyMapLoadingState(progress = if(state.nodes.isEmpty()) 0.05f else 0.5f, firstLocation = firstLoc))
 
-        processEventsToState(context, newEvents, state!!, precisionMeters) { progress ->
+        processEventsToState(context, newEvents, state, precisionMeters) { progress ->
             // Scale progress based on whether we started from cache or scratch
-            val baseProgress = if(state!!.nodes.isEmpty()) 0.0f else 0.5f
+            val baseProgress = if(state.nodes.isEmpty()) 0.0f else 0.5f
             val range = 1.0f - baseProgress
             val currentProgress = baseProgress + (progress * range) * 0.9f 
             
@@ -317,12 +317,12 @@ fun loadYearlyMapData(
         }
         
         // Save Cache
-        YearlyMapCacheManager.saveCache(context, year, state!!)
+        YearlyMapCacheManager.saveCache(context, year, state)
     } else {
         Log.d("YearlyMapDebug", "No new events to process")
     }
     
-    val finalData = stateToData(state!!)
+    val finalData = stateToData(state)
     emit(YearlyMapLoadingState(
         data = finalData,
         progress = 1.0f,

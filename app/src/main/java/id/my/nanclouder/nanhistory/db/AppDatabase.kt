@@ -25,17 +25,19 @@ import java.time.LocalDate
         TagEntity::class,
         EventTagCrossRef::class,
         DayTagCrossRef::class,
-        LocationEntity::class
+        LocationEntity::class,
+        CorridorNetworkEntity::class
     ],
     views = [
         EventsTimeWithTag::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun appDao(): AppDao
+    abstract fun corridorNetworkDao(): CorridorNetworkDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -54,6 +56,7 @@ abstract class AppDatabase : RoomDatabase() {
                     .addMigrations(migrations.migrations1to2)
                     .addMigrations(migrations.migrations2to3)
                     .addMigrations(migrations.migrations3to4)
+                    .addMigrations(migrations.migrations4to5)
                     .build()
 
                 INSTANCE = instance

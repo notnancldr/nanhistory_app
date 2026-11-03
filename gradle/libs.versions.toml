@@ -1,8 +1,6 @@
 [versions]
 activity = "1.9.3"
 agp = "9.3.2"
-androidSdk = "<latest-version>"
-androidSdkVersion = "11.5.1"
 animation = "1.11.2"
 arthenicaFfmpegKitFull = "6.0-2"
 capturable = "3.0.1"
@@ -29,9 +27,9 @@ material = "1.14.0"
 foundationLayout = "1.11.2"
 foundation = "1.11.2"
 foundationVersion = "1.9.5"
+maplibreCompose = "0.20.0"
 
 [libraries]
-android-sdk-v1151 = { module = "org.maplibre.gl:android-sdk", version.ref = "androidSdkVersion" }
 androidx-activity = { module = "androidx.activity:activity", version.ref = "activity" }
 androidx-compose-animation = { module = "androidx.compose.animation:animation", version.ref = "animation" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -65,6 +63,8 @@ androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 androidx-compose-foundation-layout = { group = "androidx.compose.foundation", name = "foundation-layout", version.ref = "foundationLayout" }
 androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundation" }
+maplibre-compose = { module = "org.maplibre.compose:maplibre-compose", version.ref = "maplibreCompose" }
+maplibre-compose-runtime-vulkan = { module = "org.maplibre.compose:maplibre-compose-runtime-vulkan-android", version.ref = "maplibreCompose" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

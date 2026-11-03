@@ -17,18 +17,11 @@ const val QUERY_2_3 = "ALTER TABLE events ADD COLUMN versionNumber INTEGER NOT N
 
 const val QUERY_3_4 = """
 CREATE TABLE IF NOT EXISTS `locations` (
-    -- Primary Key
     `timestamp` INTEGER NOT NULL, 
-    
-    -- Foreign Key and Zone Info
     `eventId` TEXT NOT NULL, 
     `zoneId` TEXT NOT NULL, 
-    
-    -- Location Data (Required)
     `latitude` REAL NOT NULL, 
     `longitude` REAL NOT NULL, 
-    
-    -- Optional Fields (Nullable)
     `speed` REAL, 
     `bearing` REAL, 
     `altitude` REAL, 
@@ -36,18 +29,13 @@ CREATE TABLE IF NOT EXISTS `locations` (
     `speedAccuracy` REAL, 
     `bearingAccuracy` REAL, 
     `verticalAccuracy` REAL, 
-    
-    -- Define the Primary Key
     PRIMARY KEY(`timestamp`), 
-    
-    -- Define the Foreign Key Constraint
     FOREIGN KEY(`eventId`) REFERENCES `events`(`id`) 
         ON UPDATE NO ACTION 
         ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS `index_locations_eventId` ON `locations` (`eventId`);
 """
-
 
 class Migrations(context: Context) {
     val migrations1to2 = object : Migration(1, 2) {
@@ -104,6 +92,52 @@ class Migrations(context: Context) {
                 logData.append(e.stackTraceToString())
 
                 Log.e("DBMigration", "Error while migrating from v3 to v4", e)
+            } finally {
+                logData.save(context)
+            }
+        }
+    }
+
+    val migrations4to5 = object : Migration(4, 5) {
+        val logData = LogData.inCommonPath("DB-MIGRATION-4to5")
+
+        override fun migrate(db: SupportSQLiteDatabase) {
+            logData.appendWithTimestamp("Starting migration v4 to v5")
+
+            try {
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_locations_eventId_timestamp` " +
+                    "ON `locations` (`eventId`, `timestamp` ASC)"
+                )
+                db.execSQL("DROP INDEX IF EXISTS `index_locations_eventId`")
+                db.execSQL("ALTER TABLE `locations` ADD COLUMN `importance` REAL DEFAULT NULL")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_locations_importance` " +
+                    "ON `locations` (`importance`)"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `corridor_networks` (" +
+                    "`rangeKey` TEXT NOT NULL, " +
+                    "`startDate` TEXT, " +
+                    "`endDate` TEXT, " +
+                    "`version` INTEGER NOT NULL, " +
+                    "`updatedAt` INTEGER NOT NULL, " +
+                    "`boundsNorth` REAL NOT NULL, " +
+                    "`boundsSouth` REAL NOT NULL, " +
+                    "`boundsEast` REAL NOT NULL, " +
+                    "`boundsWest` REAL NOT NULL, " +
+                    "`maxCount` INTEGER NOT NULL, " +
+                    "`totalDistanceMeters` REAL NOT NULL, " +
+                    "`networkBlob` BLOB NOT NULL, " +
+                    "PRIMARY KEY(`rangeKey`)" +
+                    ")"
+                )
+            } catch (e: Throwable) {
+                logData.appendWithTimestamp("==============================================")
+                logData.append("Error while migrating from v4 to v5: ${e.message ?: "unknown error"}")
+                logData.append(e.stackTraceToString())
+
+                Log.e("DBMigration", "Error while migrating from v4 to v5", e)
             } finally {
                 logData.save(context)
             }

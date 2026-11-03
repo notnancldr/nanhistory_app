@@ -91,4 +91,36 @@
     <string name="expression_helper_siblings">Sibling Offsets</string>
     <string name="expression_helper_operators">Operators</string>
     <string name="expression_apply">Apply</string>
+
+    <!-- Event Map / Cut Mode -->
+    <string name="event_map_title">Event Map</string>
+    <string name="cut_event_title">Cut Event</string>
+    <string name="cut_mode">Cut Mode</string>
+    <string name="exit_cut_mode">Exit Cut Mode</string>
+    <string name="confirm_cut">Confirm</string>
+    <string name="event_cut_saved">%1$s has been saved</string>
+    <string name="back">Back</string>
+
+    <!-- Yearly Map -->
+    <string name="yearly_map_title">Trips Map</string>
+    <string name="time_range_all_time">All Time</string>
+    <string name="time_range_custom">Custom Range…</string>
+    <string name="time_range_custom_title">Select Date Range</string>
+    <string name="trips_in_year">Trips in %1$s</string>
+    <string name="trips_all_time">All Time Trips</string>
+    <string name="trips_custom_range">Trips (%1$s – %2$s)</string>
+    <string name="events_on_path">Events on this path (%1$d)</string>
+    <string name="transport_modes">Transport Modes</string>
+    <string name="unknown_event">Unknown event</string>
+    <string name="select_time_range">Select Time Range</string>
+    <string name="base_map_unavailable">Base map unavailable (offline)</string>
+    <string name="trip_frequency">Frequency</string>
+    <string name="refresh_corridors">Refresh Corridors</string>
+    <string name="clear_corridor_cache">Clear All Corridor Cache</string>
+    <string name="clear_corridor_cache_title">Clear Map Cache?</string>
+    <string name="clear_corridor_cache_message">This will delete all saved corridor network files. Corridors for the active view will be recalculated.</string>
+    <string name="clear_corridor_map_cache_btn">Clear Corridor Map Cache (%s)</string>
+    <string name="corridor_cache_cleared">Corridor cache cleared</string>
+    <string name="clear">Clear</string>
+    <string name="cancel">Cancel</string>
 </resources>

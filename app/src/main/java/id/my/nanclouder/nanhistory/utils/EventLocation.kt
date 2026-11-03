@@ -1,10 +1,25 @@
 package id.my.nanclouder.nanhistory.utils
 
-import id.my.nanclouder.nanhistory.activity.calculateDistance
-import id.my.nanclouder.nanhistory.activity.calculateSpeed
+import android.location.Location
 import id.my.nanclouder.nanhistory.utils.history.LocationData
 import org.osmdroid.util.GeoPoint
 import java.time.ZonedDateTime
+
+fun calculateDistance(startPoint: GeoPoint, endPoint: GeoPoint): Float =
+    Location("map")
+        .apply {
+            latitude = startPoint.latitude
+            longitude = startPoint.longitude
+        }
+        .distanceTo(
+            Location("map").apply {
+                latitude = endPoint.latitude
+                longitude = endPoint.longitude
+            }
+        )
+
+fun calculateSpeed(startPoint: GeoPoint, endPoint: GeoPoint, timeHours: Float): Float =
+    calculateDistance(startPoint, endPoint) / 1000 / timeHours
 
 data class HistoryLocationData(
     val speed: Float,
