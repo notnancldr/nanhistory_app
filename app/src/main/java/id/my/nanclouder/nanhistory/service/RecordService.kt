@@ -102,6 +102,8 @@ import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 class RecordService : Service() {
     companion object {
@@ -181,6 +183,9 @@ class RecordService : Service() {
     private lateinit var notificationPendingIntent: PendingIntent
 
     private var isScreenOn = true
+    private var lastNotifiedRecording: Boolean? = null
+    private var lastNotifiedStatus: Int? = null
+
     private val screenStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
@@ -199,6 +204,9 @@ class RecordService : Service() {
     private fun onScreenStateChanged() {
         if (RecordState.isRecording.value && !stationaryDetector.isStationary && !eventPoint) {
             startLocationUpdates()
+        }
+        if (isScreenOn && RecordState.isRecording.value) {
+            updateNotification(forceNotify = true)
         }
     }
 
@@ -503,7 +511,7 @@ class RecordService : Service() {
         )
         gyroConfirmationJob?.cancel()
         gyroConfirmationJob = serviceScope.launch {
-            delay(1500L)
+            delay(1500L.milliseconds)
             stopGyroConfirmation()
         }
     }
@@ -569,7 +577,7 @@ class RecordService : Service() {
         val windowSeconds = Config.shakeListenWindowDuration.get(applicationContext)
         shakeListenWindowJob?.cancel()
         shakeListenWindowJob = serviceScope.launch {
-            delay(windowSeconds * 1000L)
+            delay(windowSeconds.seconds)
             closeShakeListenWindow()
         }
     }
@@ -682,7 +690,7 @@ class RecordService : Service() {
 
         vibrationJob = serviceScope.launch(Dispatchers.Main) {
             while (isActive) {
-                delay(vibrateInterval * 1000L)
+                delay(vibrateInterval.seconds)
                 if (isActive) {
                     val effect = VibrationEffect.createOneShot(vibrateDuration, VibrationEffect.DEFAULT_AMPLITUDE)
                     vibrator.vibrate(effect)
@@ -722,6 +730,7 @@ class RecordService : Service() {
         val now = ZonedDateTime.now()
 
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+        isScreenOn = powerManager.isInteractive
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "NanHistory::RecordWakeLock")
 
         // Initialize vibrator
@@ -945,7 +954,7 @@ class RecordService : Service() {
 
             Log.d("RecordService", "Shake detection enabled: $shakeDetectionEnabled, Shake to start: $shakeToStartEnabled, eventPoint: $eventPoint")
 
-            delay(500)
+            delay(500.milliseconds)
             if (!eventPoint) RecordState.status.value = RecordStatus.RUNNING
         }
 
@@ -1078,7 +1087,7 @@ class RecordService : Service() {
             wakeLock.release()
         }
 
-        delay(2000L)
+        delay(2000L.milliseconds)
 
         // RecordState.isRunning.value is still true at this point,
         // set to false in stopRecordService()
@@ -1207,7 +1216,7 @@ class RecordService : Service() {
                     Log.d("RecordService", "Scheduling still auto-stop in ${timeoutSeconds}s")
                     stillGraceJob?.cancel()
                     stillGraceJob = serviceScope.launch {
-                        delay(timeoutSeconds * 1000L)
+                        delay(timeoutSeconds.seconds)
                         if (RecordState.isRecording.value) {
                             Log.d("RecordService", "Still grace period expired, auto-stopping recording...")
                             stopEventRecording()
@@ -1312,7 +1321,7 @@ class RecordService : Service() {
                 stopEventRecording()
                 restartIntent.action = ACTION_RECORD_START
 
-                delay(200)
+                delay(200.milliseconds)
 
                 startForegroundService(restartIntent)
             }
@@ -1329,7 +1338,7 @@ class RecordService : Service() {
             requestTileListeningState()
 
             CoroutineScope(Dispatchers.Default).launch {
-                delay(200)
+                delay(200.milliseconds)
 
                 startForegroundService(restartIntent)
             }
@@ -1767,7 +1776,7 @@ class RecordService : Service() {
 
     private fun startAudioRecording() {
         if (!eventPoint) serviceScope.launch {
-            delay(1000)
+            delay(1000L.milliseconds)
             RecordState.status.value = RecordStatus.RUNNING
             requestTileListeningState()
         }
@@ -2098,6 +2107,7 @@ class RecordService : Service() {
         text: String? = null,
         description: String? = null,
         notify: Boolean = true,
+        forceNotify: Boolean = false,
         recording: Boolean = RecordState.isRecording.value
     ) {
         if (title != null) notificationTitle = title
@@ -2117,10 +2127,16 @@ class RecordService : Service() {
         )
 
         if (notify) {
-            // Suppress notification redraws when screen is off during active recording
-            if (!isScreenOn && RecordState.isRecording.value && !RecordState.isSaving.value) {
+            val isStateTransition = recording != lastNotifiedRecording ||
+                    RecordState.status.value != lastNotifiedStatus
+            // Suppress non-state-transition notification redraws when screen is off during active recording
+            if (!forceNotify && !isScreenOn && RecordState.isRecording.value &&
+                !RecordState.isSaving.value && !isStateTransition
+            ) {
                 return
             }
+            lastNotifiedRecording = recording
+            lastNotifiedStatus = RecordState.status.value
             notificationManager.notify(
                 1, notification
             )
@@ -2270,7 +2286,7 @@ class RecordService : Service() {
         Log.d("RecordService", "Scheduling location update restart in ${delayMs}ms (attempt $locationRetryCount)")
 
         serviceScope.launch {
-            delay(delayMs)
+            delay(delayMs.milliseconds)
             if (RecordState.isRecording.value) {
                 Log.d("RecordService", "Restarting location updates...")
                 startLocationUpdates()
@@ -2319,7 +2335,7 @@ class RecordService : Service() {
         Log.d("RecordService", "Scheduling service restart...")
 
         serviceScope.launch {
-            delay(1000) // Wait 1 second before restart
+            delay(1000L.milliseconds) // Wait 1 second before restart
 
             try {
                 // val restartIntent = Intent(this@RecordService, this@RecordService::class.java)
