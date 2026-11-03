@@ -28,6 +28,9 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.hardware.TriggerEvent
+import android.hardware.TriggerEventListener
+import android.os.HandlerThread
 import android.service.quicksettings.TileService
 import android.util.Log
 import android.view.View
@@ -44,9 +47,11 @@ import id.my.nanclouder.nanhistory.activity.MainActivity
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.config.LocationIterationLogic
+import id.my.nanclouder.nanhistory.utils.AdaptiveSamplingPolicy
 import id.my.nanclouder.nanhistory.utils.Coordinate
 import id.my.nanclouder.nanhistory.utils.LogData
 import id.my.nanclouder.nanhistory.utils.RecordStatus
+import id.my.nanclouder.nanhistory.utils.StationaryDetector
 import id.my.nanclouder.nanhistory.utils.TimeFormatterWithSecond
 import id.my.nanclouder.nanhistory.utils.history.EventPoint
 import id.my.nanclouder.nanhistory.utils.history.EventRange
@@ -176,8 +181,36 @@ class RecordService : Service() {
     private val screenStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
-                Intent.ACTION_SCREEN_ON -> isScreenOn = true
-                Intent.ACTION_SCREEN_OFF -> isScreenOn = false
+                Intent.ACTION_SCREEN_ON -> {
+                    isScreenOn = true
+                    onScreenStateChanged()
+                }
+                Intent.ACTION_SCREEN_OFF -> {
+                    isScreenOn = false
+                    onScreenStateChanged()
+                }
+            }
+        }
+    }
+
+    private fun onScreenStateChanged() {
+        if (RecordState.isRecording.value && !stationaryDetector.isStationary && !eventPoint) {
+            startLocationUpdates()
+        }
+    }
+
+    private var locationThread: HandlerThread? = null
+    private val adaptiveSamplingPolicy = AdaptiveSamplingPolicy()
+    private val stationaryDetector = StationaryDetector()
+    private var significantMotionSensor: Sensor? = null
+    private var isSignificantMotionArmed = false
+
+    private val significantMotionTrigger = object : TriggerEventListener() {
+        override fun onTrigger(event: TriggerEvent?) {
+            Log.d("RecordService", "Significant motion detected! Resuming GNSS...")
+            isSignificantMotionArmed = false
+            serviceScope.launch {
+                resumeFromStationary()
             }
         }
     }
@@ -428,6 +461,7 @@ class RecordService : Service() {
         accelerometerSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER, true)
             ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         gyroscopeSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+        significantMotionSensor = sensorManager.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION)
 
         when {
             accelerometerSensor == null -> {
@@ -586,6 +620,8 @@ class RecordService : Service() {
     override fun onCreate() {
         super.onCreate()
 
+        locationThread = HandlerThread("RecordServiceLocationThread").apply { start() }
+
         val screenFilter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_SCREEN_OFF)
@@ -665,6 +701,9 @@ class RecordService : Service() {
         )
 
         locationDigest.reset()
+        stationaryDetector.reset()
+        adaptiveSamplingPolicy.reset()
+        disarmSignificantMotion()
 
         eventLocations.clear()
         locationBuffer.clear()
@@ -827,6 +866,8 @@ class RecordService : Service() {
 
     private suspend fun stopEventRecording() {
         stopIntervalVibration()
+        disarmSignificantMotion()
+        stationaryDetector.reset()
 
         if (!continueService) {
             RecordState.isRecording.value = false
@@ -1066,6 +1107,8 @@ class RecordService : Service() {
 
     private fun stopRecordService(restart: Boolean = false) {
         Log.d("RecordService", "Service [stopService]")
+
+        disarmSignificantMotion()
 
         if (::wakeLock.isInitialized && wakeLock.isHeld) {
             wakeLock.release()
@@ -1316,6 +1359,8 @@ class RecordService : Service() {
         val accuracyThreshold = Config.locationAccuracyThreshold.get(applicationContext)
 
         var hasValidUpdate = false
+        var speedBucketChanged = false
+        var enteredStationary = false
 
         val zoneId = Calendar.getInstance().timeZone.toZoneId()
 
@@ -1335,6 +1380,27 @@ class RecordService : Service() {
             if (location.accuracy > accuracyThreshold) continue
 
             hasValidUpdate = true
+            locationRetryCount = 0
+
+            val speed = if (location.hasSpeed()) location.speed else null
+
+            if (!eventPoint) {
+                if (adaptiveSamplingPolicy.onNewSpeed(speed)) {
+                    speedBucketChanged = true
+                }
+
+                if (
+                    stationaryDetector.update(
+                        latitude = location.latitude,
+                        longitude = location.longitude,
+                        accuracy = location.accuracy,
+                        speedMps = speed,
+                        timestampMs = location.time
+                    )
+                ) {
+                    enteredStationary = true
+                }
+            }
 
             val time = ZonedDateTime.ofInstant(Instant.ofEpochMilli(location.time), zoneId)
 
@@ -1368,6 +1434,12 @@ class RecordService : Service() {
             // serviceScope.launch {
             //     dao.insertLocation(newLocationData.toLocationEntity(event.id))
             // }
+        }
+
+        if (enteredStationary) {
+            enterStationaryMode()
+        } else if (speedBucketChanged && !stationaryDetector.isStationary && !eventPoint) {
+            startLocationUpdates()
         }
 
         if (!RecordState.isRecording.value) {
@@ -1908,22 +1980,34 @@ class RecordService : Service() {
             return
         }
 
+        if (stationaryDetector.isStationary) {
+            Log.d("RecordService", "Currently stationary, skipping location updates start")
+            return
+        }
+
         Log.d("RecordService", "Requesting location updates (retry attempt: $locationRetryCount)")
 
-        val secondsInterval = if (!eventPoint) Config.locationUpdateInterval.get(applicationContext)
-        else 1
+        val intervalMs = if (eventPoint) 1000L else adaptiveSamplingPolicy.getRequestInterval()
+        val maxDelayMs = if (eventPoint) 0L else adaptiveSamplingPolicy.getMaxUpdateDelay(isScreenOn)
 
         val locationRequest = LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
-            secondsInterval * 1000L
-        ).build()
+            intervalMs
+        ).apply {
+            if (maxDelayMs > 0) {
+                setMaxUpdateDelayMillis(maxDelayMs)
+            }
+            setMinUpdateIntervalMillis(intervalMs / 2)
+            setMinUpdateDistanceMeters(5f)
+        }.build()
 
         locationTaskHandled = false
 
+        val looper = locationThread?.looper ?: mainLooper
         val task = fusedLocationProviderClient.requestLocationUpdates(
             locationRequest,
             locationCallback,
-            mainLooper
+            looper
         )
 
         task.addOnSuccessListener {
@@ -1961,6 +2045,47 @@ class RecordService : Service() {
         }
     }
 
+    private fun enterStationaryMode() {
+        if (!RecordState.isRecording.value) return
+        Log.d("RecordService", "Stationary state detected! Pausing GNSS...")
+        fusedLocationProviderClient.removeLocationUpdates(locationCallback)
+
+        if (significantMotionSensor != null) {
+            isSignificantMotionArmed = sensorManager.requestTriggerSensor(
+                significantMotionTrigger,
+                significantMotionSensor
+            )
+        } else {
+            // Fallback: poll after 90 seconds if hardware trigger is absent
+            serviceScope.launch {
+                delay(90_000L)
+                if (stationaryDetector.isStationary && RecordState.isRecording.value) {
+                    resumeFromStationary()
+                }
+            }
+        }
+    }
+
+    private fun resumeFromStationary() {
+        Log.d("RecordService", "Exiting stationary mode, resuming GNSS")
+        disarmSignificantMotion()
+        stationaryDetector.reset()
+        if (RecordState.isRecording.value) {
+            startLocationUpdates()
+        }
+    }
+
+    private fun disarmSignificantMotion() {
+        if (isSignificantMotionArmed && significantMotionSensor != null) {
+            try {
+                sensorManager.cancelTriggerSensor(significantMotionTrigger, significantMotionSensor)
+            } catch (e: Exception) {
+                Log.w("RecordService", "Error cancelling trigger sensor: ${e.message}")
+            }
+            isSignificantMotionArmed = false
+        }
+    }
+
     private fun scheduleLocationRestart() {
         // Only restart if recording is still active
         if (!RecordState.isRecording.value) {
@@ -1968,9 +2093,8 @@ class RecordService : Service() {
             return
         }
 
-
         locationRetryCount++
-        val delayMs = locationRetryDelayMs * locationRetryCount
+        val delayMs = minOf(locationRetryDelayMs * locationRetryCount, 60_000L)
 
         Log.d("RecordService", "Scheduling location update restart in ${delayMs}ms (attempt $locationRetryCount)")
 
@@ -2057,6 +2181,11 @@ class RecordService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+
+        disarmSignificantMotion()
+
+        locationThread?.quitSafely()
+        locationThread = null
 
         try {
             unregisterReceiver(screenStateReceiver)
