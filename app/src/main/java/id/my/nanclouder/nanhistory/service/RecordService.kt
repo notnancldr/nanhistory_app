@@ -1364,8 +1364,6 @@ class RecordService : Service() {
 
         val zoneId = Calendar.getInstance().timeZone.toZoneId()
 
-        val newLocations = mutableListOf<LocationData>()
-
         for (location in locations) {
             if (location.latitude != 0.0 && location.longitude != 0.0) {
                 Log.d(
@@ -1417,7 +1415,6 @@ class RecordService : Service() {
                 verticalAccuracy = if (location.hasVerticalAccuracy()) location.verticalAccuracyMeters else null
             )
             locationBuffer.add(newLocationData)
-            newLocations.add(newLocationData)
 
             // TODO: move this check
             if (locationBuffer.isNotEmpty() && eventPoint) {
@@ -1448,14 +1445,8 @@ class RecordService : Service() {
             return
         }
 
-        serviceScope.launch {
-            val currentEventData = event
-            dao.insertLocations(newLocations.map { it.toLocationEntity(event.id) })
-            if (currentEventData is EventRange) {
-                currentEventData.end = ZonedDateTime.now()
-                dao.updateEvent(currentEventData.toEventEntity())
-            }
-        }
+        // Direct Room insert-then-delete is removed in Phase 4.
+        // Candidate points buffer in locationBuffer and are batch-inserted in iterateLocations().
 
         updates++
         validUpdates += locations.filterNot { it.latitude == 0.0 || it.longitude == 0.0 }.size
@@ -1512,7 +1503,9 @@ class RecordService : Service() {
 
         // Iterate locations every 10 updates
         if (updates % 10 == 0) {
-            iterateLocations()
+            serviceScope.launch {
+                iterateLocations()
+            }
         }
 
         if (Instant.now().toEpochMilli() - startTime > (1000L * maxDuration) && restartEnabled) {
@@ -1663,7 +1656,7 @@ class RecordService : Service() {
         }
     }
 
-    private fun iterateLocations(final: Boolean = false) = runBlocking(Dispatchers.IO) {
+    private suspend fun iterateLocations(final: Boolean = false) = withContext(Dispatchers.IO) {
         val minimumDistance = Config.locationMinimumDistance.get(applicationContext)
 
         val appendToLog = { text: String ->
@@ -1759,9 +1752,13 @@ class RecordService : Service() {
                     // Remove key if it's too close to the previous location
                     if (!check) {
                         locationBuffer.remove(item)
-                        dao.deleteLocation(item.toLocationEntity(event.id))
+                        // In Phase 4, points are not written to Room until graduation,
+                        // so no dao.deleteLocation is required.
                         lastIterationIndex--
-                        Log.d("RecordService", "Location doesn't satisfy the condition, removed $item (lastIteration: $lastIterationIndex)")
+                        Log.d(
+                            "RecordService",
+                            "Location doesn't satisfy condition, dropped $item (lastIteration: $lastIterationIndex)"
+                        )
                         continue
                     }
                 }
@@ -1814,9 +1811,16 @@ class RecordService : Service() {
 
             iterationLogData.save(this@RecordService)
 
-            // Insert location data into database
-            // TODO: remove this after DB-direct implementation
-            // iteratedLocationBuffer.insertToDatabase(applicationContext, event.id)
+            // Batch insert graduated location data into database
+            if (iteratedLocationBuffer.isNotEmpty()) {
+                val entities = iteratedLocationBuffer.map { it.toLocationEntity(event.id) }
+                dao.insertLocations(entities)
+                val currentEventData = event
+                if (currentEventData is EventRange) {
+                    currentEventData.end = ZonedDateTime.now()
+                    dao.updateEvent(currentEventData.toEventEntity())
+                }
+            }
 
             // Append to main location list
             eventLocations.addAll(iteratedLocationBuffer)
@@ -2049,6 +2053,9 @@ class RecordService : Service() {
         if (!RecordState.isRecording.value) return
         Log.d("RecordService", "Stationary state detected! Pausing GNSS...")
         fusedLocationProviderClient.removeLocationUpdates(locationCallback)
+        serviceScope.launch {
+            iterateLocations()
+        }
 
         if (significantMotionSensor != null) {
             isSignificantMotionArmed = sensorManager.requestTriggerSensor(

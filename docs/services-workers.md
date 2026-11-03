@@ -52,6 +52,7 @@ sequenceDiagram
 5. **Two-Stage Shake Detection**: In idle or shake-enabled mode, only the wake-up accelerometer is registered with hardware FIFO batching (~20 Hz, 3s latency). The gyroscope is dynamically registered only for a 1.5-second confirmation window when acceleration exceeds the threshold.
 6. **Notification Optimization & Chronometer**: `RecordService` uses `RemoteViews.setChronometer()` for elapsed duration rendering directly in SystemUI, eliminating CPU wake-ups from app-side timers. Notification channels use `IMPORTANCE_LOW` with `setOnlyAlertOnce(true)`. Notification redraws are suppressed when the device screen is off.
 7. **Adaptive GNSS & Stationary State Machine**: `RecordService` dynamically adapts GPS sampling intervals across speed buckets with a 3-fix hysteresis counter. Hardware batching is screen-aware (2s delay when screen is on, up to 30s FIFO delay when screen is off). When stationary (>90s at anchor), GNSS polling is suspended and gated behind hardware `Sensor.TYPE_SIGNIFICANT_MOTION`. Location callbacks run on a dedicated `HandlerThread` ("RecordServiceLocationThread").
+8. **Batched Persistence & In-Memory Jitter Filtering**: `RecordService` buffers candidate location fixes in memory (`locationBuffer`) without immediate Room database inserts, eliminating SQLite insert-then-delete churn. `iterateLocations()` runs asynchronously via coroutines (`withContext(Dispatchers.IO)`) on periodic batches, stationary transitions, and recording stop, batch-inserting graduated locations with `dao.insertLocations()`.
 
 ---
 
