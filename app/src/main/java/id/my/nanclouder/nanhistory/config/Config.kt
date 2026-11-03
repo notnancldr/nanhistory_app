@@ -16,6 +16,10 @@ enum class LocationIterationLogic {
     LookBehindAhead_v1
 }
 
+enum class VibrateMode {
+    Interval, Update, SmartUpdate
+}
+
 object Config {
     private const val PATH = "config/config.json"
 
@@ -36,10 +40,12 @@ object Config {
         const val LOCATION_ACCURACY_THRESHOLD = 20
         const val LOCATION_MINIMUM_DISTANCE = 30
         const val LOCATION_UPDATE_INTERVAL = 5
+        const val LOCATION_ADAPTIVE_INTERVAL_ENABLED = true
+        const val LOCATION_STATIONARY_DETECTION_ENABLED = true
         val LOCATION_ITERATION_LOGIC = LocationIterationLogic.Default
 
         const val RECORD_VIBRATE_ENABLED = false
-        const val RECORD_VIBRATE_EVERY_UPDATE = false
+        val RECORD_VIBRATE_MODE = VibrateMode.SmartUpdate
         const val RECORD_VIBRATE_INTERVAL = 5 // s
         const val RECORD_VIBRATE_DURATION = 100 // ms
 
@@ -234,6 +240,12 @@ object Config {
     val locationUpdateInterval = IntValue(
         "locationUpdateInterval", Default.LOCATION_UPDATE_INTERVAL
     )
+    val locationAdaptiveIntervalEnabled = BooleanValue(
+        "locationAdaptiveIntervalEnabled", Default.LOCATION_ADAPTIVE_INTERVAL_ENABLED
+    )
+    val locationStationaryDetectionEnabled = BooleanValue(
+        "locationStationaryDetectionEnabled", Default.LOCATION_STATIONARY_DETECTION_ENABLED
+    )
     val locationIterationLogic = EnumValue(
         "locationIterationLogic", Default.LOCATION_ITERATION_LOGIC,
         LocationIterationLogic::class.java
@@ -242,8 +254,9 @@ object Config {
     val recordVibrateEnabled = BooleanValue(
         "recordVibrateEnabled", Default.RECORD_VIBRATE_ENABLED
     )
-    val recordVibrateEveryUpdate = BooleanValue(
-        "recordVibrateEveryUpdate", Default.RECORD_VIBRATE_EVERY_UPDATE
+    val recordVibrateMode = EnumValue(
+        "recordVibrateMode", Default.RECORD_VIBRATE_MODE,
+        VibrateMode::class.java
     )
     val recordVibrateInterval = IntValue(
         "recordVibrateInterval", Default.RECORD_VIBRATE_INTERVAL

@@ -91,6 +91,7 @@ import java.io.File
 import java.time.Instant
 import java.time.ZonedDateTime
 import java.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun EventListItem(
@@ -289,7 +290,7 @@ fun TimelineEventItem(
     if (recording) LaunchedEffect(eventData) {
         while (true) {
             timeElapsed = Duration.between(eventData.time.toInstant(), Instant.now())
-            delay(1000 - timeElapsed.toMillis() % 1000)
+            delay((1000 - timeElapsed.toMillis() % 1000).milliseconds)
         }
     }
 
@@ -697,6 +698,22 @@ fun TimelineEventItemPreview() {
                 description = "",
                 time = ZonedDateTime.now(),
                 end = ZonedDateTime.now()
+            )
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun TimelineEventItemPreviewSelected() {
+    Column {
+        TimelineEventItem(
+            selected = true,
+            eventData = EventRange(
+                title = "Berangkat",
+                description = "",
+                time = ZonedDateTime.now(),
+                end = ZonedDateTime.now(),
             )
         )
     }

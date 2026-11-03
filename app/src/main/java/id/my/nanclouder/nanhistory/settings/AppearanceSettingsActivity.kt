@@ -17,22 +17,17 @@ class AppearanceSettingsActivity : SubSettingsActivity("Appearance") {
         Column(Modifier.verticalScroll(scrollState)) {
             CategoryHeader(
                 icon = painterResource(R.drawable.ic_settings_filled),
-                iconDescription = "New UI",
-                title = "New UI"
+                iconDescription = "Old UI",
+                title = "Old UI"
             )
             SettingsSwitch(
-                title = "Enable New UI",
-                description = "Use new UI for application appearance",
+                title = "Use Old UI",
+                description = "WARNING: old UI is no longer receiving updates, some features may not work or break.",
                 configValue = Config.appearanceOldUi,
                 onUpdated = { _ ->
                     recreate()
                 }
             )
-            // SettingsSwitch(
-            //     title = "Always ask before auto-delete",
-            //     description = "Always ask user before auto deletion happens.",
-            //     configValue = Config.autoDeleteAlwaysAsk
-            // )
         }
     }
 }

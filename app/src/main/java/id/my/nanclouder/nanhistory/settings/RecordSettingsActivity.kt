@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
+import id.my.nanclouder.nanhistory.config.VibrateMode
 import id.my.nanclouder.nanhistory.receiver.ActivityRecognitionEngine
 import id.my.nanclouder.nanhistory.service.RecordService
 import id.my.nanclouder.nanhistory.utils.RecordStatus
@@ -43,7 +44,7 @@ class RecordSettingsActivity : SubSettingsActivity("Event Recording") {
     override fun ColumnScope.Content() {
         val context = LocalContext.current
         val scrollState = rememberScrollState()
-        val settingsChanged = rememberSaveable { mutableStateOf(false) }
+        val settingsChanged = rememberSaveable { mutableStateOf<Boolean?>(null) }
         val isRestarting = rememberSaveable { mutableStateOf(false) }
 
         val activityPermissionLauncher = rememberLauncherForActivityResult(
@@ -55,7 +56,7 @@ class RecordSettingsActivity : SubSettingsActivity("Event Recording") {
                 Config.autoRecordActivityRecognitionEnabled.set(context, false)
                 Toast.makeText(
                     context,
-                    context.getString(R.string.activity_recognition_permission_required),
+                    context.applicationContext.getString(R.string.activity_recognition_permission_required),
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -67,8 +68,10 @@ class RecordSettingsActivity : SubSettingsActivity("Event Recording") {
         val locationAccuracyThresholdState = Config.locationAccuracyThreshold.getState()
         val locationMinimumDistanceState = Config.locationMinimumDistance.getState()
         val locationUpdateIntervalState = Config.locationUpdateInterval.getState()
+        val locationAdaptiveIntervalState = Config.locationAdaptiveIntervalEnabled.getState()
+        val locationStationaryDetectionState = Config.locationStationaryDetectionEnabled.getState()
         val recordVibrateEnabledState = Config.recordVibrateEnabled.getState()
-        val recordVibrateEveryUpdateState = Config.recordVibrateEveryUpdate.getState()
+        val recordVibrateEveryUpdateState = Config.recordVibrateMode.getState()
         val recordVibrateIntervalState = Config.recordVibrateInterval.getState()
         val recordVibrateDurationState = Config.recordVibrateDuration.getState()
         val recordShakeEnableState = Config.recordShakeEnabled.getState()
@@ -86,14 +89,15 @@ class RecordSettingsActivity : SubSettingsActivity("Event Recording") {
         // Detect config changes
         LaunchedEffect(
             serviceMaxDurationState.value, locationAccuracyThresholdState.value, locationMinimumDistanceState.value,
-            locationUpdateIntervalState.value, recordVibrateEnabledState.value, recordVibrateEveryUpdateState.value,
-            recordVibrateIntervalState.value, recordVibrateDurationState.value, recordShakeEnableState.value,
-            recordShakeToStartState.value, recordShakeSensitivityState.value, audioRecordMaxDurationState.value,
-            includeAudioRecordState.value, audioStereoChannelState.value, audioEncodingBitrateState.value,
-            audioSamplingRateState.value, serviceRestartEnabled.value
+            locationUpdateIntervalState.value, locationAdaptiveIntervalState.value,
+            locationStationaryDetectionState.value, recordVibrateEnabledState.value,
+            recordVibrateEveryUpdateState.value, recordVibrateIntervalState.value, recordVibrateDurationState.value,
+            recordShakeEnableState.value, recordShakeToStartState.value, recordShakeSensitivityState.value,
+            audioRecordMaxDurationState.value, includeAudioRecordState.value, audioStereoChannelState.value,
+            audioEncodingBitrateState.value, audioSamplingRateState.value, serviceRestartEnabled.value
         ) {
             Log.d("NanHistoryDebug", "Config changed!")
-            settingsChanged.value = RecordService.RecordState.isRunning.value
+            settingsChanged.value = settingsChanged.value != null && RecordService.RecordState.isRunning.value
         }
 
         // Detect service state
@@ -113,7 +117,7 @@ class RecordSettingsActivity : SubSettingsActivity("Event Recording") {
 
         Column {
             AnimatedVisibility(
-                visible = settingsChanged.value
+                visible = settingsChanged.value ?: false
             ) {
                 SettingsChangedBanner(
                     isProcessing = serviceState.value == RecordStatus.RESTARTING,
@@ -172,6 +176,16 @@ class RecordSettingsActivity : SubSettingsActivity("Event Recording") {
                     valueUnit = "s",
                     valueRange = 1..60
                 )
+                SettingsSwitch(
+                    configValue = Config.locationAdaptiveIntervalEnabled,
+                    title = stringResource(R.string.location_adaptive_interval_title),
+                    description = stringResource(R.string.location_adaptive_interval_desc),
+                )
+                SettingsSwitch(
+                    configValue = Config.locationStationaryDetectionEnabled,
+                    title = stringResource(R.string.location_stationary_detection_title),
+                    description = stringResource(R.string.location_stationary_detection_desc),
+                )
                 CategoryHeader(
                     icon = painterResource(R.drawable.ic_mobile_vibrate_filled),
                     iconDescription = "Vibration",
@@ -182,10 +196,11 @@ class RecordSettingsActivity : SubSettingsActivity("Event Recording") {
                     title = "Enable Vibration",
                     description = "Vibrate device during location recording."
                 )
-                SettingsSwitch(
-                    configValue = Config.recordVibrateEveryUpdate,
-                    title = "Vibrate on Every Update",
-                    description = "Vibrate on each location update, or only at intervals."
+                SettingsDropdown(
+                    configValue = Config.recordVibrateMode,
+                    enumClass = VibrateMode::class.java,
+                    title = "Vibrate Mode",
+                    description = "How vibration is triggered."
                 )
                 SettingsNumInput(
                     title = "Vibration Interval",

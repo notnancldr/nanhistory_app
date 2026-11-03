@@ -144,4 +144,14 @@
     <string name="external_automation_desc">Allow external apps (Tasker, Quick Tap) to start, stop, or toggle recording via broadcast.</string>
     <string name="external_automation_passkey_title">Automation Passkey</string>
     <string name="external_automation_passkey_desc">Optional security passkey required in extra_passkey intent extra.</string>
+
+    <!-- Location Settings -->
+    <string name="location_adaptive_interval_title">Adaptive GNSS Interval</string>
+    <string name="location_adaptive_interval_desc">
+        Automatically adjust GPS polling interval based on movement speed.
+    </string>
+    <string name="location_stationary_detection_title">Stationary Mode Detection</string>
+    <string name="location_stationary_detection_desc">
+        Pause GPS updates when device remains stationary to save battery.
+    </string>
 </resources>

@@ -47,6 +47,7 @@ import id.my.nanclouder.nanhistory.activity.MainActivity
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.config.LocationIterationLogic
+import id.my.nanclouder.nanhistory.config.VibrateMode
 import id.my.nanclouder.nanhistory.utils.AdaptiveSamplingPolicy
 import id.my.nanclouder.nanhistory.utils.Coordinate
 import id.my.nanclouder.nanhistory.utils.LogData
@@ -59,7 +60,6 @@ import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
 import id.my.nanclouder.nanhistory.utils.history.generateEventId
 import id.my.nanclouder.nanhistory.utils.signature.generateSignature
 import id.my.nanclouder.nanhistory.utils.history.updateModifiedTime
-import id.my.nanclouder.nanhistory.utils.readableTimeHours
 import java.io.File
 import java.io.IOException
 import java.time.Duration
@@ -81,7 +81,6 @@ import id.my.nanclouder.nanhistory.utils.average
 import id.my.nanclouder.nanhistory.utils.getLocationData
 import id.my.nanclouder.nanhistory.utils.signature.EventLocationDigest
 import id.my.nanclouder.nanhistory.utils.history.LocationData
-import id.my.nanclouder.nanhistory.utils.signature.generateSignatureV1
 import id.my.nanclouder.nanhistory.utils.history.insertToDatabase
 import id.my.nanclouder.nanhistory.utils.signature.generateSignatureV2
 import id.my.nanclouder.nanhistory.utils.transportModel.TransportMode
@@ -96,7 +95,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -154,6 +153,7 @@ class RecordService : Service() {
 
     private var continueService = false
     private var eventPoint = false
+    private var isFirstLocationSampled = false
     private var restartEnabled = false
     private var maxDuration = 0
     private var startedAsIdle = false
@@ -166,7 +166,7 @@ class RecordService : Service() {
 
     // Vibration
     private var vibrateEnabled = false
-    private var vibrateEveryUpdate = false
+    private var vibrateMode = VibrateMode.SmartUpdate
     private var vibrateInterval = 5
     private var vibrateDuration = 0L
     private var lastVibrateTime = 0L
@@ -202,8 +202,10 @@ class RecordService : Service() {
     }
 
     private fun onScreenStateChanged() {
+        logService("SCREEN STATE CHANGE: $isScreenOn")
+        locationLogData.appendWithTimestamp("SCREEN STATE CHANGE: $isScreenOn")
         if (RecordState.isRecording.value && !stationaryDetector.isStationary && !eventPoint) {
-            startLocationUpdates()
+            // startLocationUpdates()
         }
         if (isScreenOn && RecordState.isRecording.value) {
             updateNotification(forceNotify = true)
@@ -662,7 +664,7 @@ class RecordService : Service() {
     private fun performVibration(doubleVibrate: Boolean = false) {
         if (!vibrateEnabled || vibrateDuration <= 0) return
 
-        if (vibrateEveryUpdate) {
+        if ((vibrateMode == VibrateMode.SmartUpdate && !isScreenOn) || vibrateMode == VibrateMode.Update) {
             val effect = VibrationEffect.createOneShot(vibrateDuration, VibrationEffect.DEFAULT_AMPLITUDE)
             val timings = longArrayOf(
                 0L,
@@ -686,7 +688,7 @@ class RecordService : Service() {
     }
 
     private fun startIntervalVibration() {
-        if (!vibrateEnabled || vibrateDuration <= 0 || vibrateEveryUpdate) return
+        if (!vibrateEnabled || vibrateDuration <= 0 || vibrateMode == VibrateMode.Interval) return
 
         vibrationJob = serviceScope.launch(Dispatchers.Main) {
             while (isActive) {
@@ -797,6 +799,8 @@ class RecordService : Service() {
         eventLocations.clear()
         locationBuffer.clear()
         iteratedLocationBuffer.clear()
+        isFirstLocationSampled = false
+        signedStr = ""
 
         validUpdates = 0
         updates = 0
@@ -830,11 +834,18 @@ class RecordService : Service() {
         accelDataFile = File(filesDir, "accelerometer_data/$time.accel")
     }
 
-    private fun startEventRecording(eventPoint: Boolean = false, eventId: String? = null, shakeToStart: Boolean = false) {
+    private fun startEventRecording(
+        eventPoint: Boolean = false,
+        eventId: String? = null,
+        shakeToStart: Boolean = false,
+        triggerSource: String? = null
+    ) {
         if (RecordState.isRecording.value && RecordState.status.value != RecordStatus.RESTARTING) {
             Log.d("RecordService", "Event recording already started and it's not a restart!")
             return
         }
+
+        RecordState.isRecording.value = true
 
         closeShakeListenWindow()
         disarmShakeMotionGate()
@@ -846,8 +857,9 @@ class RecordService : Service() {
 
         initializeRecording()
         event.metadata["shake_to_start"] = shakeToStart
+        triggerSource?.let { event.metadata["trigger_source"] = it }
 
-        updateNotification(text = "Recording Event")
+        updateNotification(text = "Recording Event", recording = true, forceNotify = true)
 
         val now = ZonedDateTime.now()
 
@@ -877,7 +889,7 @@ class RecordService : Service() {
             requestTileListeningState()
 
             vibrateEnabled = Config.recordVibrateEnabled.get(this@RecordService)
-            vibrateEveryUpdate = Config.recordVibrateEveryUpdate.get(this@RecordService)
+            vibrateMode = Config.recordVibrateMode.get(this@RecordService)
             vibrateInterval = Config.recordVibrateInterval.get(this@RecordService)
             vibrateDuration = Config.recordVibrateDuration.get(this@RecordService).toLong()
 
@@ -921,6 +933,9 @@ class RecordService : Service() {
             // Start location updates
             // Stopped from stopEventRecording
             startLocationUpdates()
+            if (!eventPoint) {
+                sampleInitialLocation()
+            }
 
             RecordState.eventId.value = event.id
 
@@ -957,14 +972,18 @@ class RecordService : Service() {
             delay(500.milliseconds)
             if (!eventPoint) RecordState.status.value = RecordStatus.RUNNING
         }
-
-        RecordState.isRecording.value = true
     }
 
     private suspend fun stopEventRecording() {
         stopIntervalVibration()
         disarmSignificantMotion()
         stationaryDetector.reset()
+
+        Log.d("RecordService", "Service [stopEventRecording]")
+        resetLocationRetry()
+
+        // Deliver all remaining locations in hardware buffer and safely unregister
+        flushLocationUpdates(fusedLocationProviderClient, locationCallback)
 
         if (!continueService) {
             RecordState.isRecording.value = false
@@ -981,36 +1000,8 @@ class RecordService : Service() {
 
         RecordState.isSaving.value = true
 
-        Log.d("RecordService", "Service [stopEventRecording]")
-        resetLocationRetry()
-        fusedLocationProviderClient.removeLocationUpdates(locationCallback)
-
         // iterateLocations()
         if (includeAudio && mediaRecorder != null) stopAudioRecording()
-
-        if (
-            event is EventRange && (
-                    Duration.between(event.time.toInstant(), Instant.now()) < Duration.ofSeconds(5)
-                            || eventPoint)
-        ) {
-            val eventData = event as EventRange
-            event = EventPoint(
-                id = eventData.id,
-                title = eventData.title,
-                description = eventData.description,
-                time = eventData.time,
-                favorite = eventData.favorite,
-                tags = eventData.tags,
-                created = eventData.created,
-                modified = eventData.modified,
-                metadata = eventData.metadata,
-                audio = eventData.audio
-            )
-        }
-
-        if (event is EventRange) {
-            (event as EventRange).end = ZonedDateTime.now()
-        }
 
         // Stop previous signature generation logic (NOPE, THIS BREAKS SIGNING SEQUENCE)
         if (signatureJob != null && signatureJob?.isActive == true) try {
@@ -1021,24 +1012,6 @@ class RecordService : Service() {
         } catch (e: Throwable) {
             Log.w("RecordService", e.message ?: "Unknown error")
             Log.w("RecordService", e.stackTraceToString())
-        }
-
-        // Add 'unnamed metadata'
-        event.metadata["unnamed"] = true
-
-        // Add detected transport mode
-        val minimumLocationCount = 3
-        if (eventLocations.size > minimumLocationCount) {
-            val models = loadCalibrationModels(applicationContext)
-            val detected = detectTransportMode(
-                history = eventLocations.getLocationData(),
-                modelMap = models,
-            )
-
-            if (detected != TransportMode.UNKNOWN) {
-                event.metadata["transport_detection_unconfirmed"] = true
-                (event as? EventRange)?.transportationType = detected.toTransportationType()
-            }
         }
 
         withContext(Dispatchers.IO) {
@@ -1057,13 +1030,56 @@ class RecordService : Service() {
             val d1 = t2.toEpochMilli() - t1.toEpochMilli()
             logService("(ITERATE_LOCATION) in stopEventRecording: ${d1}ms ${if (plusWait) "(+JOIN)" else ""}")
 
-            // TODO: new signing (done)
+            if (
+                event is EventRange && (
+                        Duration.between(event.time.toInstant(), Instant.now()) < Duration.ofSeconds(5)
+                                || eventPoint)
+            ) {
+                val eventData = event as EventRange
+                event = EventPoint(
+                    id = eventData.id,
+                    title = eventData.title,
+                    description = eventData.description,
+                    time = eventData.time,
+                    favorite = eventData.favorite,
+                    tags = eventData.tags,
+                    created = eventData.created,
+                    modified = eventData.modified,
+                    metadata = eventData.metadata,
+                    audio = eventData.audio
+                )
+            }
+
+            if (event is EventRange) {
+                (event as EventRange).end = ZonedDateTime.now()
+            }
+
+            // Add 'unnamed metadata'
+            event.metadata["unnamed"] = true
+
+            // Add detected transport mode
+            val minimumLocationCount = 3
+            if (eventLocations.size > minimumLocationCount) {
+                val models = loadCalibrationModels(applicationContext)
+                val detected = detectTransportMode(
+                    history = eventLocations.getLocationData(),
+                    modelMap = models,
+                )
+
+                if (detected != TransportMode.UNKNOWN) {
+                    event.metadata["transport_detection_unconfirmed"] = true
+                    (event as? EventRange)?.transportationType = detected.toTransportationType()
+                }
+            }
+
             // finalize signing, make sure nothing left to digest
-            if (eventLocations.isNotEmpty()) {
+            if (eventLocations.isNotEmpty() && event is EventRange) {
                 processSignature(funcLabel = "stopEventRecording", final = true)
             }
             else {
-                event.generateSignatureV1(applicationContext)
+                event.updateModifiedTime()
+                event.generateSignature(applicationContext, apply = true)
+                dao.updateEvent(event.toEventEntity())
             }
 
             // No update modified time, since it's also included in processSignature
@@ -1087,7 +1103,7 @@ class RecordService : Service() {
             wakeLock.release()
         }
 
-        delay(2000L.milliseconds)
+        delay(500L.milliseconds)
 
         // RecordState.isRunning.value is still true at this point,
         // set to false in stopRecordService()
@@ -1151,17 +1167,17 @@ class RecordService : Service() {
 
                 includeAudio = intent.getBooleanExtra("includeAudio", false)
                 startedAsIdle = intent.getBooleanExtra("startedAsIdle", false)
-
-                intent.getStringExtra("trigger_source")?.let { source ->
-                    this@RecordService.event.metadata["trigger_source"] = source
-                }
+                val triggerSource = intent.getStringExtra("trigger_source")
 
                 if (includeAudio) {
-                    startForeground(1, getNotification(notificationTitle, notificationText))
+                    startForeground(
+                        1,
+                        getNotification(notificationTitle, notificationText, recording = true)
+                    )
                 } else {
                     startForeground(
                         1,
-                        getNotification(notificationTitle, notificationText),
+                        getNotification(notificationTitle, notificationText, recording = true),
                         ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
                     )
                 }
@@ -1169,7 +1185,8 @@ class RecordService : Service() {
                 // Main logic
                 startEventRecording(
                     intent.getBooleanExtra("eventPoint", false),
-                    intent.getStringExtra("eventId")
+                    intent.getStringExtra("eventId"),
+                    triggerSource = triggerSource
                 )
             }
 
@@ -1189,21 +1206,23 @@ class RecordService : Service() {
                 } else {
                     includeAudio = intent.getBooleanExtra("includeAudio", false)
                     startedAsIdle = intent.getBooleanExtra("startedAsIdle", false)
-                    intent.getStringExtra("trigger_source")?.let { source ->
-                        this@RecordService.event.metadata["trigger_source"] = source
-                    }
+                    val triggerSource = intent.getStringExtra("trigger_source")
                     if (includeAudio) {
-                        startForeground(1, getNotification(notificationTitle, notificationText))
+                        startForeground(
+                            1,
+                            getNotification(notificationTitle, notificationText, recording = true)
+                        )
                     } else {
                         startForeground(
                             1,
-                            getNotification(notificationTitle, notificationText),
+                            getNotification(notificationTitle, notificationText, recording = true),
                             ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
                         )
                     }
                     startEventRecording(
                         intent.getBooleanExtra("eventPoint", false),
-                        intent.getStringExtra("eventId")
+                        intent.getStringExtra("eventId"),
+                        triggerSource = triggerSource
                     )
                 }
             }
@@ -1401,8 +1420,10 @@ class RecordService : Service() {
 
             Log.d("RecordService|Signature", "Digesting: --$data--")
 
-            locationDigest.update(data.encodeToByteArray())
-            signedStr += data
+            if (data.isNotEmpty()) {
+                locationDigest.update(data.encodeToByteArray())
+                signedStr += data
+            }
             digestedLocations += count
             numberOfRows = count
         }
@@ -1510,8 +1531,8 @@ class RecordService : Service() {
         val recordStatus = RecordState.status.value
 
         // (BUSY and !eventPoint) or (lower than BUSY despite everything)
-        if ((recordStatus == RecordStatus.BUSY && !eventPoint) || recordStatus < RecordStatus.BUSY) {
-            Log.w("RecordService", "locationUpdate while the status is BUSY or below")
+        if (recordStatus < RecordStatus.BUSY) {
+            Log.w("RecordService", "locationUpdate while the status is below BUSY")
             logService("UPDATE WHILE " + when (RecordState.status.value) {
                 RecordStatus.RESTARTING -> "RESTARTING"
                 RecordStatus.BUSY -> "BUSY"
@@ -1553,14 +1574,23 @@ class RecordService : Service() {
             hasValidUpdate = true
             locationRetryCount = 0
 
+            if (!isFirstLocationSampled && !eventPoint) {
+                recordMandatoryFirstLocation(location)
+                continue
+            }
+
             val speed = if (location.hasSpeed()) location.speed else null
 
             if (!eventPoint) {
-                if (adaptiveSamplingPolicy.onNewSpeed(speed)) {
+                val adaptiveEnabled = Config.locationAdaptiveIntervalEnabled.get(applicationContext)
+                val stationaryEnabled = Config.locationStationaryDetectionEnabled.get(applicationContext)
+
+                if (adaptiveEnabled && adaptiveSamplingPolicy.onNewSpeed(speed)) {
                     speedBucketChanged = true
                 }
 
                 if (
+                    stationaryEnabled &&
                     stationaryDetector.update(
                         latitude = location.latitude,
                         longitude = location.longitude,
@@ -1597,6 +1627,10 @@ class RecordService : Service() {
                     locationBuffer.clear()
 
                     stopEventRecording()
+                    if (!shakeToStartEnabled || !startedAsIdle)
+                        stopRecordService()
+                    else
+                        showIdleNotification()
                 }
                 return
             }
@@ -1830,192 +1864,196 @@ class RecordService : Service() {
     }
 
     private suspend fun iterateLocations(final: Boolean = false) = withContext(Dispatchers.IO) {
+        if (!::event.isInitialized) return@withContext
         val minimumDistance = Config.locationMinimumDistance.get(applicationContext)
 
         val appendToLog = { text: String ->
             iterationLogData.appendWithTimestamp(text)
         }
 
-        if (event is EventRange) {
-            // val coordinateMap: MutableMap<ZonedDateTime, Coordinate> = mutableMapOf()
-            var prevLocation: Location? = null
+        // val coordinateMap: MutableMap<ZonedDateTime, Coordinate> = mutableMapOf()
+        var prevLocation: Location? = eventLocations.lastOrNull()?.let { last ->
+            Location("prev").apply {
+                longitude = last.location.longitude
+                latitude = last.location.latitude
+                time = last.time.toInstant().toEpochMilli()
+            }
+        }
 
-            // Start from 5 updates before last iteration
-            val startIndex = maxOf(0, lastIterationIndex - 5)
-            var currentIndex = 0
+        // Start from 5 updates before last iteration
+        val startIndex = maxOf(0, lastIterationIndex - 5)
+        var currentIndex = 0
 
-            // take from sorted locationBuffer
-            val currentBuffer = locationBuffer.toList().sortedBy { it.time }
+        // take from sorted locationBuffer
+        val currentBuffer = locationBuffer.toList().sortedBy { it.time }
 
-            Log.d("RecordService", "Iterating from $startIndex to ${eventLocations.size} (${currentBuffer.size})")
-            appendToLog("ITERATE 0 - ${locationBuffer.size.toString().padStart(4)} (${currentBuffer.size})")
+        Log.d("RecordService", "Iterating from $startIndex to ${eventLocations.size} (${currentBuffer.size})")
+        appendToLog("ITERATE 0 - ${locationBuffer.size.toString().padStart(4)} (${currentBuffer.size})")
 
-            // TODO: unused
-            lastIterationIndex = eventLocations.size - 1
+        // TODO: unused
+        lastIterationIndex = eventLocations.size - 1
 
-            // Iterate-remove (2 steps)
+        // Iterate-remove (2 steps)
 
-            for ((index, item) in currentBuffer.withIndex()) {
-                val currentLocation = Location("current").apply {
-                    longitude = item.location.longitude
-                    latitude = item.location.latitude
-                    time = item.time.toInstant().toEpochMilli()
-                }
+        for ((index, item) in currentBuffer.withIndex()) {
+            val currentLocation = Location("current").apply {
+                longitude = item.location.longitude
+                latitude = item.location.latitude
+                time = item.time.toInstant().toEpochMilli()
+            }
 
-                if (prevLocation != null) {
+            if (prevLocation != null) {
 
-                    val check = when (RecordState.currentLogic.value) {
-                        // Legacy Logic (only look behind and time)
-                        // Cons: One direction check making it less accurate
-                        LocationIterationLogic.Legacy -> {
-                            val time = currentLocation.time.compareTo(prevLocation.time)
-                            val distance = currentLocation.distanceTo(prevLocation)
-                            (!(distance < minimumDistance && time < 900_000L)).apply {
+                val check = when (RecordState.currentLogic.value) {
+                    // Legacy Logic (only look behind and time)
+                    // Cons: One direction check making it less accurate
+                    LocationIterationLogic.Legacy -> {
+                        val time = currentLocation.time.compareTo(prevLocation.time)
+                        val distance = currentLocation.distanceTo(prevLocation)
+                        (!(distance < minimumDistance && time < 900_000L)).apply {
+                            if (!this) {
+                                appendToLog(
+                                    "REMOVE ${
+                                        DateTimeFormatter.ofPattern("HH:mm:ss").format(item.time)
+                                    } BUFFER_SIZE: ${
+                                        locationBuffer.size.toString().padStart(3)
+                                    } DIST: ${
+                                        distance.roundToInt().toString().padStart(4)
+                                    } TIME: $time"
+                                )
+                            }
+                        }
+                    }
+
+                    // LookBehindAhead_v1 (compare distance index behind and ahead)
+                    // Pros: Two directions check for better accuracy
+                    LocationIterationLogic.LookBehindAhead_v1 -> {
+                        val distanceBehind = currentLocation.distanceTo(prevLocation)
+                        val distanceAhead = currentBuffer.getOrNull(index + 1)?.let {
+                            val aheadLocation = Location("ahead").apply {
+                                longitude = it.location.longitude
+                                latitude = it.location.latitude
+                                time = it.time.toInstant().toEpochMilli()
+                            }
+                            currentLocation.distanceTo(aheadLocation)
+                        }
+
+                        // At least one of behind or ahead distance satisfies the minimum distance
+                        if (distanceAhead != null) {
+                            (distanceBehind >= minimumDistance || distanceAhead >= minimumDistance).apply {
                                 if (!this) {
                                     appendToLog(
                                         "REMOVE ${
                                             DateTimeFormatter.ofPattern("HH:mm:ss").format(item.time)
                                         } BUFFER_SIZE: ${
                                             locationBuffer.size.toString().padStart(3)
-                                        } DIST: ${
-                                            distance.roundToInt().toString().padStart(4)
-                                        } TIME: $time"
+                                        } BEHIND: ${
+                                            distanceBehind.roundToInt().toString().padStart(4)
+                                        } AHEAD: ${
+                                            distanceAhead.roundToInt().toString().padStart(4)
+                                        }"
                                     )
                                 }
                             }
                         }
-
-                        // LookBehindAhead_v1 (compare distance index behind and ahead)
-                        // Pros: Two directions check for better accuracy
-                        LocationIterationLogic.LookBehindAhead_v1 -> {
-                            val distanceBehind = currentLocation.distanceTo(prevLocation)
-                            val distanceAhead = currentBuffer.getOrNull(index + 1)?.let {
-                                val aheadLocation = Location("ahead").apply {
-                                    longitude = it.location.longitude
-                                    latitude = it.location.latitude
-                                    time = it.time.toInstant().toEpochMilli()
-                                }
-                                currentLocation.distanceTo(aheadLocation)
-                            }
-
-                            // At least one of behind or ahead distance satisfies the minimum distance
-                            if (distanceAhead != null) {
-                                (distanceBehind >= minimumDistance || distanceAhead >= minimumDistance).apply {
-                                    if (!this) {
-                                        appendToLog(
-                                            "REMOVE ${
-                                                DateTimeFormatter.ofPattern("HH:mm:ss").format(item.time)
-                                            } BUFFER_SIZE: ${
-                                                locationBuffer.size.toString().padStart(3)
-                                            } BEHIND: ${
-                                                distanceBehind.roundToInt().toString().padStart(4)
-                                            } AHEAD: ${
-                                                distanceAhead.roundToInt().toString().padStart(4)
-                                            }"
-                                        )
-                                    }
-                                }
-                            }
-                            else true // If this the last location, then keep it
-                        }
-                        else -> false // None of them -> no location will be saved
+                        else true // If this the last location, then keep it
                     }
-
-
-                    // Remove key if it's too close to the previous location
-                    if (!check) {
-                        locationBuffer.remove(item)
-                        // In Phase 4, points are not written to Room until graduation,
-                        // so no dao.deleteLocation is required.
-                        lastIterationIndex--
-                        Log.d(
-                            "RecordService",
-                            "Location doesn't satisfy condition, dropped $item (lastIteration: $lastIterationIndex)"
-                        )
-                        continue
-                    }
+                    else -> false // None of them -> no location will be saved
                 }
-                prevLocation = currentLocation
-                // coordinateMap[key] = eventLocations[key]!!
-                currentIndex++
-            }
 
-            // // Iterate-buffer-replace
-            // // This system has been replaced by iterate-remove system
-            // eventLocations.clear()
-            // for (key in coordinateMap.keys) {
-            //     eventLocations[key] = coordinateMap[key]!!
-            // }
 
-            // 000000000A-----------
-            // ---------B00000000000
-            //          ^ drop to prevent overlap
-
-            val moved = locationBuffer.let {
-                // Move all if it's final iteration
-                if (final) it
-                // Move processed buffer (except for the last 5 items for re-iteration)
-                else it.dropLast(5)
-            }
-
-            if (!final) {
-                locationBuffer.removeAll(moved.dropLast(1))  // Keep the last one (A)
-            }
-            else {
-                locationBuffer.clear()
-            }
-
-            if ((eventLocations.size + iteratedLocationBuffer.size) > 0 && !final) {
-                iteratedLocationBuffer.addAll(moved.drop(1)) // Exclude the overlap (B) (only if location still empty)
-            }
-            else {
-                iteratedLocationBuffer.addAll(moved)
-            }
-
-            appendToLog(
-                "MOVED ${
-                    max(moved.size - 1, 0).toString().padStart(3)
-                } (BUFFER_SIZE: ${
-                    locationBuffer.size.toString().padStart(3)
-                } ITERATED_BUFFER: ${
-                    iteratedLocationBuffer.size.toString().padStart(3)
-                })"
-            )
-
-            iterationLogData.save(this@RecordService)
-
-            // Batch insert graduated location data into database
-            if (iteratedLocationBuffer.isNotEmpty()) {
-                val entities = iteratedLocationBuffer.map { it.toLocationEntity(event.id) }
-                dao.insertLocations(entities)
-                val currentEventData = event
-                if (currentEventData is EventRange) {
-                    currentEventData.end = ZonedDateTime.now()
-                    dao.updateEvent(currentEventData.toEventEntity())
+                // Remove key if it's too close to the previous location
+                if (!check) {
+                    locationBuffer.remove(item)
+                    // In Phase 4, points are not written to Room until graduation,
+                    // so no dao.deleteLocation is required.
+                    lastIterationIndex--
+                    Log.d(
+                        "RecordService",
+                        "Location doesn't satisfy condition, dropped $item (lastIteration: $lastIterationIndex)"
+                    )
+                    continue
                 }
             }
+            prevLocation = currentLocation
+            // coordinateMap[key] = eventLocations[key]!!
+            currentIndex++
+        }
 
-            // Append to main location list
-            eventLocations.addAll(iteratedLocationBuffer)
+        // // Iterate-buffer-replace
+        // // This system has been replaced by iterate-remove system
+        // eventLocations.clear()
+        // for (key in coordinateMap.keys) {
+        //     eventLocations[key] = coordinateMap[key]!!
+        // }
 
-            // I forgot that if `final` was true, it skipped the signature processing
-            // when this was still running
-            if (final && signatureJob?.isActive == true) {
-                signatureJob?.join()
+        // 000000000A-----------
+        // ---------B00000000000
+        //          ^ drop to prevent overlap
+
+        val moved = if (final) {
+            locationBuffer.toList()
+        } else {
+            locationBuffer.dropLast(5)
+        }
+
+        if (!final) {
+            locationBuffer.removeAll(moved.dropLast(1))  // Keep the last one (A)
+        }
+        else {
+            locationBuffer.clear()
+        }
+
+        if ((eventLocations.size + iteratedLocationBuffer.size) > 0 && !final) {
+            iteratedLocationBuffer.addAll(moved.drop(1)) // Exclude the overlap (B) (only if location still empty)
+        }
+        else {
+            iteratedLocationBuffer.addAll(moved)
+        }
+
+        appendToLog(
+            "MOVED ${
+                max(moved.size - 1, 0).toString().padStart(3)
+            } (BUFFER_SIZE: ${
+                locationBuffer.size.toString().padStart(3)
+            } ITERATED_BUFFER: ${
+                iteratedLocationBuffer.size.toString().padStart(3)
+            })"
+        )
+
+        iterationLogData.save(this@RecordService)
+
+        // Batch insert graduated location data into database
+        if (iteratedLocationBuffer.isNotEmpty()) {
+            val entities = iteratedLocationBuffer.map { it.toLocationEntity(event.id) }
+            dao.insertLocations(entities)
+            val currentEventData = event
+            if (currentEventData is EventRange) {
+                currentEventData.end = ZonedDateTime.now()
             }
+            dao.updateEvent(currentEventData.toEventEntity())
+        }
 
+        // Append to main location list
+        eventLocations.addAll(iteratedLocationBuffer)
+
+        if (final && signatureJob?.isActive == true) {
+            signatureJob?.join()
+        }
+
+        if (!final) {
             signatureJob = signatureJob ?: serviceScope.launch {
                 processSignature(
                     funcLabel = "iterateLocations",
-                    final // << this was the culprit that I've missed
+                    final = false
                 )
                 signatureJob = null
             }
-
-            // Clear iterated location buffer
-            iteratedLocationBuffer.clear()
-            updateNotification()
         }
+
+        // Clear iterated location buffer
+        iteratedLocationBuffer.clear()
+        updateNotification()
     }
 
     private fun getNotification(
@@ -2154,7 +2192,84 @@ class RecordService : Service() {
         }
     }
 
+    private fun sampleInitialLocation() {
+        if (
+            checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+
+        fusedLocationProviderClient.lastLocation.addOnSuccessListener { loc ->
+            if (loc != null && RecordState.isRecording.value && !isFirstLocationSampled) {
+                val ageMs = System.currentTimeMillis() - loc.time
+                // If lastLocation is recent (< 2 minutes old), use it immediately
+                if (ageMs < 2 * 60 * 1000L) {
+                    recordMandatoryFirstLocation(loc)
+                } else {
+                    requestImmediateFreshLocation()
+                }
+            } else if (!isFirstLocationSampled && RecordState.isRecording.value) {
+                requestImmediateFreshLocation()
+            }
+        }.addOnFailureListener {
+            requestImmediateFreshLocation()
+        }
+    }
+
+    private fun requestImmediateFreshLocation() {
+        if (
+            checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+
+        try {
+            fusedLocationProviderClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                .addOnSuccessListener { currentLoc ->
+                    if (currentLoc != null && RecordState.isRecording.value && !isFirstLocationSampled) {
+                        recordMandatoryFirstLocation(currentLoc)
+                    }
+                }
+        } catch (e: Exception) {
+            Log.d("RecordService", "getCurrentLocation error: ${e.message}")
+        }
+    }
+
+    private fun recordMandatoryFirstLocation(location: Location) {
+        if (isFirstLocationSampled || !RecordState.isRecording.value) return
+        if (location.latitude == 0.0 && location.longitude == 0.0) return
+
+        isFirstLocationSampled = true
+        Log.d("RecordService", "Mandatory first location sampled: ${location.latitude}, ${location.longitude}")
+
+        val time = ZonedDateTime.now()
+
+        val newLocationData = LocationData(
+            time = time,
+            location = Coordinate(location.latitude, location.longitude),
+            speed = if (location.hasSpeed()) location.speed else null,
+            bearing = if (location.hasBearing()) location.bearing else null,
+            altitude = if (location.hasAltitude()) location.altitude else null,
+            accuracy = if (location.hasAccuracy()) location.accuracy else null,
+            speedAccuracy = if (location.hasSpeedAccuracy()) location.speedAccuracyMetersPerSecond else null,
+            bearingAccuracy = if (location.hasBearingAccuracy()) location.bearingAccuracyDegrees else null,
+            verticalAccuracy = if (location.hasVerticalAccuracy()) location.verticalAccuracyMeters else null
+        )
+
+        serviceScope.launch(Dispatchers.IO) {
+            dao.insertLocation(newLocationData.toLocationEntity(event.id))
+            eventLocations.add(newLocationData)
+            validUpdates = maxOf(validUpdates, 1)
+            updates = maxOf(updates, 1)
+            updateNotification()
+        }
+    }
+
     private fun startLocationUpdates() {
+        val minimumDistance = Config.locationMinimumDistance.get(applicationContext)
+
         if (
             checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED
@@ -2171,8 +2286,22 @@ class RecordService : Service() {
 
         Log.d("RecordService", "Requesting location updates (retry attempt: $locationRetryCount)")
 
-        val intervalMs = if (eventPoint) 1000L else adaptiveSamplingPolicy.getRequestInterval()
-        val maxDelayMs = if (eventPoint) 0L else adaptiveSamplingPolicy.getMaxUpdateDelay(isScreenOn)
+        val adaptiveEnabled = Config.locationAdaptiveIntervalEnabled.get(applicationContext)
+        val intervalMs = if (eventPoint) {
+            1000L
+        } else if (adaptiveEnabled) {
+            adaptiveSamplingPolicy.getRequestInterval()
+        } else {
+            (Config.locationUpdateInterval.get(applicationContext) * 1000L).coerceAtLeast(1000L)
+        }
+
+        val maxDelayMs = if (eventPoint) {
+            0L
+        } else if (adaptiveEnabled) {
+            adaptiveSamplingPolicy.getMaxUpdateDelay(isScreenOn)
+        } else {
+            60_000L
+        }
 
         val locationRequest = LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
@@ -2182,7 +2311,7 @@ class RecordService : Service() {
                 setMaxUpdateDelayMillis(maxDelayMs)
             }
             setMinUpdateIntervalMillis(intervalMs / 2)
-            setMinUpdateDistanceMeters(5f)
+            setMinUpdateDistanceMeters(minimumDistance.toFloat())
         }.build()
 
         locationTaskHandled = false
@@ -2229,11 +2358,38 @@ class RecordService : Service() {
         }
     }
 
+    private suspend fun flushLocationUpdates(
+        client: FusedLocationProviderClient,
+        callback: LocationCallback
+    ) {
+        try {
+            // 1. Deliver all remaining locations in the hardware buffer to `callback`
+            if (
+                checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                logService("LOCATION FLUSH")
+                locationLogData.appendWithTimestamp("LOCATION FLUSH")
+                locationLogData.save(applicationContext)
+                client.flushLocations().await()
+            }
+        } catch (e: Exception) {
+            Log.w("RecordService", "Failed to flush locations: ${e.message}")
+        } finally {
+            // 2. Safely unregister the callback without losing the tail end of the route
+            try {
+                client.removeLocationUpdates(callback).await()
+            } catch (e: Exception) {
+                Log.w("RecordService", "Failed to remove location updates: ${e.message}")
+            }
+        }
+    }
+
     private fun enterStationaryMode() {
         if (!RecordState.isRecording.value) return
         Log.d("RecordService", "Stationary state detected! Pausing GNSS...")
-        fusedLocationProviderClient.removeLocationUpdates(locationCallback)
         serviceScope.launch {
+            flushLocationUpdates(fusedLocationProviderClient, locationCallback)
             iterateLocations()
         }
 
@@ -2245,7 +2401,7 @@ class RecordService : Service() {
         } else {
             // Fallback: poll after 90 seconds if hardware trigger is absent
             serviceScope.launch {
-                delay(90_000L)
+                delay(90.seconds)
                 if (stationaryDetector.isStationary && RecordState.isRecording.value) {
                     resumeFromStationary()
                 }

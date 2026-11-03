@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
@@ -73,6 +72,8 @@ import java.util.concurrent.Executors
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.iterator
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -265,23 +266,26 @@ fun EventList(
 
                     @Composable
                     fun AddNextToEventButton(
-                        isPrevious: Boolean
+                        before: Boolean
                     ) {
-                        Row(
-                            horizontalArrangement = Arrangement.Start,
+                        TextButton(
                             modifier = Modifier
-                                .padding(8.dp)
+                                .fillMaxWidth(),
+                            onClick = {
+                                val intent = Intent(context, EditEventActivity::class.java)
+                                intent.putExtra(
+                                    if (!before) "previousEventOf" else "nextEventOf",
+                                    event.id
+                                )
+                                selectionState.reset()
+                                context.startActivity(intent)
+                            }
                         ) {
-                            TextButton(
-                                onClick = {
-                                    val intent = Intent(context, EditEventActivity::class.java)
-                                    intent.putExtra(
-                                        if (isPrevious) "previousEventOf" else "nextEventOf",
-                                        event.id
-                                    )
-                                    selectionState.reset()
-                                    context.startActivity(intent)
-                                }
+                            Row(
+                                horizontalArrangement = Arrangement.Start,
+                                modifier = Modifier
+                                    .padding(8.dp)
+                                    .fillMaxWidth()
                             ) {
                                 Icon(Icons.Rounded.Add, "Add Event")
                                 Box(Modifier.width(8.dp))
@@ -290,8 +294,18 @@ fun EventList(
                         }
                     }
 
+                    val showNewEventButton = selectedItems.size == 1 && isSelected
+                    var showNewEventButtonDebounced by remember { mutableStateOf(false) }
+
+                    LaunchedEffect(showNewEventButton) {
+                        if (showNewEventButton) {
+                            delay(1.seconds)
+                        }
+                        showNewEventButtonDebounced = showNewEventButton
+                    }
+
                     AnimatedVisibility(
-                        visible = selectedItems.size == 1 && isSelected,
+                        visible = showNewEventButtonDebounced,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         AddNextToEventButton(true)
@@ -373,7 +387,7 @@ fun EventList(
                     )
 
                     AnimatedVisibility(
-                        visible = selectedItems.size == 1 && isSelected,
+                        visible = showNewEventButtonDebounced,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         AddNextToEventButton(false)

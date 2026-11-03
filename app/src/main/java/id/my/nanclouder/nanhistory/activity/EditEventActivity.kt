@@ -106,16 +106,19 @@ class EditEventActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             NanHistoryTheme {
-                EditEventView(eventId)
+                val previousEventOf = intent.getStringExtra("previousEventOf")
+                val nextEventOf = intent.getStringExtra("nextEventOf")
+
+                EditEventView(eventId, previousEventOf, nextEventOf)
             }
         }
     }
 }
 
 @Composable
-fun EditEventView(eventId: String?) {
+fun EditEventView(eventId: String?, previousEventOf: String?, nextEventOf: String?) {
     val useOldUi = Config.appearanceOldUi.getCache()
-    if (!useOldUi) EditEventView_New(eventId)
+    if (!useOldUi) EditEventView_New(eventId, previousEventOf, nextEventOf)
     else EditEventView_Old(eventId)
 }
 
@@ -553,7 +556,7 @@ fun EditEventView_Old(eventId: String?) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EditEventView_New(eventId: String?) {
+fun EditEventView_New(eventId: String?, previousEventOf: String?, nextEventOf: String?) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
@@ -566,6 +569,11 @@ fun EditEventView_New(eventId: String?) {
 
     val addMode = eventId == null
 
+    var siblingEventsLoaded by rememberSaveable { mutableStateOf(false) }
+    val needToLoadSibling = previousEventOf != null || nextEventOf != null
+
+    val isLoading = (!addMode && oldEvent == null) || (needToLoadSibling && !siblingEventsLoaded)
+
     var titleIconClicked by remember { mutableIntStateOf(0) }
 
     var datePickerIsOpened by rememberSaveable { mutableStateOf(false) }
@@ -576,10 +584,40 @@ fun EditEventView_New(eventId: String?) {
 
     var invalidSignatureWarning by remember { mutableStateOf(false) }
 
+    var startTimeFromSibling by remember { mutableStateOf<ZonedDateTime?>(null) }
+    var endTimeFromSibling by remember { mutableStateOf<ZonedDateTime?>(null) }
+
     LaunchedEffect(titleIconClicked) {
         if (titleIconClicked == 10) {
             Toast.makeText(context, "Blank title enabled", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    LaunchedEffect(previousEventOf, nextEventOf) {
+        if (!needToLoadSibling) {
+            return@LaunchedEffect
+        }
+
+        lateinit var firstSiblingTime: ZonedDateTime
+        lateinit var secondSiblingTime: ZonedDateTime
+
+        if (previousEventOf != null) {
+            val firstSibling = dao.getPreviousEvent(previousEventOf)
+            firstSiblingTime = firstSibling?.end ?: firstSibling?.time ?: ZonedDateTime.now()
+            val secondSibling = dao.getEventById(previousEventOf)
+            secondSiblingTime = secondSibling?.event?.time ?: ZonedDateTime.now()
+        }
+        if (nextEventOf != null) {
+            val firstSibling = dao.getNextEvent(nextEventOf)
+            firstSiblingTime = firstSibling?.time ?: ZonedDateTime.now()
+            val secondSibling = dao.getEventById(nextEventOf)
+            secondSiblingTime = secondSibling?.event?.end ?: secondSibling?.event?.time ?: ZonedDateTime.now()
+        }
+
+        startTimeFromSibling = if (firstSiblingTime < secondSiblingTime) firstSiblingTime else secondSiblingTime
+        endTimeFromSibling = if (firstSiblingTime > secondSiblingTime) firstSiblingTime else secondSiblingTime
+
+        siblingEventsLoaded = true
     }
 
     val saveEvent = {
@@ -632,7 +670,7 @@ fun EditEventView_New(eventId: String?) {
         }
     }
 
-    if (!addMode && oldEvent == null) Scaffold(
+    if (isLoading) Scaffold(
         topBar = {
             TopAppBar(
                 title = {
@@ -655,14 +693,14 @@ fun EditEventView_New(eventId: String?) {
             } ?: ""
         ) }
         var eventDescription by rememberSaveable { mutableStateOf(oldEvent?.description ?: "") }
-        var rangeEvent by rememberSaveable { mutableStateOf(oldEvent is EventRange) }
-        var time by rememberSaveable { mutableStateOf(oldEvent?.time ?: ZonedDateTime.now()) }
+        var rangeEvent by rememberSaveable { mutableStateOf(oldEvent is EventRange || (startTimeFromSibling != null && endTimeFromSibling != null)) }
+        var time by rememberSaveable { mutableStateOf(oldEvent?.time ?: startTimeFromSibling ?: ZonedDateTime.now()) }
 
         val castedEvent = oldEvent as? EventRange
 
         var timeEnd by rememberSaveable {
             mutableStateOf(
-                castedEvent?.end ?: ZonedDateTime.now()
+                castedEvent?.end ?: endTimeFromSibling ?: ZonedDateTime.now()
             )
         }
         var transportationType by rememberSaveable {
@@ -1274,7 +1312,7 @@ private fun FormattingGuideItem(syntax: String, description: String) {
 @Composable
 fun EditEventPreview() {
     NanHistoryTheme {
-        EditEventView("")
+        EditEventView(eventId = null, previousEventOf = null, nextEventOf = null)
     }
 }
 
