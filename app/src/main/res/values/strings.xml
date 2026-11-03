@@ -123,4 +123,25 @@
     <string name="corridor_cache_cleared">Corridor cache cleared</string>
     <string name="clear">Clear</string>
     <string name="cancel">Cancel</string>
+
+    <!-- Phase 5 Trigger Settings -->
+    <string name="category_activity_recognition">Activity Recognition</string>
+    <string name="auto_record_activity_title">Automatic Activity Recording</string>
+    <string name="auto_record_activity_desc">Automatically start recording when vehicle, bicycle, or running motion is detected.</string>
+    <string name="auto_record_still_stop_title">Auto-Stop on Stillness</string>
+    <string name="auto_record_still_stop_desc">Automatically stop and finalize recording when motionless state persists.</string>
+    <string name="auto_record_still_timeout_title">Stillness Grace Period</string>
+    <string name="auto_record_still_timeout_desc">Duration device must remain completely still before auto-stopping recording.</string>
+    <string name="activity_recognition_permission_required">Activity Recognition permission is required for automatic recording.</string>
+
+    <string name="shake_sigmotion_gate_title">Sensor-Hub Motion Gating</string>
+    <string name="shake_sigmotion_gate_desc">Keep accelerometer powered down until significant motion is detected for zero idle drain.</string>
+    <string name="shake_listen_window_title">Shake Listen Window</string>
+    <string name="shake_listen_window_desc">Duration accelerometer remains active to detect shake after motion wake-up.</string>
+
+    <string name="category_external_automation">External Automation</string>
+    <string name="external_automation_title">Enable Automation Receiver</string>
+    <string name="external_automation_desc">Allow external apps (Tasker, Quick Tap) to start, stop, or toggle recording via broadcast.</string>
+    <string name="external_automation_passkey_title">Automation Passkey</string>
+    <string name="external_automation_passkey_desc">Optional security passkey required in extra_passkey intent extra.</string>
 </resources>

@@ -18,6 +18,7 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.BODY_SENSORS" />
     <uses-permission android:name="android.permission.BODY_SENSORS_BACKGROUND" />
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
 
     <queries>
         <intent>
@@ -205,6 +206,20 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <receiver
+            android:name=".receiver.ActivityTransitionReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".receiver.RecordAutomationReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="id.my.nanclouder.nanhistory.action.START_RECORDING" />
+                <action android:name="id.my.nanclouder.nanhistory.action.STOP_RECORDING" />
+                <action android:name="id.my.nanclouder.nanhistory.action.TOGGLE_RECORDING" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

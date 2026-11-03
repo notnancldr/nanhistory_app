@@ -109,9 +109,12 @@ class RecordService : Service() {
 
         const val ACTION_RECORD_START = "RECORD_START"
         const val ACTION_RECORD_STOP = "RECORD_STOP"
+        const val ACTION_RECORD_TOGGLE = "RECORD_TOGGLE"
         const val ACTION_SERVICE_IDLE = "SERVICE_IDLE"
         const val ACTION_SERVICE_RESTART = "SERVICE_RESTART"
         const val ACTION_SERVICE_STOP = "SERVICE_STOP"
+        const val ACTION_STILL_ENTER = "STILL_ENTER"
+        const val ACTION_STILL_EXIT = "STILL_EXIT"
     }
 
     object RecordState {
@@ -212,6 +215,19 @@ class RecordService : Service() {
             serviceScope.launch {
                 resumeFromStationary()
             }
+        }
+    }
+
+    private var isShakeMotionArmed = false
+    private var isAccelerometerRegistered = false
+    private var shakeListenWindowJob: Job? = null
+    private var stillGraceJob: Job? = null
+
+    private val shakeMotionTrigger = object : TriggerEventListener() {
+        override fun onTrigger(event: TriggerEvent?) {
+            isShakeMotionArmed = false
+            Log.d("RecordService", "Significant motion detected in idle, opening shake window")
+            openShakeListenWindow()
         }
     }
 
@@ -506,6 +522,67 @@ class RecordService : Service() {
         }
     }
 
+    private fun armShakeMotionGate() {
+        if (!shakeDetectionEnabled || RecordState.isRecording.value) return
+        if (significantMotionSensor == null || isShakeMotionArmed) return
+        isShakeMotionArmed = sensorManager.requestTriggerSensor(shakeMotionTrigger, significantMotionSensor)
+        Log.d("RecordService", "Shake significant motion gate armed: $isShakeMotionArmed")
+    }
+
+    private fun disarmShakeMotionGate() {
+        if (isShakeMotionArmed && significantMotionSensor != null) {
+            try {
+                sensorManager.cancelTriggerSensor(shakeMotionTrigger, significantMotionSensor)
+            } catch (e: Exception) {
+                Log.w("RecordService", "Error cancelling shake trigger: ${e.message}")
+            }
+            isShakeMotionArmed = false
+        }
+    }
+
+    private fun registerAccelerometerForShake() {
+        if (isAccelerometerRegistered || accelerometerSensor == null) return
+        sensorManager.registerListener(
+            sensorEventListener,
+            accelerometerSensor,
+            SensorManager.SENSOR_DELAY_UI,
+            3_000_000
+        )
+        isAccelerometerRegistered = true
+        Log.d("RecordService", "Accelerometer registered for shake detection")
+    }
+
+    private fun unregisterAccelerometerForShake() {
+        if (!isAccelerometerRegistered) return
+        try {
+            sensorManager.unregisterListener(sensorEventListener, accelerometerSensor)
+        } catch (e: Exception) {
+            Log.w("RecordService", "Error unregistering accel: ${e.message}")
+        }
+        isAccelerometerRegistered = false
+        Log.d("RecordService", "Accelerometer unregistered for shake detection")
+    }
+
+    private fun openShakeListenWindow() {
+        if (!shakeDetectionEnabled || RecordState.isRecording.value) return
+        registerAccelerometerForShake()
+        val windowSeconds = Config.shakeListenWindowDuration.get(applicationContext)
+        shakeListenWindowJob?.cancel()
+        shakeListenWindowJob = serviceScope.launch {
+            delay(windowSeconds * 1000L)
+            closeShakeListenWindow()
+        }
+    }
+
+    private fun closeShakeListenWindow() {
+        shakeListenWindowJob?.cancel()
+        shakeListenWindowJob = null
+        if (!RecordState.isRecording.value && RecordState.status.value == RecordStatus.IDLE) {
+            unregisterAccelerometerForShake()
+            armShakeMotionGate()
+        }
+    }
+
     private fun startShakeDetection() {
         // Check if shake detection is already initialized
         if (shakeDetectionRegistered)
@@ -545,22 +622,25 @@ class RecordService : Service() {
                     "minDirectionChanges=${shakeDetector.minDirectionChanges}"
         )
 
-        // Register wake-up accelerometer with hardware batching (3s FIFO latency)
-        sensorManager.registerListener(
-            sensorEventListener,
-            accelerometerSensor,
-            SensorManager.SENSOR_DELAY_UI,
-            3_000_000
-        )
+        val gatingEnabled = Config.shakeSignificantMotionGateEnabled.get(applicationContext)
+        if (gatingEnabled && significantMotionSensor != null && !RecordState.isRecording.value) {
+            armShakeMotionGate()
+            Log.d("RecordService", "Shake detection started with sensor-hub motion gating (Tier 2)")
+        } else {
+            registerAccelerometerForShake()
+            Log.d("RecordService", "Shake detection started with continuous accelerometer")
+        }
 
-        Log.d("RecordService", "Shake detection started successfully (Stage 1)")
         shakeDetectionRegistered = true
     }
 
     private fun stopShakeDetection() {
         try {
+            shakeListenWindowJob?.cancel()
+            shakeListenWindowJob = null
+            disarmShakeMotionGate()
             stopGyroConfirmation()
-            sensorManager.unregisterListener(sensorEventListener)
+            unregisterAccelerometerForShake()
             shakeDetector.reset()
             hasAccelData = false
             hasGyroData = false
@@ -745,6 +825,14 @@ class RecordService : Service() {
         if (RecordState.isRecording.value && RecordState.status.value != RecordStatus.RESTARTING) {
             Log.d("RecordService", "Event recording already started and it's not a restart!")
             return
+        }
+
+        closeShakeListenWindow()
+        disarmShakeMotionGate()
+        stillGraceJob?.cancel()
+        stillGraceJob = null
+        if (shakeDetectionEnabled) {
+            registerAccelerometerForShake()
         }
 
         initializeRecording()
@@ -1047,13 +1135,26 @@ class RecordService : Service() {
             // Start event recording
             ACTION_RECORD_START -> {
                 Log.d("RecordService", "ACTION: ACTION_RECORD_START")
+                if (RecordState.isRecording.value) {
+                    Log.d("RecordService", "Recording already active, duplicate start ignored")
+                    return
+                }
+
                 includeAudio = intent.getBooleanExtra("includeAudio", false)
                 startedAsIdle = intent.getBooleanExtra("startedAsIdle", false)
+
+                intent.getStringExtra("trigger_source")?.let { source ->
+                    this@RecordService.event.metadata["trigger_source"] = source
+                }
 
                 if (includeAudio) {
                     startForeground(1, getNotification(notificationTitle, notificationText))
                 } else {
-                    startForeground(1, getNotification(notificationTitle, notificationText), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+                    startForeground(
+                        1,
+                        getNotification(notificationTitle, notificationText),
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                    )
                 }
 
                 // Main logic
@@ -1061,6 +1162,69 @@ class RecordService : Service() {
                     intent.getBooleanExtra("eventPoint", false),
                     intent.getStringExtra("eventId")
                 )
+            }
+
+            // Toggle event recording
+            ACTION_RECORD_TOGGLE -> {
+                Log.d("RecordService", "ACTION: ACTION_RECORD_TOGGLE")
+                if (RecordState.isRecording.value) {
+                    RecordState.status.value = RecordStatus.BUSY
+                    requestTileListeningState()
+                    serviceScope.launch {
+                        stopEventRecording()
+                        if (!shakeToStartEnabled || !startedAsIdle)
+                            stopRecordService()
+                        else
+                            showIdleNotification()
+                    }
+                } else {
+                    includeAudio = intent.getBooleanExtra("includeAudio", false)
+                    startedAsIdle = intent.getBooleanExtra("startedAsIdle", false)
+                    intent.getStringExtra("trigger_source")?.let { source ->
+                        this@RecordService.event.metadata["trigger_source"] = source
+                    }
+                    if (includeAudio) {
+                        startForeground(1, getNotification(notificationTitle, notificationText))
+                    } else {
+                        startForeground(
+                            1,
+                            getNotification(notificationTitle, notificationText),
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                        )
+                    }
+                    startEventRecording(
+                        intent.getBooleanExtra("eventPoint", false),
+                        intent.getStringExtra("eventId")
+                    )
+                }
+            }
+
+            // Stillness detected by Activity Recognition
+            ACTION_STILL_ENTER -> {
+                Log.d("RecordService", "ACTION: ACTION_STILL_ENTER")
+                if (RecordState.isRecording.value && Config.autoRecordStillAutoStop.get(this)) {
+                    val timeoutSeconds = Config.autoRecordStillTimeout.get(this)
+                    Log.d("RecordService", "Scheduling still auto-stop in ${timeoutSeconds}s")
+                    stillGraceJob?.cancel()
+                    stillGraceJob = serviceScope.launch {
+                        delay(timeoutSeconds * 1000L)
+                        if (RecordState.isRecording.value) {
+                            Log.d("RecordService", "Still grace period expired, auto-stopping recording...")
+                            stopEventRecording()
+                            if (!shakeToStartEnabled || !startedAsIdle)
+                                stopRecordService()
+                            else
+                                showIdleNotification()
+                        }
+                    }
+                }
+            }
+
+            // Motion resumed after stillness
+            ACTION_STILL_EXIT -> {
+                Log.d("RecordService", "ACTION: ACTION_STILL_EXIT")
+                stillGraceJob?.cancel()
+                stillGraceJob = null
             }
 
             // Start service as idle
@@ -2190,6 +2354,9 @@ class RecordService : Service() {
         super.onDestroy()
 
         disarmSignificantMotion()
+        disarmShakeMotionGate()
+        shakeListenWindowJob?.cancel()
+        stillGraceJob?.cancel()
 
         locationThread?.quitSafely()
         locationThread = null

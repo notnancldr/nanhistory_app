@@ -1,7 +1,12 @@
 package id.my.nanclouder.nanhistory.settings
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.util.Log
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -24,18 +29,37 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
+import id.my.nanclouder.nanhistory.receiver.ActivityRecognitionEngine
 import id.my.nanclouder.nanhistory.service.RecordService
 import id.my.nanclouder.nanhistory.utils.RecordStatus
 
 class RecordSettingsActivity : SubSettingsActivity("Event Recording") {
     @Composable
     override fun ColumnScope.Content() {
+        val context = LocalContext.current
         val scrollState = rememberScrollState()
         val settingsChanged = rememberSaveable { mutableStateOf(false) }
         val isRestarting = rememberSaveable { mutableStateOf(false) }
+
+        val activityPermissionLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission()
+        ) { isGranted ->
+            if (isGranted) {
+                ActivityRecognitionEngine.register(context)
+            } else {
+                Config.autoRecordActivityRecognitionEnabled.set(context, false)
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.activity_recognition_permission_required),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
 
         // Track all settings states
         val serviceMaxDurationState = Config.serviceMaxDuration.getState()
@@ -190,7 +214,8 @@ class RecordSettingsActivity : SubSettingsActivity("Event Recording") {
                 SettingsSwitch(
                     configValue = Config.recordShakeToStart,
                     title = "Shake to Start",
-                    description = "Wait for first shake to start recording. Disable this to only stop recording on shake."
+                    description =
+                        "Wait for first shake to start recording. Disable this to only stop recording on shake."
                 )
                 SettingsNumInput(
                     title = "Shake Sensitivity",
@@ -198,6 +223,65 @@ class RecordSettingsActivity : SubSettingsActivity("Event Recording") {
                     configValue = Config.recordShakeSensitivity,
                     valueUnit = "level",
                     valueRange = 1..20
+                )
+                SettingsSwitch(
+                    configValue = Config.shakeSignificantMotionGateEnabled,
+                    title = stringResource(R.string.shake_sigmotion_gate_title),
+                    description = stringResource(R.string.shake_sigmotion_gate_desc)
+                )
+                SettingsNumInput(
+                    title = stringResource(R.string.shake_listen_window_title),
+                    description = stringResource(R.string.shake_listen_window_desc),
+                    configValue = Config.shakeListenWindowDuration,
+                    valueUnit = "s",
+                    valueRange = 5..60
+                )
+                CategoryHeader(
+                    icon = painterResource(R.drawable.ic_directions_walk),
+                    iconDescription = stringResource(R.string.category_activity_recognition),
+                    title = stringResource(R.string.category_activity_recognition)
+                )
+                SettingsSwitch(
+                    configValue = Config.autoRecordActivityRecognitionEnabled,
+                    title = stringResource(R.string.auto_record_activity_title),
+                    description = stringResource(R.string.auto_record_activity_desc),
+                    onUpdated = { enabled ->
+                        if (enabled) {
+                            if (ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.ACTIVITY_RECOGNITION
+                                ) != PackageManager.PERMISSION_GRANTED
+                            ) {
+                                activityPermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+                            } else {
+                                ActivityRecognitionEngine.register(context)
+                            }
+                        } else {
+                            ActivityRecognitionEngine.unregister(context)
+                        }
+                    }
+                )
+                SettingsSwitch(
+                    configValue = Config.autoRecordStillAutoStop,
+                    title = stringResource(R.string.auto_record_still_stop_title),
+                    description = stringResource(R.string.auto_record_still_stop_desc)
+                )
+                SettingsNumInput(
+                    title = stringResource(R.string.auto_record_still_timeout_title),
+                    description = stringResource(R.string.auto_record_still_timeout_desc),
+                    configValue = Config.autoRecordStillTimeout,
+                    valueUnit = "s",
+                    valueRange = 30..600
+                )
+                CategoryHeader(
+                    icon = painterResource(R.drawable.ic_settings_filled),
+                    iconDescription = stringResource(R.string.category_external_automation),
+                    title = stringResource(R.string.category_external_automation)
+                )
+                SettingsSwitch(
+                    configValue = Config.externalAutomationEnabled,
+                    title = stringResource(R.string.external_automation_title),
+                    description = stringResource(R.string.external_automation_desc)
                 )
                 if (recordAudioExperimental) {
                     CategoryHeader(

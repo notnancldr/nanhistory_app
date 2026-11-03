@@ -15,6 +15,7 @@
 | `config` | Preferences and configuration key declarations (`Config.kt`) | Android Context, primitive types |
 | `db` | Room database schema, tables, DAOs, views, migrations | `utils` only. NEVER `ui`, `state`, or `service` |
 | `debug` | Diagnostic screens and development tools (file previews, log inspection) | Development only; never referenced by release code paths |
+| `receiver` | Broadcast receivers for activity recognition transitions and automation intents | `service`, `config`, Google Play Services |
 | `service` | Background recording, data processing, and Quick Settings tile | `db`, `utils`, `config`, Android system services |
 | `settings` | User settings activities, backup configurations, appearance options | `ui`, `state`, `config`, `utils` |
 | `state` | UI ViewModels and custom state holders (e.g. `SelectionState`) | `db`, `settings`, `utils`, `config` |
@@ -52,6 +53,11 @@
 - [`Views.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/db/Views.kt): Database views (`EventsTimeWithTag`) for joined queries.
 - [`Converters.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/db/Converters.kt): Type converters for `LocalDate`, `Instant`, `List<String>`, and `Map<String, Any>`.
 - [`Migrations.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/db/Migrations.kt): Manual Room migration scripts (`1 -> 2`, `2 -> 3`, `3 -> 4`).
+
+### `receiver/`
+- [`ActivityRecognitionEngine.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/receiver/ActivityRecognitionEngine.kt): Helper object managing Play Services Activity Recognition transition subscriptions.
+- [`ActivityTransitionReceiver.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/receiver/ActivityTransitionReceiver.kt): Receives activity enter/exit events (vehicle, bicycle, running, walking, still) and dispatches start/stop/still intents to `RecordService`.
+- [`RecordAutomationReceiver.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/receiver/RecordAutomationReceiver.kt): Exported broadcast receiver allowing third-party tools (Tasker, Automate, Quick Tap) to start, stop, or toggle recording.
 
 ### `service/`
 - [`RecordService.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/service/RecordService.kt): Foreground service recording audio and location breadcrumbs (`location|microphone`).

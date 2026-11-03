@@ -46,6 +46,15 @@ object Config {
         const val RECORD_SHAKE_ENABLED = false
         const val RECORD_SHAKE_TO_START = false
         const val RECORD_SHAKE_SENSITIVITY = 2
+        const val SHAKE_SIGNIFICANT_MOTION_GATE_ENABLED = true
+        const val SHAKE_LISTEN_WINDOW_DURATION = 15 // s
+
+        const val AUTO_RECORD_ACTIVITY_RECOGNITION_ENABLED = false
+        const val AUTO_RECORD_STILL_AUTO_STOP = true
+        const val AUTO_RECORD_STILL_TIMEOUT = 180 // s
+
+        const val EXTERNAL_AUTOMATION_ENABLED = true
+        const val EXTERNAL_AUTOMATION_PASSKEY = ""
 
         const val AUDIO_RECORD_MAX_DURATION = 10
         const val EXPERIMENTAL_AUDIO_RECORD = false
@@ -251,6 +260,29 @@ object Config {
     )
     val recordShakeSensitivity = IntValue(
         "recordShakeSensitivity", Default.RECORD_SHAKE_SENSITIVITY
+    )
+    val shakeSignificantMotionGateEnabled = BooleanValue(
+        "shakeSignificantMotionGateEnabled", Default.SHAKE_SIGNIFICANT_MOTION_GATE_ENABLED
+    )
+    val shakeListenWindowDuration = IntValue(
+        "shakeListenWindowDuration", Default.SHAKE_LISTEN_WINDOW_DURATION
+    )
+
+    val autoRecordActivityRecognitionEnabled = BooleanValue(
+        "autoRecordActivityRecognitionEnabled", Default.AUTO_RECORD_ACTIVITY_RECOGNITION_ENABLED
+    )
+    val autoRecordStillAutoStop = BooleanValue(
+        "autoRecordStillAutoStop", Default.AUTO_RECORD_STILL_AUTO_STOP
+    )
+    val autoRecordStillTimeout = IntValue(
+        "autoRecordStillTimeout", Default.AUTO_RECORD_STILL_TIMEOUT
+    )
+
+    val externalAutomationEnabled = BooleanValue(
+        "externalAutomationEnabled", Default.EXTERNAL_AUTOMATION_ENABLED
+    )
+    val externalAutomationPasskey = StringValue(
+        "externalAutomationPasskey", Default.EXTERNAL_AUTOMATION_PASSKEY
     )
 
     val audioRecordMaxDuration = IntValue(
