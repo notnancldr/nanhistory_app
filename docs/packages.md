@@ -36,6 +36,7 @@
 - `eventLocation/common/EventLocationHelpers.kt`: Shared color calculations, bearing arcs, and distance/speed utilities.
 - `eventLocation/oldUi/EventLocationOldUi.kt`, `MapHistoryViewOld.kt`: Preserved legacy implementation of event location map.
 - `eventLocation/ui/EventLocationScreen.kt`, `MapHistoryView.kt`, `EventLocationControls.kt`: Modular modern event location map screen with dynamic rendered viewport queries.
+- `eventLocation/ui/replay/ReplayBottomSheet.kt`, `ReplayTelemetryHud.kt`: Interactive location replay controls (scrubber, discrete speed slider, follow-camera toggle, step controls) and real-time floating telemetry HUD.
 - [`YearlyMapActivity.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/YearlyMapActivity.kt): Renders annual aggregate trip and location maps.
 - [`TagDetailActivity.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/TagDetailActivity.kt): Details and event filtering for specific tags.
 - [`TrashActivity.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/TrashActivity.kt): Displays soft-deleted events with options to restore or permanently delete.
@@ -70,7 +71,8 @@
 
 ### `state/`
 - [`SelectionState.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/state/SelectionState.kt): State holder managing multi-item selection flows across UI lists.
-- [`EventLocationViewModel.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/state/EventLocationViewModel.kt): ViewModel managing viewport downsampling queries, debounce, cut mode, and slicing operations for event locations.
+- [`EventLocationViewModel.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/state/EventLocationViewModel.kt): ViewModel managing viewport downsampling queries, debounce, cut mode, slicing operations, and replay delegation.
+- [`ReplayState.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/state/ReplayState.kt) & [`ReplayController.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/state/ReplayController.kt): Location replay domain state models, coordinate/telemetry interpolation mathematics, and playback ticker loop.
 - [`YearlyMapViewModel.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/state/YearlyMapViewModel.kt): ViewModel managing dynamic Room queries across All Time, Years, and Custom Date Ranges with corridor merging and transportation stats.
 
 ### `ui/map/`
@@ -85,6 +87,8 @@
 - [`YearlyMapMergeLogic.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/map/YearlyMapMergeLogic.kt): Pure geometry utilities for Ramer-Douglas-Peucker track simplification, polyline resampling, and corridor vertex network snapping into canonical edges.
 - [`YearlyMapLogic.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/map/YearlyMapLogic.kt) & [`YearlyMapCacheManager.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/map/YearlyMapCacheManager.kt): Legacy file-based trip cache management routines.
 - `ui/map/maplibre/CorridorMap.kt`: Isolated MapLibre Compose map component rendering `LineLayer` with data-driven sort keys, interpolation, and click gestures.
+- `ui/map/maplibre/EventLocationMap.kt`: Isolated MapLibre Compose map component rendering event track, cut mode slice, touch points, pins, and animated replay marker with accuracy halo and follow-camera.
+- `ui/map/maplibre/EventMapGeoJsonBuilder.kt`: Helper constructing compact GeoJSON strings for `EventLocationMap`.
 - `ui/map/maplibre/BaseMapStyle.kt`: MapLibre base raster style definitions (OpenStreetMap 256px raster tiles).
 
 ### `settings/`

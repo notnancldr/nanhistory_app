@@ -538,7 +538,7 @@ fun DetailContent(eventId: String, path: String) {
 
             // Map Section
             AnimatedVisibility(
-                visible = locationAvailable != null,
+                visible = locationAvailable != null && eventLocations.isNotEmpty(),
                 modifier = Modifier
                     .fillMaxWidth(),
             ) {

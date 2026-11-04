@@ -154,4 +154,19 @@
     <string name="location_stationary_detection_desc">
         Pause GPS updates when device remains stationary to save battery.
     </string>
+
+    <!-- Location Replay -->
+    <string name="replay_mode">Replay</string>
+    <string name="replay_play">Play</string>
+    <string name="replay_pause">Pause</string>
+    <string name="replay_step_back_10">Rewind 10 seconds</string>
+    <string name="replay_step_forward_10">Fast forward 10 seconds</string>
+    <string name="replay_prev_point">Previous point</string>
+    <string name="replay_next_point">Next point</string>
+    <string name="replay_speed_label">Speed: %1$sx</string>
+    <string name="replay_follow_camera">Follow camera</string>
+    <string name="replay_free_camera">Free camera</string>
+    <string name="replay_immersive">Fullscreen replay</string>
+    <string name="replay_exit">Exit replay</string>
+    <string name="replay_dwell_title">Stop point</string>
 </resources>

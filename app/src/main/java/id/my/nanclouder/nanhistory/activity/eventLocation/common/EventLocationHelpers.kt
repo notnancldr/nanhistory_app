@@ -1,6 +1,5 @@
 package id.my.nanclouder.nanhistory.activity.eventLocation.common
 
-import android.util.Log
 import androidx.compose.ui.graphics.Color
 import id.my.nanclouder.nanhistory.utils.calculateDistance
 import id.my.nanclouder.nanhistory.utils.calculateSpeed
@@ -72,8 +71,6 @@ fun calculateAccuracyColor(accuracy: Float?): Color {
 }
 
 fun calculateAccelerationColor(acceleration: Int): Color {
-    Log.d("AccelerationColor", "acceleration: $acceleration")
-
     val normalized = (acceleration.coerceIn(-10000, 10000) / 10000f)
 
     val hue =

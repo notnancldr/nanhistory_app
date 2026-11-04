@@ -138,10 +138,12 @@ To prevent loading tens of thousands of GPS coordinates into memory when viewing
 
 ## 5. MapLibre Integration Status
 
-- **Primary MapLibre Use**: `YearlyMap` is migrated to **MapLibre Compose** (`org.maplibre.compose:maplibre-compose:0.20.0`) with the **Vulkan runtime** (`org.maplibre.compose:maplibre-compose-runtime-vulkan-android:0.20.0`).
+- **Primary MapLibre Use**: `YearlyMap` and `EventLocationScreen` (modern UI) are migrated to **MapLibre Compose** (`org.maplibre.compose:maplibre-compose:0.20.0`) with the **Vulkan runtime** (`org.maplibre.compose:maplibre-compose-runtime-vulkan-android:0.20.0`).
 - **Vector Base Style**: Fully migrated from raster OSM tiles to vector styles (`MapStyleConfig`, `BaseMapStyle`) with OpenFreeMap and bundled zero-network offline fallbacks.
-- **Isolation Boundary**: All MapLibre Compose imports are strictly confined to `id.my.nanclouder.nanhistory.ui.map.maplibre` (`CorridorMap.kt`, `BaseMapStyle.kt`, `MapStyleConfig.kt`). UI screens (`YearlyMapContent.kt`) interact exclusively through standard Compose slots and immutable state.
-- **OSMDroid Coexistence**: OSMDroid remains the map engine for single-event inspection (`EventLocationScreen`, `ShareMap`, `EventListHeader`).
+- **Isolation Boundary**: All MapLibre Compose imports are strictly confined to `id.my.nanclouder.nanhistory.ui.map.maplibre` (`CorridorMap.kt`, `EventLocationMap.kt`, `EventMapGeoJsonBuilder.kt`, `BaseMapStyle.kt`, `MapStyleConfig.kt`). UI screens (`YearlyMapContent.kt`, `MapHistoryView.kt`) interact exclusively through standard Compose slots and immutable state.
+- **Event Location Replay**: Interactive chronological playback on `EventLocationMap` with real-time coordinate interpolation, bearing azimuth calculation, discrete speed slider (0.25x - 50x), follow-camera centering, dynamic traveled trail styling, pulsing accuracy halo, stationary dwell indicators, and floating telemetry HUD.
+- **Data Mode Colored Polylines**: Full parity with legacy OSMDroid data modes (`SPEED`, `ACCELERATION`, `TIME`, `ACCURACY`, `BEARING`, `ALTITUDE`). `EventMapGeoJsonBuilder` dynamically slices the route into 2-point segments with `"color": "#RRGGBB"` properties, styled dynamically on the GPU by `EventLocationMap` using MapLibre expressions for both the base path and traveled replay trail.
+- **OSMDroid Coexistence**: OSMDroid remains the map engine for legacy `EventLocationView_Old`, `ShareMap`, and `EventListHeader`.
 
 ---
 

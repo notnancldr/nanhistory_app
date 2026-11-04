@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,6 +36,7 @@ import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.activity.eventDetail.getActivity
 import id.my.nanclouder.nanhistory.state.EventLocationUiState
 import id.my.nanclouder.nanhistory.state.EventLocationViewModel
+import id.my.nanclouder.nanhistory.state.ReplayUiState
 import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import id.my.nanclouder.nanhistory.utils.Coordinate
@@ -80,7 +82,16 @@ fun EventLocationScreen(
         },
         onSelectCutPoint = { viewModel.setCutPoint(it) },
         onUndoCut = { viewModel.undoCutSelection() },
-        onViewportChanged = { box, zoom -> viewModel.updateViewport(box, zoom) }
+        onViewportChanged = { box, zoom -> viewModel.updateViewport(box, zoom) },
+        onStartReplay = { viewModel.startReplay() },
+        onTogglePlayPause = { viewModel.togglePlayPause() },
+        onSeekReplay = { viewModel.seekReplay(it) },
+        onStepReplayTime = { viewModel.stepTime(it) },
+        onStepReplayWaypoint = { viewModel.stepWaypoint(it) },
+        onReplaySpeedChanged = { viewModel.setSpeedMultiplier(it) },
+        onToggleFollowCamera = { viewModel.toggleFollowCamera() },
+        onToggleImmersive = { viewModel.toggleImmersive() },
+        onCloseReplay = { viewModel.stopReplay() }
     )
 }
 
@@ -94,81 +105,106 @@ fun EventLocationContent(
     onConfirmCut: () -> Unit = {},
     onSelectCutPoint: (ZonedDateTime) -> Unit = {},
     onUndoCut: () -> Unit = {},
-    onViewportChanged: (BoundingBox, Double) -> Unit = { _, _ -> }
+    onViewportChanged: (BoundingBox, Double) -> Unit = { _, _ -> },
+    onStartReplay: () -> Unit = {},
+    onTogglePlayPause: () -> Unit = {},
+    onSeekReplay: (Float) -> Unit = {},
+    onStepReplayTime: (Long) -> Unit = {},
+    onStepReplayWaypoint: (Int) -> Unit = {},
+    onReplaySpeedChanged: (Float) -> Unit = {},
+    onToggleFollowCamera: () -> Unit = {},
+    onToggleImmersive: () -> Unit = {},
+    onCloseReplay: () -> Unit = {}
 ) {
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     val snackbarHostState = remember { SnackbarHostState() }
     val eventData = uiState.event
+    val isImmersiveReplay = uiState.replayState.isActive && uiState.replayState.isImmersive
 
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         modifier = modifier.fillMaxSize(),
         topBar = {
-            TopAppBar(
-                scrollBehavior = scrollBehavior,
-                title = {
-                    if (eventData != null) {
-                        Text(
-                            text = if (uiState.cutMode) {
-                                stringResource(R.string.cut_event_title)
-                            } else {
-                                stringResource(R.string.event_map_title)
-                            },
-                            style = MaterialTheme.typography.headlineSmall
-                        )
-                    } else {
-                        ComponentPlaceholder(Modifier.size(128.dp, 16.dp))
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = stringResource(R.string.back)
-                        )
-                    }
-                },
-                actions = {
-                    if (eventData == null) {
-                        ComponentPlaceholder(
-                            Modifier.size(24.dp).padding(8.dp)
-                        )
-                    }
-                    if (uiState.cutMode && eventData is EventRange) {
-                        IconButton(
-                            onClick = onConfirmCut,
-                            enabled = uiState.cutStart != null && uiState.cutEnd != null
-                        ) {
+            if (!isImmersiveReplay) {
+                TopAppBar(
+                    scrollBehavior = scrollBehavior,
+                    title = {
+                        if (eventData != null) {
+                            Text(
+                                text = if (uiState.cutMode) {
+                                    stringResource(R.string.cut_event_title)
+                                } else {
+                                    stringResource(R.string.event_map_title)
+                                },
+                                style = MaterialTheme.typography.headlineSmall
+                            )
+                        } else {
+                            ComponentPlaceholder(Modifier.size(128.dp, 16.dp))
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
                             Icon(
-                                Icons.Rounded.Check,
-                                contentDescription = stringResource(R.string.confirm_cut),
-                                tint = MaterialTheme.colorScheme.primary
+                                Icons.AutoMirrored.Rounded.ArrowBack,
+                                contentDescription = stringResource(R.string.back)
                             )
                         }
-                    }
-                    if (eventData is EventRange) {
-                        IconButton(
-                            onClick = onToggleCutMode,
-                            enabled = !uiState.isRecording
-                        ) {
-                            if (uiState.cutMode) {
+                    },
+                    actions = {
+                        if (eventData == null) {
+                            ComponentPlaceholder(
+                                Modifier.size(24.dp).padding(8.dp)
+                            )
+                        }
+                        // Replay Button (shown when not in cut mode and not currently replaying)
+                        if (eventData is EventRange && !uiState.replayState.isActive && !uiState.cutMode) {
+                            IconButton(
+                                onClick = onStartReplay,
+                                enabled = !uiState.isRecording
+                            ) {
                                 Icon(
-                                    Icons.Rounded.Close,
-                                    contentDescription = stringResource(R.string.exit_cut_mode),
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                            } else {
-                                Icon(
-                                    painterResource(R.drawable.ic_content_cut),
-                                    contentDescription = stringResource(R.string.cut_mode),
+                                    Icons.Rounded.PlayArrow,
+                                    contentDescription = stringResource(R.string.replay_mode),
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                             }
                         }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors()
-            )
+                        if (uiState.cutMode && eventData is EventRange) {
+                            IconButton(
+                                onClick = onConfirmCut,
+                                enabled = uiState.cutStart != null && uiState.cutEnd != null
+                            ) {
+                                Icon(
+                                    Icons.Rounded.Check,
+                                    contentDescription = stringResource(R.string.confirm_cut),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        if (eventData is EventRange && !uiState.replayState.isActive) {
+                            IconButton(
+                                onClick = onToggleCutMode,
+                                enabled = !uiState.isRecording
+                            ) {
+                                if (uiState.cutMode) {
+                                    Icon(
+                                        Icons.Rounded.Close,
+                                        contentDescription = stringResource(R.string.exit_cut_mode),
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                } else {
+                                    Icon(
+                                        painterResource(R.drawable.ic_content_cut),
+                                        contentDescription = stringResource(R.string.cut_mode),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors()
+                )
+            }
         }
     ) { paddingValues ->
         Column(
@@ -177,7 +213,9 @@ fun EventLocationContent(
                 .padding(paddingValues)
                 .fillMaxSize()
         ) {
-            val hasData = uiState.renderedLocations.isNotEmpty() || uiState.initialBounds != null
+            val hasData = uiState.renderedLocations.isNotEmpty() ||
+                uiState.initialBounds != null ||
+                uiState.replayState.isActive
             if (hasData) {
                 MapHistoryView(
                     locations = uiState.renderedLocations,
@@ -187,9 +225,18 @@ fun EventLocationContent(
                     cutMode = uiState.cutMode,
                     cutStart = uiState.cutStart,
                     cutEnd = uiState.cutEnd,
+                    replayState = uiState.replayState,
                     onSelectCutPoint = onSelectCutPoint,
                     onUndoCut = onUndoCut,
-                    onViewportChanged = onViewportChanged
+                    onViewportChanged = onViewportChanged,
+                    onTogglePlayPause = onTogglePlayPause,
+                    onSeekReplay = onSeekReplay,
+                    onStepReplayTime = onStepReplayTime,
+                    onStepReplayWaypoint = onStepReplayWaypoint,
+                    onReplaySpeedChanged = onReplaySpeedChanged,
+                    onToggleFollowCamera = onToggleFollowCamera,
+                    onToggleImmersive = onToggleImmersive,
+                    onCloseReplay = onCloseReplay
                 )
             } else {
                 ComponentPlaceholder(

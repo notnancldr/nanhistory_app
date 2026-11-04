@@ -24,10 +24,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.osmdroid.util.BoundingBox
 import java.io.File
+import java.time.Duration
 import java.time.ZonedDateTime
 import kotlin.math.roundToInt
 
@@ -42,6 +44,7 @@ data class EventLocationUiState(
     val cutStart: ZonedDateTime? = null,
     val cutEnd: ZonedDateTime? = null,
     val isLoading: Boolean = false,
+    val replayState: ReplayUiState = ReplayUiState(),
 )
 
 class EventLocationViewModel(
@@ -59,9 +62,15 @@ class EventLocationViewModel(
     private var debounceJob: Job? = null
     private var lastQueriedBounds: BoundingBox? = null
     private var lastQueriedStep: Int = -1
+    private val replayController = ReplayController(dao, eventId, viewModelScope, ioDispatcher)
 
     init {
         loadInitialData()
+        viewModelScope.launch {
+            replayController.replayState.collect { rState ->
+                _uiState.update { it.copy(replayState = rState) }
+            }
+        }
     }
 
     private fun loadInitialData() {
@@ -248,6 +257,17 @@ class EventLocationViewModel(
             onSuccess(newEvent)
         }
     }
+
+    fun startReplay() = replayController.startReplay()
+    fun stopReplay() = replayController.stopReplay()
+    fun togglePlayPause() = replayController.togglePlayPause()
+    fun seekReplay(progress: Float) = replayController.seekReplay(progress)
+    fun stepTime(seconds: Long) = replayController.stepTime(seconds)
+    fun stepWaypoint(direction: Int) = replayController.stepWaypoint(direction)
+    fun setSpeedMultiplier(speed: Float) = replayController.setSpeedMultiplier(speed)
+    fun toggleFollowCamera() = replayController.toggleFollowCamera()
+    fun setFollowCamera(enabled: Boolean) = replayController.setFollowCamera(enabled)
+    fun toggleImmersive() = replayController.toggleImmersive()
 
     companion object {
         fun calculateStep(zoomLevel: Int): Int {
