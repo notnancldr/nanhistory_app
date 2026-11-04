@@ -64,6 +64,8 @@ object Config {
 
         const val AUDIO_RECORD_MAX_DURATION = 10
         const val EXPERIMENTAL_AUDIO_RECORD = false
+        const val EXPERIMENTAL_MARKDOWN_INPUT_HIGHLIGHTING = false
+        const val EXPERIMENTAL_MARKDOWN_VIEWER_SYNTAX_HIGHLIGHTING = true
         const val INCLUDE_AUDIO_RECORD = false
 
         const val AUDIO_STEREO_CHANNEL = false
@@ -303,6 +305,13 @@ object Config {
     )
     val experimentalAudioRecord = BooleanValue(
         "experimentalAudioRecord", Default.EXPERIMENTAL_AUDIO_RECORD
+    )
+    val experimentalMarkdownInputHighlighting = BooleanValue(
+        "experimentalMarkdownInputHighlighting", Default.EXPERIMENTAL_MARKDOWN_INPUT_HIGHLIGHTING
+    )
+    val experimentalMarkdownViewerSyntaxHighlighting = BooleanValue(
+        "experimentalMarkdownViewerSyntaxHighlighting",
+        Default.EXPERIMENTAL_MARKDOWN_VIEWER_SYNTAX_HIGHLIGHTING
     )
     val includeAudioRecord = BooleanValue(
         "includeAudioRecord", Default.INCLUDE_AUDIO_RECORD

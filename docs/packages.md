@@ -84,6 +84,7 @@
 - [`CorridorGeoJsonBuilder.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/map/CorridorGeoJsonBuilder.kt): Pure Kotlin builder constructing GeoJSON LineString feature collections with 6-decimal precision.
 - [`MapZoomUtils.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/map/MapZoomUtils.kt): Standardized zoom offset conversion helpers (`osmEquivalentZoom`).
 - [`DateRangePickerModal.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/map/DateRangePickerModal.kt): Material 3 date range picker dialog for custom trip map ranges.
+- [`CodeBlockCard.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/component/CodeBlockCard.kt): Interactive Markdown code block card with language header, clipboard copy action, line numbers gutter, and horizontally scrollable syntax-highlighted code.
 - [`YearlyMapMergeLogic.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/map/YearlyMapMergeLogic.kt): Pure geometry utilities for Ramer-Douglas-Peucker track simplification, polyline resampling, and corridor vertex network snapping into canonical edges.
 - [`YearlyMapLogic.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/map/YearlyMapLogic.kt) & [`YearlyMapCacheManager.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/map/YearlyMapCacheManager.kt): Legacy file-based trip cache management routines.
 - `ui/map/maplibre/CorridorMap.kt`: Isolated MapLibre Compose map component rendering `LineLayer` with data-driven sort keys, interpolation, and click gestures.
@@ -92,7 +93,16 @@
 - `ui/map/maplibre/BaseMapStyle.kt`: MapLibre base raster style definitions (OpenStreetMap 256px raster tiles).
 
 ### `settings/`
-- `SettingsActivity.kt`, `AppearanceSettingsActivity.kt`, `RecordSettingsActivity.kt`, `StorageSettingsActivity.kt`, `AutoDeleteSettingsActivity.kt`, `BackupActivity.kt`, `DeveloperOptionsActivity.kt`, `AboutActivity.kt`: Preferences management screens.
+- `SettingsActivity.kt`, `AppearanceSettingsActivity.kt`, `RecordSettingsActivity.kt`, `StorageSettingsActivity.kt`, `AutoDeleteSettingsActivity.kt`, `BackupActivity.kt`, `DeveloperOptionsActivity.kt`, `AboutActivity.kt`, `ExperimentalSettingsActivity.kt`: Preferences management screens.
+
+### `utils/`
+- [`TextFormat.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/utils/TextFormat.kt): Rich Markdown display composables (`FormattedText`) powered by `compose-markdown` with mention routing and inline content preservation.
+- [`TextParser.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/utils/TextParser.kt): Core parser converting Markdown and @mention syntax to Compose `AnnotatedString`.
+- [`FormattedOutlinedTextField.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/utils/FormattedOutlinedTextField.kt): Outlined text field wrapper with `TextFieldState`, `OutputTransformation`, and full-width code block background support.
+- [`MarkdownVisualTransformation.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/utils/MarkdownVisualTransformation.kt): Compose `VisualTransformation` providing live Markdown syntax styling with identity offset mapping.
+- [`CodeSyntaxHighlighter.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/utils/CodeSyntaxHighlighter.kt): Multi-language code syntax tokenization using `dev.snipme:highlights` and LRU token caching.
+- [`MarkdownOutputTransformation.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/utils/MarkdownOutputTransformation.kt): Zero-copy `OutputTransformation` for Markdown with cursor-aware code fence hiding.
+- [`CustomExpressionOutputTransformation.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/utils/CustomExpressionOutputTransformation.kt): `OutputTransformation` providing syntax coloring for mathematical/telemetry graph expressions.
 
 ---
 

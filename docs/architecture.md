@@ -68,6 +68,7 @@ sequenceDiagram
 ## 3. Design Decisions & Fragile Areas
 
 - **Multi-Activity Design**: The application uses separate Activities for major feature flows (e.g., `MainActivity`, `EditEventActivity`, `EventDetailActivity`, `TrashActivity`, `YearlyMapActivity`) rather than Single-Activity Navigation Compose. Inter-screen navigation uses Android explicit `Intent`s.
+- **Markdown & Text Formatting Architecture**: Markdown display is handled via `utils/TextFormat.kt` (using `compose-markdown` for rich rendering, segmented with interactive `ui/component/CodeBlockCard.kt` for syntax-highlighted code blocks with language header, copy action, and line numbers) and `utils/TextParser.kt` (parsing into `AnnotatedString`). Text field syntax highlighting is powered by Foundation's `OutputTransformation` and `TextFieldState` with multi-language code highlighting (`dev.snipme:highlights` via `CodeSyntaxHighlighter.kt`), LRU token caching, and cursor-aware code fence hiding (`MarkdownOutputTransformation.kt`, `CustomExpressionOutputTransformation.kt`).
 - **Direct Service/Worker DAO Access**: Because background services (`RecordService`, `DataProcessService`) and workers (`AutoDeleteWorker`) operate without UI lifecycles, they instantiate and query Room DAOs directly via `AppDatabase.getInstance(context)`.
 - **Known Fragile Areas**:
   - `RecordService`: If invoked from the background without proper Android 12+/14 foreground service exemptions, Android will throw `ForegroundServiceStartNotAllowedException`.

@@ -69,6 +69,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.R
@@ -76,9 +77,14 @@ import id.my.nanclouder.nanhistory.activity.eventDetail.getActivity
 import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.toEventEntity
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import id.my.nanclouder.nanhistory.db.toHistoryEvent
 import id.my.nanclouder.nanhistory.utils.DateFormatter
 import id.my.nanclouder.nanhistory.utils.DatePickerModal
+import id.my.nanclouder.nanhistory.utils.FormattedOutlinedTextField
+import id.my.nanclouder.nanhistory.utils.MarkdownOutputTransformation
+import id.my.nanclouder.nanhistory.utils.MarkdownVisualTransformation
 import id.my.nanclouder.nanhistory.utils.TimeFormatter
 import id.my.nanclouder.nanhistory.utils.TimePickerDialog
 import id.my.nanclouder.nanhistory.utils.history.EventPoint
@@ -194,6 +200,18 @@ fun EditEventView_Old(eventId: String?) {
             mutableStateOf(
                 castedEvent?.transportationType ?: TransportationType.Unspecified
             )
+        }
+
+        val markdownHighlightingEnabled by Config.experimentalMarkdownInputHighlighting.getState()
+        val markdownVisualTransformation = if (markdownHighlightingEnabled) {
+            MarkdownVisualTransformation(
+                primaryColor = MaterialTheme.colorScheme.primary,
+                codeBackgroundColor = MaterialTheme.colorScheme.surfaceVariant,
+                tagColor = MaterialTheme.colorScheme.primary,
+                quoteColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            VisualTransformation.None
         }
 
         val datePickerState = rememberDatePickerState(
@@ -327,7 +345,8 @@ fun EditEventView_Old(eventId: String?) {
                         eventTitle = it
                     },
                     label = { Text("Title") },
-                    shape = textFieldShape
+                    shape = textFieldShape,
+                    visualTransformation = markdownVisualTransformation
                 )
                 OutlinedTextField(
                     modifier = textFieldModifier,
@@ -336,7 +355,8 @@ fun EditEventView_Old(eventId: String?) {
                         eventDescription = it
                     },
                     label = { Text("Description") },
-                    shape = textFieldShape
+                    shape = textFieldShape,
+                    visualTransformation = markdownVisualTransformation
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -686,14 +706,18 @@ fun EditEventView_New(eventId: String?, previousEventOf: String?, nextEventOf: S
         }
     }
     else {
-        var eventTitle by rememberSaveable { mutableStateOf(
-            oldEvent?.let {
-                if (it.metadata["unnamed"] as? Boolean != true) it.title
-                else null
-            } ?: ""
-        ) }
-        var eventDescription by rememberSaveable { mutableStateOf(oldEvent?.description ?: "") }
-        var rangeEvent by rememberSaveable { mutableStateOf(oldEvent is EventRange || (startTimeFromSibling != null && endTimeFromSibling != null)) }
+        val initialTitle = oldEvent?.let {
+            if (it.metadata["unnamed"] as? Boolean != true) it.title
+            else null
+        } ?: ""
+        val eventTitleState = rememberTextFieldState(initialTitle)
+        val eventDescriptionState = rememberTextFieldState(oldEvent?.description ?: "")
+        val eventTitleText = eventTitleState.text.toString()
+        val eventDescriptionText = eventDescriptionState.text.toString()
+
+        var rangeEvent by rememberSaveable {
+            mutableStateOf(oldEvent is EventRange || (startTimeFromSibling != null && endTimeFromSibling != null))
+        }
         var time by rememberSaveable { mutableStateOf(oldEvent?.time ?: startTimeFromSibling ?: ZonedDateTime.now()) }
 
         val castedEvent = oldEvent as? EventRange
@@ -707,6 +731,25 @@ fun EditEventView_New(eventId: String?, previousEventOf: String?, nextEventOf: S
             mutableStateOf(
                 castedEvent?.transportationType ?: TransportationType.Unspecified
             )
+        }
+
+        val markdownHighlightingEnabled by Config.experimentalMarkdownInputHighlighting.getState()
+        val isDarkTheme = isSystemInDarkTheme()
+        val primaryColor = MaterialTheme.colorScheme.primary
+        val quoteColor = MaterialTheme.colorScheme.onSurfaceVariant
+        var codeBlockRanges by remember { mutableStateOf<List<IntRange>>(emptyList()) }
+        val markdownOutputTransformation = if (markdownHighlightingEnabled) {
+            remember(isDarkTheme, primaryColor, quoteColor) {
+                MarkdownOutputTransformation(
+                    isDarkTheme = isDarkTheme,
+                    primaryColor = primaryColor,
+                    tagColor = primaryColor,
+                    quoteColor = quoteColor,
+                    onCodeBlockRangesUpdated = { ranges -> codeBlockRanges = ranges }
+                )
+            }
+        } else {
+            null
         }
 
         val datePickerState = rememberDatePickerState(
@@ -729,16 +772,16 @@ fun EditEventView_New(eventId: String?, previousEventOf: String?, nextEventOf: S
 
         val confirmButtonEnabled =
             if (oldEvent != null) {
-                eventTitle != oldEvent.title ||
-                        eventDescription != oldEvent.description ||
-                        rangeEvent != (oldEvent is EventRange) ||
-                        time != oldEvent.time
+                eventTitleText != oldEvent.title ||
+                    eventDescriptionText != oldEvent.description ||
+                    rangeEvent != (oldEvent is EventRange) ||
+                    time != oldEvent.time
             } else {
-                eventTitle.isNotBlank() || titleIconClicked >= 10
+                eventTitleText.isNotBlank() || titleIconClicked >= 10
             }.let {
                 if (oldEvent is EventRange) {
                     it || timeEnd != oldEvent.end ||
-                            transportationType != oldEvent.transportationType
+                        transportationType != oldEvent.transportationType
                 }
                 else it
             }
@@ -776,16 +819,19 @@ fun EditEventView_New(eventId: String?, previousEventOf: String?, nextEventOf: S
                     ) {
                         Button(
                             onClick = {
+                                val resolvedTitle = eventTitleText.ifBlank {
+                                    if (titleIconClicked < 10) oldEvent?.title ?: "" else ""
+                                }
                                 newEvent = (
                                     if (rangeEvent) EventRange(
-                                        title = eventTitle.ifBlank { if (titleIconClicked < 10) oldEvent?.title ?: "" else "" },
-                                        description = eventDescription,
+                                        title = resolvedTitle,
+                                        description = eventDescriptionText,
                                         time = time,
                                         end = timeEnd,
                                         transportationType = transportationType
                                     ) else EventPoint(
-                                        title = eventTitle.ifBlank { if (titleIconClicked < 10) oldEvent?.title ?: "" else "" },
-                                        description = eventDescription,
+                                        title = resolvedTitle,
+                                        description = eventDescriptionText,
                                         time = time,
                                     )
                                     ).apply {
@@ -820,7 +866,10 @@ fun EditEventView_New(eventId: String?, previousEventOf: String?, nextEventOf: S
                             modifier = Modifier.height(40.dp),
                             shape = RoundedCornerShape(10.dp)
                         ) {
-                            Text(if (addMode) "Add Event" else "Save Changes", style = MaterialTheme.typography.labelLarge)
+                            Text(
+                                if (addMode) "Add Event" else "Save Changes",
+                                style = MaterialTheme.typography.labelLarge
+                            )
                         }
                     }
                 }
@@ -834,12 +883,12 @@ fun EditEventView_New(eventId: String?, previousEventOf: String?, nextEventOf: S
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp)
             ) {
                 item {
-                    OutlinedTextField(
+                    FormattedOutlinedTextField(
+                        state = eventTitleState,
                         modifier = textFieldModifier,
-                        value = eventTitle,
-                        onValueChange = { eventTitle = it },
                         label = { Text("Title") },
                         shape = textFieldShape,
+                        outputTransformation = markdownOutputTransformation,
                         leadingIcon = {
                             Icon(
                                 painterResource(R.drawable.ic_title),
@@ -863,20 +912,20 @@ fun EditEventView_New(eventId: String?, previousEventOf: String?, nextEventOf: S
                 }
 
                 item {
-                    OutlinedTextField(
+                    FormattedOutlinedTextField(
+                        state = eventDescriptionState,
                         modifier = textFieldModifier,
-                        value = eventDescription,
-                        onValueChange = { eventDescription = it },
                         label = { Text("Description") },
                         shape = textFieldShape,
+                        outputTransformation = markdownOutputTransformation,
+                        codeBlockRanges = codeBlockRanges,
                         leadingIcon = {
                             Icon(
                                 painterResource(R.drawable.ic_info),
                                 "Description",
                                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
                             )
-                        },
-                        minLines = 3
+                        }
                     )
                 }
 

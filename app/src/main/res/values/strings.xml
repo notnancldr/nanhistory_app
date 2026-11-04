@@ -169,4 +169,11 @@
     <string name="replay_immersive">Fullscreen replay</string>
     <string name="replay_exit">Exit replay</string>
     <string name="replay_dwell_title">Stop point</string>
+    <string name="settings_experimental_category_markdown">Markdown</string>
+    <string name="settings_experimental_markdown_input_title">Markdown Input Highlighting</string>
+    <string name="settings_experimental_markdown_input_desc">Highlight Markdown syntax in event title and description inputs while editing.</string>
+    <string name="settings_experimental_markdown_viewer_title">Markdown Viewer Syntax Highlighting</string>
+    <string name="settings_experimental_markdown_viewer_desc">Display code blocks with syntax highlighting, line numbers, and copy action in Markdown viewers.</string>
+    <string name="code_block_copy">Copy code</string>
+    <string name="code_block_copied">Copied</string>
 </resources>

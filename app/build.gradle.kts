@@ -175,4 +175,7 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
 
     implementation(libs.androidx.material.icons.extended)
+    implementation(libs.compose.markdown)
+    implementation(libs.highlights)
+    implementation(libs.androidx.collection.ktx)
 }

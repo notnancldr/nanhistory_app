@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -23,8 +24,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.R
+import id.my.nanclouder.nanhistory.utils.CustomExpressionOutputTransformation
+import id.my.nanclouder.nanhistory.utils.FormattedOutlinedTextField
 import id.my.nanclouder.nanhistory.utils.graph.GraphExpressionEvaluator
 
 /**
@@ -37,17 +41,33 @@ fun CustomExpressionDialog(
     onDismissRequest: () -> Unit,
     onApply: (expression: String, unit: String) -> Unit
 ) {
-    var expression by remember(initialExpression) { mutableStateOf(initialExpression) }
+    val expressionState = rememberTextFieldState(initialExpression)
     var unit by remember(initialUnit) { mutableStateOf(initialUnit) }
 
-    val validationResult = remember(expression) {
-        GraphExpressionEvaluator.validate(expression)
+    val expressionText = expressionState.text.toString()
+    val validationResult = remember(expressionText) {
+        GraphExpressionEvaluator.validate(expressionText)
     }
     val isValid = validationResult.isSuccess
     val errorMessage = validationResult.exceptionOrNull()?.message
 
+    val expressionOutputTransformation = remember {
+        CustomExpressionOutputTransformation()
+    }
+
     fun insertToken(token: String) {
-        expression = if (expression.isBlank()) token else "$expression $token"
+        val sel = expressionState.selection
+        val start = sel.min
+        val end = sel.max
+        val textToInsert = if (start > 0 && expressionState.text[start - 1] != ' ' && !token.startsWith(" ")) {
+            " $token"
+        } else {
+            token
+        }
+        expressionState.edit {
+            replace(start, end, textToInsert)
+            selection = TextRange(start + textToInsert.length)
+        }
     }
 
     AlertDialog(
@@ -60,13 +80,13 @@ fun CustomExpressionDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                OutlinedTextField(
-                    value = expression,
-                    onValueChange = { expression = it },
+                FormattedOutlinedTextField(
+                    state = expressionState,
                     label = { Text(stringResource(R.string.expression_field_label)) },
-                    isError = expression.isNotBlank() && !isValid,
+                    isError = expressionText.isNotBlank() && !isValid,
+                    outputTransformation = expressionOutputTransformation,
                     supportingText = {
-                        if (expression.isNotBlank()) {
+                        if (expressionText.isNotBlank()) {
                             if (isValid) {
                                 Text(
                                     text = stringResource(R.string.expression_syntax_valid),
@@ -108,7 +128,11 @@ fun CustomExpressionDialog(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    listOf("speed", "altitude", "acceleration", "bearing", "accuracy", "distance", "latitude", "longitude").forEach { prop ->
+                    val properties = listOf(
+                        "speed", "altitude", "acceleration", "bearing",
+                        "accuracy", "distance", "latitude", "longitude"
+                    )
+                    properties.forEach { prop ->
                         FilterChip(
                             selected = false,
                             onClick = { insertToken(prop) },
@@ -167,7 +191,7 @@ fun CustomExpressionDialog(
             Button(
                 enabled = isValid,
                 onClick = {
-                    onApply(expression.trim(), unit.trim())
+                    onApply(expressionText.trim(), unit.trim())
                 }
             ) {
                 Text(stringResource(R.string.expression_apply))
