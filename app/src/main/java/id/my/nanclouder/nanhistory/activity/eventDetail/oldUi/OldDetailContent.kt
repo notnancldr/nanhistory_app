@@ -76,7 +76,6 @@ import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.activity.EditEventActivity
 import id.my.nanclouder.nanhistory.activity.EventLocationActivity
-import id.my.nanclouder.nanhistory.activity.eventDetail.ui.MapHistoryPreview
 import id.my.nanclouder.nanhistory.activity.eventDetail.getActivity
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.db.toHistoryEvent
@@ -391,7 +390,7 @@ fun OldDetailContent(eventId: String, path: String) {
                         .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
                 ) {
                     if (eventLocations.isNotEmpty()) {
-                        MapHistoryPreview(
+                        MapHistoryPreviewOld(
                             locations = eventLocations,
                             modifier = Modifier
                                 .height(200.dp)

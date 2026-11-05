@@ -176,4 +176,43 @@
     <string name="settings_experimental_markdown_viewer_desc">Display code blocks with syntax highlighting, line numbers, and copy action in Markdown viewers.</string>
     <string name="code_block_copy">Copy code</string>
     <string name="code_block_copied">Copied</string>
+
+    <!-- Experimental Map & Share Customization -->
+    <string name="settings_experimental_category_map">Maps &amp; Sharing</string>
+    <string name="settings_experimental_maplibre_sharemap_title">MapLibre ShareMap</string>
+    <string name="settings_experimental_maplibre_sharemap_desc">Use MapLibre and MapSnapshotter for rendering customizable share cards.</string>
+    <string name="settings_experimental_share_export_engine_title">Share Map Export Engine</string>
+    <string name="settings_experimental_share_export_engine_desc">Choose between high-resolution MapSnapshotter vector rendering or direct PixelCopy screen capture.</string>
+    <string name="settings_experimental_export_engine_snapshotter">MapSnapshotter (High-Res)</string>
+    <string name="settings_experimental_export_engine_pixelcopy">PixelCopy (Screen Capture)</string>
+    <string name="settings_experimental_advanced_share_style_title">Advanced Share Styling</string>
+    <string name="settings_experimental_advanced_share_style_desc">Enable raw style property editing for share card elements.</string>
+    <string name="share_map_custom_canvas">Customizable Card</string>
+    <string name="share_map_presets">Layout Presets</string>
+    <string name="share_map_preset_square">Square (1:1)</string>
+    <string name="share_map_preset_story">Story (9:16)</string>
+    <string name="share_map_preset_landscape">Landscape (16:9)</string>
+    <string name="share_map_add_element">Add Element</string>
+    <string name="share_map_edit_style">Style</string>
+    <string name="share_map_delete_element">Delete</string>
+    <string name="share_map_duplicate_element">Duplicate</string>
+    <string name="share_map_bring_forward">Bring Forward</string>
+    <string name="share_map_send_backward">Send Backward</string>
+    <string name="share_map_element_title">Title</string>
+    <string name="share_map_element_metric">Telemetry Badge</string>
+    <string name="share_map_element_map">Floating Map</string>
+    <string name="share_map_element_text">Formatted Text</string>
+    <string name="share_map_element_tags">Tags</string>
+
+    <!-- Share Studio Activity -->
+    <string name="title_activity_share_map">Share Trip</string>
+    <string name="share_undo">Undo</string>
+    <string name="share_redo">Redo</string>
+    <string name="share_reset">Reset</string>
+    <string name="share_export">Export</string>
+    <string name="share_save_gallery">Save to Pictures</string>
+    <string name="share_share_image">Share</string>
+    <string name="share_resolution">Resolution</string>
+    <string name="share_format">Format</string>
+    <string name="share_saved_toast">Image saved to Pictures/NanHistory</string>
 </resources>

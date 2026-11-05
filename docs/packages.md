@@ -43,6 +43,8 @@
 - [`EncryptionKey.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/EncryptionKey.kt): Helper routines for database encryption key resolution.
 - [`MapLibreTest.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/MapLibreTest.kt): Experimental test activity for MapLibre SDK (commented out in manifest).
 - `eventDetail/EventDetailActivity.kt`: Full detail view for recorded events, audio playback, and attached metadata.
+- `shareMap/ShareMapActivity.kt`: Full-screen editing studio for composing and exporting shareable map snapshots with draggable/resizable overlays.
+- `shareMap/ui/ShareMapScreen.kt`, `ShareMapTopBar.kt`, `ShareMapBottomBar.kt`, `ShareExportSheet.kt`: Compose UI components for the share map canvas and controls.
 
 ### `config/`
 - [`Config.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/config/Config.kt): Typed configuration accessors reading from Android SharedPreferences.
@@ -74,6 +76,8 @@
 - [`EventLocationViewModel.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/state/EventLocationViewModel.kt): ViewModel managing viewport downsampling queries, debounce, cut mode, slicing operations, and replay delegation.
 - [`ReplayState.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/state/ReplayState.kt) & [`ReplayController.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/state/ReplayController.kt): Location replay domain state models, coordinate/telemetry interpolation mathematics, and playback ticker loop.
 - [`YearlyMapViewModel.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/state/YearlyMapViewModel.kt): ViewModel managing dynamic Room queries across All Time, Years, and Custom Date Ranges with corridor merging and transportation stats.
+- [`ShareMapViewModel.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/state/ShareMapViewModel.kt): ViewModel managing share canvas elements, aspect ratio adaptations, metrics calculations, and 20-step Undo/Redo stack.
+- [`ShareMapUiState.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/state/ShareMapUiState.kt): Immutable UI state container for the ShareMap full-screen studio.
 
 ### `ui/map/`
 - [`YearlyMapScreen.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/map/YearlyMapScreen.kt): Stateful screen connecting `YearlyMapViewModel` to `YearlyMapContent` and `CorridorMap`.

@@ -36,5 +36,27 @@ class ExperimentalSettingsActivity : SubSettingsActivity("Experimental") {
             description = stringResource(R.string.settings_experimental_markdown_viewer_desc),
             configValue = Config.experimentalMarkdownViewerSyntaxHighlighting
         )
+
+        CategoryHeader(
+            icon = painterResource(R.drawable.ic_circle_filled),
+            iconDescription = stringResource(R.string.settings_experimental_category_map),
+            title = stringResource(R.string.settings_experimental_category_map)
+        )
+        SettingsSwitch(
+            title = stringResource(R.string.settings_experimental_maplibre_sharemap_title),
+            description = stringResource(R.string.settings_experimental_maplibre_sharemap_desc),
+            configValue = Config.experimentalMaplibreShareMap
+        )
+        SettingsDropdown(
+            configValue = Config.shareMapExportEngine,
+            enumClass = id.my.nanclouder.nanhistory.config.ShareMapExportEngine::class.java,
+            title = stringResource(R.string.settings_experimental_share_export_engine_title),
+            description = stringResource(R.string.settings_experimental_share_export_engine_desc)
+        )
+        SettingsSwitch(
+            title = stringResource(R.string.settings_experimental_advanced_share_style_title),
+            description = stringResource(R.string.settings_experimental_advanced_share_style_desc),
+            configValue = Config.experimentalAdvancedShareStyle
+        )
     }
 }

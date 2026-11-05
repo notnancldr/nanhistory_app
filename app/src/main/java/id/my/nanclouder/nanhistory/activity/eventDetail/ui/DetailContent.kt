@@ -113,7 +113,6 @@ import id.my.nanclouder.nanhistory.ui.tags.TagsView
 import id.my.nanclouder.nanhistory.utils.DateFormatter
 import id.my.nanclouder.nanhistory.utils.FormattedText
 import id.my.nanclouder.nanhistory.utils.HistoryLocationData
-import id.my.nanclouder.nanhistory.utils.MapShareDialog
 import id.my.nanclouder.nanhistory.utils.TimeFormatter
 import id.my.nanclouder.nanhistory.utils.getLocationData
 import id.my.nanclouder.nanhistory.utils.history.EventMetadata
@@ -164,7 +163,6 @@ fun DetailContent(eventId: String, path: String) {
 
     var showSignatureInfo by rememberSaveable { mutableStateOf(false) }
     var deleteDialogState by rememberSaveable { mutableStateOf(false) }
-    var showShareMapDialog by rememberSaveable { mutableStateOf(false) }
 
     var showInfo by remember { mutableStateOf(false) }
     var showRepairDialog by rememberSaveable { mutableStateOf(false) }
@@ -428,7 +426,13 @@ fun DetailContent(eventId: String, path: String) {
 
                         Button(
                             onClick = {
-                                showShareMapDialog = true
+                                val intent = Intent(
+                                    context,
+                                    id.my.nanclouder.nanhistory.activity.shareMap.ShareMapActivity::class.java
+                                ).apply {
+                                    putExtra("eventId", eventData.id)
+                                }
+                                context.startActivity(intent)
                             },
                             modifier = Modifier
                                 .weight(1f),
@@ -1156,17 +1160,6 @@ fun DetailContent(eventId: String, path: String) {
             }
         )
     }
-
-    // TODO: Update MapShareDialog to adapt new LocationData
-    if (showShareMapDialog && eventData != null && locationAvailable == true && locationData != null) MapShareDialog(
-        eventData = eventData,
-        onDismiss = {
-            showShareMapDialog = false
-        },
-        eventLocations = eventLocations.associate { it.time to it.location },
-        locationData = locationData
-    )
-
 
     // Delete Dialog
     if (deleteDialogState && eventData != null) {

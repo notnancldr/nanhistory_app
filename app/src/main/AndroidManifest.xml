@@ -53,6 +53,11 @@
             android:label="@string/title_activity_event_location"
             android:theme="@style/Theme.NanHistory" />
         <activity
+            android:name=".activity.shareMap.ShareMapActivity"
+            android:exported="false"
+            android:label="@string/title_activity_share_map"
+            android:theme="@style/Theme.NanHistory" />
+        <activity
             android:name=".settings.SettingsActivity"
             android:exported="false"
             android:label="@string/title_activity_settings"

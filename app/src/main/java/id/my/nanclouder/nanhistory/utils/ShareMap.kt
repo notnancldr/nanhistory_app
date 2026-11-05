@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,8 +30,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon as Material3Icon
 import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.Button
@@ -80,6 +83,15 @@ import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.utils.history.EventRange
 import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
 import id.my.nanclouder.nanhistory.utils.history.TransportationType
+import id.my.nanclouder.nanhistory.config.Config
+import id.my.nanclouder.nanhistory.ui.map.maplibre.TripPreviewMap
+import id.my.nanclouder.nanhistory.utils.history.LocationData
+import id.my.nanclouder.nanhistory.utils.share.CanvasElement
+import id.my.nanclouder.nanhistory.utils.share.CanvasElementType
+import id.my.nanclouder.nanhistory.utils.share.ShareCanvasPresets
+import id.my.nanclouder.nanhistory.utils.share.ShareCanvasTransformer
+import id.my.nanclouder.nanhistory.utils.share.ShareCardAspectRatio
+import id.my.nanclouder.nanhistory.utils.share.ShareElementInspector
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -592,6 +604,16 @@ private fun TripMapView(
     locations: Map<ZonedDateTime, Coordinate>,
     modifier: Modifier = Modifier
 ) {
+    if (Config.experimentalMaplibreShareMap.getCache()) {
+        val locList = remember(locations) {
+            locations.entries.sortedBy { it.key }.map {
+                LocationData(time = it.key, location = it.value)
+            }
+        }
+        TripPreviewMap(locations = locList, modifier = modifier)
+        return
+    }
+
     val context = LocalContext.current
 
     val geoPoints = locations.keys.sorted().map {
@@ -717,6 +739,49 @@ fun MapShareDialog(
     val duration = if (eventData is EventRange) {
         eventData.end.toEpochSecond() - eventData.time.toEpochSecond()
     } else 0L
+
+    val useMapLibre = Config.experimentalMaplibreShareMap.getCache()
+    var useCustomCanvas by rememberSaveable { mutableStateOf(useMapLibre) }
+    var selectedElementId by remember { mutableStateOf<String?>(null) }
+    var inspectingElement by remember { mutableStateOf<CanvasElement?>(null) }
+    var addElementMenuExpanded by remember { mutableStateOf(false) }
+
+    val locationsList = remember(eventLocations) {
+        eventLocations.entries.sortedBy { it.key }.map {
+            LocationData(time = it.key, location = it.value)
+        }
+    }
+
+    val initialAspect = remember(actualWidthPx, actualHeightPx) {
+        val r = actualWidthPx / actualHeightPx
+        when {
+            r in 0.9f..1.1f -> ShareCardAspectRatio.SQUARE
+            r < 0.9f -> ShareCardAspectRatio.STORY
+            else -> ShareCardAspectRatio.LANDSCAPE
+        }
+    }
+
+    var canvasElements by remember(eventData.id) {
+        mutableStateOf(ShareCanvasPresets.getDefaultElements(initialAspect))
+    }
+
+    val metricsMap = remember(locationData, duration) {
+        val dist = locationData.sumOf { it.distance.toDouble() }
+        val maxSp = if (locationData.isNotEmpty()) kotlin.math.round(locationData.maxOf { it.speed } * 10) / 10 else 0f
+        val avgSp = if (duration > 0 && dist > 0) ((dist / 100f / (duration / 3600f)) * 10).roundToInt() / 10f else 0f
+        mapOf(
+            "distance" to String.format("%.2f km", dist / 1000.0),
+            "duration" to "${duration / 60}m",
+            "avg_speed" to String.format("%.1f km/h", avgSp),
+            "max_speed" to String.format("%.1f km/h", maxSp)
+        )
+    }
+
+    val dateStr = remember(eventData) {
+        if (eventData is EventRange) {
+            DateTimeFormatter.ofPattern("MMM dd, yyyy HH:mm").format(eventData.time)
+        } else ""
+    }
 
     val graphicsLayer = rememberGraphicsLayer()
 
@@ -955,6 +1020,92 @@ fun MapShareDialog(
                             }
                         }
 
+                        if (useMapLibre) {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp)),
+                                color = MaterialTheme.colorScheme.surfaceContainer,
+                                tonalElevation = 2.dp
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        FilterChip(
+                                            selected = useCustomCanvas,
+                                            onClick = { useCustomCanvas = true },
+                                            label = { Text("Custom Canvas") }
+                                        )
+                                        FilterChip(
+                                            selected = !useCustomCanvas,
+                                            onClick = { useCustomCanvas = false },
+                                            label = { Text("Classic Card") }
+                                        )
+                                    }
+
+                                    if (useCustomCanvas) {
+                                        Text("Canvas Layout & Elements", style = MaterialTheme.typography.labelMedium)
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            ShareCardAspectRatio.values().forEach { aspect ->
+                                                FilterChip(
+                                                    selected = false,
+                                                    onClick = {
+                                                        canvasElements = ShareCanvasPresets.getDefaultElements(aspect)
+                                                    },
+                                                    label = { Text(aspect.label, fontSize = 11.sp) }
+                                                )
+                                            }
+
+                                            Spacer(modifier = Modifier.weight(1f))
+
+                                            Box {
+                                                Button(
+                                                    onClick = { addElementMenuExpanded = true },
+                                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                                ) {
+                                                    Icon(Icons.Rounded.Add, contentDescription = "Add", modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("Add", fontSize = 12.sp)
+                                                }
+
+                                                androidx.compose.material3.DropdownMenu(
+                                                    expanded = addElementMenuExpanded,
+                                                    onDismissRequest = { addElementMenuExpanded = false }
+                                                ) {
+                                                    CanvasElementType.values().forEach { type ->
+                                                        DropdownMenuItem(
+                                                            text = { Text(type.name.replace("_", " ")) },
+                                                            onClick = {
+                                                                val newElem = CanvasElement(
+                                                                    type = type,
+                                                                    xPercent = 0.2f,
+                                                                    yPercent = 0.4f,
+                                                                    widthPercent = 0.6f,
+                                                                    heightPercent = 0.15f
+                                                                )
+                                                                canvasElements = canvasElements + newElem
+                                                                selectedElementId = newElem.id
+                                                                addElementMenuExpanded = false
+                                                            }
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1159,30 +1310,58 @@ fun MapShareDialog(
                                         }
                                         drawLayer(graphicsLayer)
                                     }
-                                    .padding(4.dp)
+                                    .padding(if (useCustomCanvas) 0.dp else 4.dp)
                             ) {
-                                // Apply custom density to the content
-                                CompositionLocalProvider(
-                                    LocalDensity provides Density(
-                                        density = customDensity,
-                                        fontScale = customFontScale
-                                    )
-                                ) {
-                                    // The actual content that will be captured
-                                    ShareableStatsCard(
-                                        locationData = locationData,
-                                        eventLocations = eventLocations,
-                                        duration = duration,
+                                if (useCustomCanvas) {
+                                    if (showMapCheckbox && locationsList.isNotEmpty()) {
+                                        TripPreviewMap(
+                                            locations = locationsList,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
+                                    ShareCanvasTransformer(
+                                        elements = canvasElements,
+                                        selectedElementId = selectedElementId,
                                         eventTitle = eventData.title,
-                                        eventData = eventData,
-                                        widthPx = actualWidthPx,
-                                        heightPx = actualHeightPx,
-                                        showTitle = showTitleCheckbox,
-                                        showDescription = showDescriptionCheckbox,
-                                        showMap = showMapCheckbox,
-                                        showStats = showStatsCheckbox,
+                                        dateString = dateStr,
+                                        metricsText = metricsMap,
+                                        locations = locationsList,
+                                        onSelectElement = { selectedElementId = it },
+                                        onUpdateElement = { updated ->
+                                            canvasElements = canvasElements.map { if (it.id == updated.id) updated else it }
+                                        },
+                                        onDeleteElement = { delId ->
+                                            canvasElements = canvasElements.filter { it.id != delId }
+                                            if (selectedElementId == delId) selectedElementId = null
+                                        },
+                                        onOpenStyleSheet = { inspectingElement = it },
+                                        isExporting = isGenerating,
                                         modifier = Modifier.fillMaxSize()
                                     )
+                                } else {
+                                    // Apply custom density to the content
+                                    CompositionLocalProvider(
+                                        LocalDensity provides Density(
+                                            density = customDensity,
+                                            fontScale = customFontScale
+                                        )
+                                    ) {
+                                        // The actual content that will be captured
+                                        ShareableStatsCard(
+                                            locationData = locationData,
+                                            eventLocations = eventLocations,
+                                            duration = duration,
+                                            eventTitle = eventData.title,
+                                            eventData = eventData,
+                                            widthPx = actualWidthPx,
+                                            heightPx = actualHeightPx,
+                                            showTitle = showTitleCheckbox,
+                                            showDescription = showDescriptionCheckbox,
+                                            showMap = showMapCheckbox,
+                                            showStats = showStatsCheckbox,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1310,6 +1489,17 @@ fun MapShareDialog(
             }
         }
     )
+
+    if (inspectingElement != null) {
+        ShareElementInspector(
+            element = inspectingElement!!,
+            onUpdateElement = { updated ->
+                canvasElements = canvasElements.map { if (it.id == updated.id) updated else it }
+                inspectingElement = updated
+            },
+            onDismiss = { inspectingElement = null }
+        )
+    }
 }
 
 /**

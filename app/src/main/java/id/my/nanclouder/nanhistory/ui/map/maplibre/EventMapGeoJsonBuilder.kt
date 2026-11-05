@@ -189,6 +189,20 @@ object EventMapGeoJsonBuilder {
         return sb.toString()
     }
 
+    fun buildStartEndPointsGeoJson(first: Coordinate?, last: Coordinate?): String {
+        if (first == null) return emptyFeatureCollection()
+        val sb = StringBuilder()
+        sb.append("{\"type\":\"FeatureCollection\",\"features\":[")
+        sb.append("{\"type\":\"Feature\",\"properties\":{\"pointType\":\"start\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[")
+        sb.append(first.longitude).append(",").append(first.latitude).append("]}}")
+        if (last != null && (last.latitude != first.latitude || last.longitude != first.longitude)) {
+            sb.append(",{\"type\":\"Feature\",\"properties\":{\"pointType\":\"end\"},\"geometry\":{\"type\":\"Point\",\"coordinates\":[")
+            sb.append(last.longitude).append(",").append(last.latitude).append("]}}")
+        }
+        sb.append("]}")
+        return sb.toString()
+    }
+
     fun buildPointsGeoJson(locations: List<LocationData>): String {
         if (locations.isEmpty()) return emptyFeatureCollection()
         val sb = StringBuilder(locations.size * 64)

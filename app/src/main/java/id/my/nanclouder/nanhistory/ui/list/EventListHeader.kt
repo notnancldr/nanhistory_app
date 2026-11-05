@@ -62,14 +62,10 @@ import id.my.nanclouder.nanhistory.utils.DateFormatter
 import id.my.nanclouder.nanhistory.utils.history.HistoryDay
 import id.my.nanclouder.nanhistory.ui.tags.TagsView
 import id.my.nanclouder.nanhistory.utils.history.LocationData
+import id.my.nanclouder.nanhistory.ui.map.maplibre.TripPreviewMap
 import id.my.nanclouder.nanhistory.utils.simplifyPoints
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.CustomZoomButtonsController
-import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Polyline
 
 @Composable
 fun EventListHeader(
@@ -414,7 +410,7 @@ fun EventListHeader_New(
                             .clip(RoundedCornerShape(12.dp))
                             .background(MaterialTheme.colorScheme.surface)
                     ) {
-                        TripMapView(
+                        TripPreviewMap(
                             locations = tripLocations,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -535,101 +531,4 @@ fun EventListHeader_New(
             }
         }
     }
-}
-
-@Composable
-private fun TripMapView(
-    locations: List<LocationData>,
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-
-    val sortedLocationData = locations.sortedBy { it.time }
-    val simplifiedPoints = simplifyPoints(sortedLocationData.map { it.location }, epsilon = 0.00003)
-
-    if (simplifiedPoints.isEmpty()) return
-
-    val geoPoints = simplifiedPoints.map { GeoPoint(it.latitude, it.longitude) }
-
-    AndroidView(
-        modifier = modifier,
-        factory = { ctx ->
-            MapView(ctx).apply {
-                setMultiTouchControls(false)
-                isClickable = false
-                isEnabled = false
-
-                setTileSource(TileSourceFactory.DEFAULT_TILE_SOURCE)
-                zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
-
-                post {
-                    maxZoomLevel = 18.0
-                    try {
-                        zoomToBoundingBox(geoPoints.toBoundingBox(), false)
-                        setScrollableAreaLimitLatitude(mapCenter.latitude, mapCenter.latitude, 0)
-                        setScrollableAreaLimitLongitude(mapCenter.longitude, mapCenter.longitude, 0)
-                        minZoomLevel = zoomLevelDouble
-                        maxZoomLevel = zoomLevelDouble
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }
-            }
-        },
-        update = { mapView ->
-            mapView.overlays.clear()
-
-            val polylineBorder = Polyline(mapView).apply {
-                setPoints(geoPoints)
-                outlinePaint.apply {
-                    color = android.graphics.Color.rgb(0, 0, 20)
-                    strokeWidth = 4f
-                    strokeCap = android.graphics.Paint.Cap.ROUND
-                }
-            }
-
-            val polyline = Polyline(mapView).apply {
-                setPoints(geoPoints)
-                outlinePaint.apply {
-                    color = android.graphics.Color.BLUE
-                    strokeWidth = 3f
-                    strokeCap = android.graphics.Paint.Cap.ROUND
-                }
-            }
-
-            mapView.overlays.add(polylineBorder)
-            mapView.overlays.add(polyline)
-
-            val endMarker = org.osmdroid.views.overlay.Marker(mapView).apply {
-                position = geoPoints.last()
-                icon = context.getDrawable(R.drawable.ic_location_end)
-            }
-            mapView.overlays.add(endMarker)
-
-            if (geoPoints.size > 1) {
-                val startMarker = org.osmdroid.views.overlay.Marker(mapView).apply {
-                    position = geoPoints.first()
-                    icon = context.getDrawable(R.drawable.ic_location_start)
-                }
-                mapView.overlays.add(startMarker)
-            }
-
-            mapView.invalidate()
-        }
-    )
-}
-
-private fun List<GeoPoint>.toBoundingBox(): org.osmdroid.util.BoundingBox? {
-    if (this.isNotEmpty()) {
-        val boundingBox = org.osmdroid.util.BoundingBox.fromGeoPointsSafe(this)
-        val paddingFactor = 0.2
-
-        return org.osmdroid.util.BoundingBox(
-            boundingBox.latNorth + (boundingBox.latitudeSpan * paddingFactor),
-            boundingBox.lonEast + (boundingBox.longitudeSpan * paddingFactor),
-            boundingBox.latSouth - (boundingBox.latitudeSpan * paddingFactor),
-            boundingBox.lonWest - (boundingBox.longitudeSpan * paddingFactor)
-        )
-    }
-    return null
 }

@@ -1,0 +1,393 @@
+package id.my.nanclouder.nanhistory.activity.shareMap.ui
+
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Rect
+import android.graphics.RectF
+import android.view.Window
+import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import id.my.nanclouder.nanhistory.R
+import id.my.nanclouder.nanhistory.config.Config
+import id.my.nanclouder.nanhistory.config.ShareMapExportEngine
+import id.my.nanclouder.nanhistory.state.ShareMapUiState
+import id.my.nanclouder.nanhistory.state.ShareMapViewModel
+import id.my.nanclouder.nanhistory.ui.map.maplibre.TripMapSnapshotter
+import id.my.nanclouder.nanhistory.ui.map.maplibre.TripPreviewMap
+import id.my.nanclouder.nanhistory.utils.saveBitmapToPictures
+import id.my.nanclouder.nanhistory.utils.share.PixelCopyCapture
+import id.my.nanclouder.nanhistory.utils.share.ShareCanvasTransformer
+import id.my.nanclouder.nanhistory.utils.share.ShareCardAspectRatio
+import id.my.nanclouder.nanhistory.utils.share.ShareElementInspector
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
+import kotlin.time.Duration.Companion.milliseconds
+import androidx.core.graphics.createBitmap
+
+/**
+ * Screen-level composable for the dedicated full-screen ShareMap editing studio.
+ */
+@Composable
+fun ShareMapScreen(
+    viewModel: ShareMapViewModel,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val isDark = isSystemInDarkTheme()
+    val cardBgColor = MaterialTheme.colorScheme.surface
+    val scope = rememberCoroutineScope()
+    val graphicsLayer = rememberGraphicsLayer()
+
+    var cardBoundsInWindow by remember { mutableStateOf<Rect?>(null) }
+    var isCapturing by remember { mutableStateOf(false) }
+
+    Scaffold(
+        topBar = {
+            ShareMapTopBar(
+                canUndo = uiState.canUndo,
+                canRedo = uiState.canRedo,
+                onBack = onBack,
+                onUndo = viewModel::undo,
+                onRedo = viewModel::redo,
+                onReset = viewModel::resetLayout,
+                onExport = { viewModel.showExportSheet(true) }
+            )
+        },
+        bottomBar = {
+            val selectedElement = remember(uiState.elements, uiState.selectedElementId) {
+                uiState.elements.find { it.id == uiState.selectedElementId }
+            }
+            ShareMapBottomBar(
+                modifier = Modifier.padding(bottom = 4.dp),
+                currentAspect = uiState.aspectRatio,
+                selectedElement = selectedElement,
+                showBackgroundMap = uiState.showBackgroundMap,
+                onSelectAspect = viewModel::setAspectRatio,
+                onToggleBackgroundMap = viewModel::toggleBackgroundMap,
+                onAddElement = viewModel::addElement,
+                onDuplicateElement = viewModel::duplicateElement,
+                onDeleteElement = viewModel::deleteElement,
+                onOpenStyle = { viewModel.openStyleSheet(it) },
+                onLayerUp = {
+                    viewModel.updateElement(it.copy(zIndex = it.zIndex + 1f))
+                    viewModel.onTransformCommit()
+                },
+                onLayerDown = {
+                    viewModel.updateElement(it.copy(zIndex = (it.zIndex - 1f).coerceAtLeast(0f)))
+                    viewModel.onTransformCommit()
+                }
+            )
+        },
+        modifier = modifier.fillMaxSize()
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .background(MaterialTheme.colorScheme.surfaceContainerLowest),
+            contentAlignment = Alignment.Center
+        ) {
+            if (uiState.isLoading) {
+                CircularProgressIndicator()
+            } else {
+                // Centered Aspect-Ratio Card Viewport
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val cardAspect = uiState.aspectRatio.ratio
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(if (cardAspect < 1f) 0.85f else 1f)
+                            .aspectRatio(cardAspect)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surface)
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+                            .onGloballyPositioned { coordinates ->
+                                val bounds = coordinates.boundsInWindow()
+                                cardBoundsInWindow = Rect(
+                                    bounds.left.toInt(),
+                                    bounds.top.toInt(),
+                                    bounds.right.toInt(),
+                                    bounds.bottom.toInt()
+                                )
+                            }
+                    ) {
+                        // 1. Background Route Map (if enabled)
+                        if (uiState.showBackgroundMap && uiState.locations.isNotEmpty()) {
+                            TripPreviewMap(
+                                locations = uiState.locations,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+
+                        // 2. Interactive Canvas Transformer (Draggable, resizable elements)
+                        ShareCanvasTransformer(
+                            elements = uiState.elements,
+                            selectedElementId = uiState.selectedElementId,
+                            eventTitle = uiState.eventTitle,
+                            dateString = uiState.dateString,
+                            metricsText = uiState.metrics,
+                            locations = uiState.locations,
+                            onSelectElement = viewModel::selectElement,
+                            onUpdateElement = viewModel::updateElement,
+                            onDeleteElement = viewModel::deleteElement,
+                            onOpenStyleSheet = { viewModel.openStyleSheet(it) },
+                            onTransformCommit = viewModel::onTransformCommit,
+                            isExporting = isCapturing,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .drawWithContent {
+                                    graphicsLayer.record {
+                                        this@drawWithContent.drawContent()
+                                    }
+                                    drawLayer(graphicsLayer)
+                                }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // Modal Style Property Inspector Sheet
+    if (uiState.inspectingElement != null) {
+        ShareElementInspector(
+            element = uiState.inspectingElement!!,
+            onUpdateElement = { updated ->
+                viewModel.updateElement(updated)
+                viewModel.openStyleSheet(updated)
+                viewModel.onTransformCommit()
+            },
+            onDismiss = { viewModel.openStyleSheet(null) }
+        )
+    }
+
+    // Modal Export & Sharing Sheet
+    if (uiState.showExportSheet) {
+        ShareExportSheet(
+            isExporting = isCapturing,
+            onSaveToPictures = { format, baseDimensionPx ->
+                scope.launch {
+                    try {
+                        isCapturing = true
+                        viewModel.selectElement(null)
+                        delay(150.milliseconds)
+
+                        val imageBitmap = graphicsLayer.toImageBitmap()
+                        val elementsBitmap = imageBitmap.asAndroidBitmap()
+
+                        val window = (context as? Activity)?.window
+                        val compositeBitmap = withContext(Dispatchers.Default) {
+                            renderCardBitmap(
+                                context, window, cardBoundsInWindow, uiState,
+                                elementsBitmap, baseDimensionPx, isDark, cardBgColor
+                            )
+                        }
+
+                        withContext(Dispatchers.IO) {
+                            val fileName = "Trip_${System.currentTimeMillis()}.${format.lowercase()}"
+                            saveBitmapToPictures(context, compositeBitmap, fileName, format)
+                        }
+
+                        Toast.makeText(
+                            context,
+                            context.applicationContext.getString(R.string.share_saved_toast),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        viewModel.showExportSheet(false)
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Export error: ${e.message}", Toast.LENGTH_LONG).show()
+                    } finally {
+                        isCapturing = false
+                    }
+                }
+            },
+            onShareDirectly = { format, baseDimensionPx ->
+                scope.launch {
+                    try {
+                        isCapturing = true
+                        viewModel.selectElement(null)
+                        delay(150.milliseconds)
+
+                        val imageBitmap = graphicsLayer.toImageBitmap()
+                        val elementsBitmap = imageBitmap.asAndroidBitmap()
+
+                        val window = (context as? Activity)?.window
+                        val compositeBitmap = withContext(Dispatchers.Default) {
+                            renderCardBitmap(
+                                context, window, cardBoundsInWindow, uiState,
+                                elementsBitmap, baseDimensionPx, isDark, cardBgColor
+                            )
+                        }
+
+                        val uri = withContext(Dispatchers.IO) {
+                            val tempFile = File(context.cacheDir, "shared_trip.${format.lowercase()}")
+                            FileOutputStream(tempFile).use { out ->
+                                val compressFormat = if (format == "JPEG") {
+                                    Bitmap.CompressFormat.JPEG
+                                } else {
+                                    Bitmap.CompressFormat.PNG
+                                }
+                                compositeBitmap.compress(compressFormat, 95, out)
+                            }
+                            androidx.core.content.FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.fileprovider",
+                                tempFile
+                            )
+                        }
+
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "image/*"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(
+                            Intent.createChooser(shareIntent, context.applicationContext.getString(R.string.share_share_image))
+                        )
+                        viewModel.showExportSheet(false)
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Share error: ${e.message}", Toast.LENGTH_LONG).show()
+                    } finally {
+                        isCapturing = false
+                    }
+                }
+            },
+            onDismiss = { viewModel.showExportSheet(false) }
+        )
+    }
+}
+
+private fun Bitmap.toSoftwareBitmap(): Bitmap =
+    if (config == Bitmap.Config.HARDWARE) copy(Bitmap.Config.ARGB_8888, false) else this
+
+private suspend fun renderCardBitmap(
+    context: Context,
+    window: Window?,
+    cardBoundsInWindow: Rect?,
+    uiState: ShareMapUiState,
+    elementsBitmap: Bitmap,
+    baseDimensionPx: Int,
+    isDark: Boolean,
+    cardBgColor: Color
+): Bitmap {
+    val (targetWidth, targetHeight) = when (uiState.aspectRatio) {
+        ShareCardAspectRatio.SQUARE -> Pair(baseDimensionPx, baseDimensionPx)
+        ShareCardAspectRatio.STORY -> Pair(baseDimensionPx, (baseDimensionPx * 16) / 9)
+        ShareCardAspectRatio.LANDSCAPE -> Pair((baseDimensionPx * 16) / 9, baseDimensionPx)
+    }
+
+    val exportEngine = Config.shareMapExportEngine.get(context)
+
+    if (exportEngine == ShareMapExportEngine.PixelCopy && window != null && cardBoundsInWindow != null) {
+        val pixelCopyBitmap = PixelCopyCapture.captureWindowBounds(
+            window, cardBoundsInWindow, targetWidth, targetHeight
+        )
+        if (pixelCopyBitmap != null) return pixelCopyBitmap
+    }
+
+    var mapBitmap: Bitmap? = null
+    if (uiState.showBackgroundMap && uiState.locations.isNotEmpty()) {
+        mapBitmap = TripMapSnapshotter.captureMapSnapshot(
+            locations = uiState.locations,
+            widthPx = targetWidth,
+            heightPx = targetHeight,
+            isDark = isDark
+        )
+    }
+
+    if (mapBitmap == null && uiState.showBackgroundMap && uiState.locations.isNotEmpty() &&
+        window != null && cardBoundsInWindow != null
+    ) {
+        val fallbackPixelCopy = PixelCopyCapture.captureWindowBounds(
+            window, cardBoundsInWindow, targetWidth, targetHeight
+        )
+        if (fallbackPixelCopy != null) return fallbackPixelCopy
+    }
+
+    val finalBitmap = createBitmap(targetWidth, targetHeight)
+    val canvas = Canvas(finalBitmap)
+    val cornerRadiusPx = 16f * (baseDimensionPx / 360f).coerceAtLeast(1f)
+
+    val path = Path().apply {
+        addRoundRect(
+            RectF(0f, 0f, targetWidth.toFloat(), targetHeight.toFloat()),
+            cornerRadiusPx,
+            cornerRadiusPx,
+            Path.Direction.CW
+        )
+    }
+    canvas.clipPath(path)
+
+    val bgPaint = Paint().apply {
+        color = cardBgColor.toArgb()
+        style = Paint.Style.FILL
+    }
+    canvas.drawRect(0f, 0f, targetWidth.toFloat(), targetHeight.toFloat(), bgPaint)
+
+    if (mapBitmap != null) {
+        val safeMap = mapBitmap.toSoftwareBitmap()
+        val mapPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+        val src = Rect(0, 0, safeMap.width, safeMap.height)
+        val dst = Rect(0, 0, targetWidth, targetHeight)
+        canvas.drawBitmap(safeMap, src, dst, mapPaint)
+        if (safeMap !== mapBitmap) safeMap.recycle()
+        mapBitmap.recycle()
+    }
+
+    val safeElements = elementsBitmap.toSoftwareBitmap()
+    val overlayPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+    val srcOverlay = Rect(0, 0, safeElements.width, safeElements.height)
+    val dstOverlay = Rect(0, 0, targetWidth, targetHeight)
+    canvas.drawBitmap(safeElements, srcOverlay, dstOverlay, overlayPaint)
+    if (safeElements !== elementsBitmap) safeElements.recycle()
+
+    return finalBitmap
+}

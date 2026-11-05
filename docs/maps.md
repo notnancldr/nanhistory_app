@@ -7,7 +7,7 @@
   - [`app/src/main/java/id/my/nanclouder/nanhistory/activity/EventLocationActivity.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/EventLocationActivity.kt)
   - [`app/src/main/java/id/my/nanclouder/nanhistory/activity/YearlyMapActivity.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/YearlyMapActivity.kt)
   - [`app/src/main/java/id/my/nanclouder/nanhistory/activity/MapLibreTest.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/MapLibreTest.kt)
-- **Last Verified Against**: 2026-11-01
+- **Last Verified Against**: 2026-11-04
 
 ---
 
@@ -138,14 +138,68 @@ To prevent loading tens of thousands of GPS coordinates into memory when viewing
 
 ## 5. MapLibre Integration Status
 
-- **Primary MapLibre Use**: `YearlyMap` and `EventLocationScreen` (modern UI) are migrated to **MapLibre Compose** (`org.maplibre.compose:maplibre-compose:0.20.0`) with the **Vulkan runtime** (`org.maplibre.compose:maplibre-compose-runtime-vulkan-android:0.20.0`).
+- **Primary MapLibre Use**: `YearlyMap`, `EventLocationScreen` (modern UI), `EventDetail` route preview (`TripPreviewMap`), `EventListHeader_New`, and `ShareMap` are migrated to **MapLibre Compose** (`org.maplibre.compose:maplibre-compose:0.20.0`) with the **Vulkan runtime** (`org.maplibre.compose:maplibre-compose-runtime-vulkan-android:0.20.0`).
 - **Vector Base Style**: Fully migrated from raster OSM tiles to vector styles (`MapStyleConfig`, `BaseMapStyle`) with OpenFreeMap and bundled zero-network offline fallbacks.
-- **Isolation Boundary**: All MapLibre Compose imports are strictly confined to `id.my.nanclouder.nanhistory.ui.map.maplibre` (`CorridorMap.kt`, `EventLocationMap.kt`, `EventMapGeoJsonBuilder.kt`, `BaseMapStyle.kt`, `MapStyleConfig.kt`). UI screens (`YearlyMapContent.kt`, `MapHistoryView.kt`) interact exclusively through standard Compose slots and immutable state.
+- **Isolation Boundary**: All MapLibre Compose imports are strictly confined to `id.my.nanclouder.nanhistory.ui.map.maplibre` (`CorridorMap.kt`, `EventLocationMap.kt`, `TripPreviewMap.kt`, `TripMapSnapshotter.kt`, `EventMapGeoJsonBuilder.kt`, `BaseMapStyle.kt`, `MapStyleConfig.kt`). UI screens (`YearlyMapContent.kt`, `MapHistoryView.kt`, `DetailContent.kt`, `EventListHeader.kt`, `ShareMap.kt`) interact exclusively through standard Compose slots and immutable state.
 - **Event Location Replay**: Interactive chronological playback on `EventLocationMap` with real-time coordinate interpolation, bearing azimuth calculation, discrete speed slider (0.25x - 50x), follow-camera centering, dynamic traveled trail styling, pulsing accuracy halo, stationary dwell indicators, and floating telemetry HUD.
 - **Data Mode Colored Polylines**: Full parity with legacy OSMDroid data modes (`SPEED`, `ACCELERATION`, `TIME`, `ACCURACY`, `BEARING`, `ALTITUDE`). `EventMapGeoJsonBuilder` dynamically slices the route into 2-point segments with `"color": "#RRGGBB"` properties, styled dynamically on the GPU by `EventLocationMap` using MapLibre expressions for both the base path and traveled replay trail.
-- **OSMDroid Coexistence**: OSMDroid remains the map engine for legacy `EventLocationView_Old`, `ShareMap`, and `EventListHeader`.
+- **Customizable Drag-and-Drop ShareMap**: Interactive canvas in `ShareMap.kt` powered by `ShareCanvasTransformer`, allowing users to drag, resize, rotate, and style floating elements (Title, Telemetry Badges, Mini Map, Markdown Text) with normalized coordinates across 1:1, 9:16, and 16:9 aspect ratios.
+- **ShareMap Dual-Engine Image Export**: See Section 6 for details on `MapSnapshotter` and `PixelCopyCapture`.
+- **OSMDroid Coexistence**: OSMDroid remains strictly isolated to legacy old UI paths (`MapHistoryViewOld` in `activity.eventLocation.oldUi` and `MapHistoryPreviewOld` in `activity.eventDetail.oldUi`). All modern screens use MapLibre.
 
 ---
 
-## 6. Open Questions & Unverified Items
-- None. OSMDroid coexistence and MapLibre Compose Vulkan runtime are verified in the build and test suites.
+## 6. ShareMap Image Export Pipeline
+
+Exporting the ShareMap card to a bitmap requires capturing both the underlying MapLibre map and the user-customized Compose overlay elements.
+
+### Root Cause of Blank Map in Native Compose Recording
+`MapLibreMap` renders using an `AndroidExternalSurface` (`SurfaceView`). `SurfaceView` draws directly to a hardware layer composed by Android's `SurfaceFlinger`, completely bypassing the View hierarchy's and Jetpack Compose's `DrawScope` / DisplayList. As a result, standard Jetpack Compose graphics recording (`graphicsLayer.record { drawContent() }` / `toImageBitmap()`) captures only Compose draw calls (solid card background, text, badges), leaving the map area completely blank (transparent/background color).
+
+### Dual-Engine Export Architecture
+To support high-resolution offscreen rendering as well as robust fallback across diverse hardware, NanHistory implements a dual-engine architecture configurable via `ExperimentalSettingsActivity` (`Config.shareMapExportEngine`):
+
+1. **MapSnapshotter Engine (`ShareMapExportEngine.MapSnapshotter` - Default & Recommended)**:
+   - Uses MapLibre's native offscreen renderer (`runtime.createSnapshotter`).
+   - Renders vector tiles, route polyline casing, route core lines, and start/finish pins offscreen directly to an Android `android.graphics.Bitmap` at the exact requested export resolution (Standard 1080p, High 2K, Ultra 4K).
+   - In `ShareMapScreen`, the Compose overlay elements (`ShareCanvasTransformer`) are recorded via `graphicsLayer.record` with a transparent background.
+   - The final export image is composited on a native `android.graphics.Canvas`:
+     1. Rounded card background (with user-selected card color).
+     2. High-resolution map snapshot bitmap clipped to card boundaries.
+     3. High-resolution transparent Compose element layer (scaled via bilinear filtering matrix).
+   - If `MapSnapshotter` fails (e.g., native driver crash or style loading error), it automatically logs a warning and falls back to `PixelCopyCapture`.
+
+2. **PixelCopy Engine (`ShareMapExportEngine.PixelCopy` / Fallback)**:
+   - Uses Android's `PixelCopy.request` on the host Activity window (`PixelCopyCapture.captureViewBounds`).
+   - Captures the exact composited pixels from the hardware framebuffer within the card's screen bounds (obtained via `onGloballyPositioned`).
+   - Scales the screen-resolution capture to the selected export preset (1080p, 2K, 4K) using an anti-aliased bitmap canvas with bilinear filtering (`isFilterBitmap = true`).
+
+```mermaid
+flowchart TD
+    UserExport[User clicks Export] --> CheckEngine{Config.shareMapExportEngine}
+    
+    CheckEngine -->|MapSnapshotter| TrySnapshotter[TripMapSnapshotter.captureMapSnapshot]
+    TrySnapshotter -->|Success| CompositeSnapshot[Canvas Composite: Background + Map Snapshot + Elements]
+    TrySnapshotter -->|Failure / Null| Fallback[Fallback to PixelCopyCapture]
+    
+    CheckEngine -->|PixelCopy| DoPixelCopy[PixelCopyCapture.captureViewBounds]
+    Fallback --> DoPixelCopy
+    
+    DoPixelCopy --> ScaleBitmap[Scale to target export resolution with bilinear filter]
+    ScaleBitmap --> FinalBitmap[Exported Bitmap]
+    CompositeSnapshot --> FinalBitmap
+    
+    FinalBitmap --> SaveMedia[Save to MediaStore / Share Intent]
+```
+
+### Configuration & Settings
+- Setting key: `Config.shareMapExportEngine` stored in `SharedPreferences`.
+- Accessible in `Settings` -> `Experimental Settings` -> `Share Map Export Engine`.
+- Options:
+  - `MapSnapshotter` (`R.string.settings_experimental_export_engine_snapshotter`): High-resolution vector snapshot (Default).
+  - `PixelCopy` (`R.string.settings_experimental_export_engine_pixelcopy`): Framebuffer screen capture.
+
+---
+
+## 7. Open Questions & Unverified Items
+- None. OSMDroid coexistence, MapLibre Compose Vulkan runtime, and ShareMap dual-engine export pipeline are verified in the build and test suites.

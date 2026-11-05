@@ -20,6 +20,11 @@ enum class VibrateMode {
     Interval, Update, SmartUpdate
 }
 
+enum class ShareMapExportEngine {
+    MapSnapshotter,
+    PixelCopy
+}
+
 object Config {
     private const val PATH = "config/config.json"
 
@@ -66,6 +71,10 @@ object Config {
         const val EXPERIMENTAL_AUDIO_RECORD = false
         const val EXPERIMENTAL_MARKDOWN_INPUT_HIGHLIGHTING = false
         const val EXPERIMENTAL_MARKDOWN_VIEWER_SYNTAX_HIGHLIGHTING = true
+        const val EXPERIMENTAL_MAPLIBRE_SHARE_MAP = true
+        val SHARE_MAP_EXPORT_ENGINE = ShareMapExportEngine.MapSnapshotter
+        const val EXPERIMENTAL_ADVANCED_SHARE_STYLE = false
+        const val LAST_SHARE_MAP_LAYOUT = ""
         const val INCLUDE_AUDIO_RECORD = false
 
         const val AUDIO_STEREO_CHANNEL = false
@@ -312,6 +321,19 @@ object Config {
     val experimentalMarkdownViewerSyntaxHighlighting = BooleanValue(
         "experimentalMarkdownViewerSyntaxHighlighting",
         Default.EXPERIMENTAL_MARKDOWN_VIEWER_SYNTAX_HIGHLIGHTING
+    )
+    val experimentalMaplibreShareMap = BooleanValue(
+        "experimentalMaplibreShareMap", Default.EXPERIMENTAL_MAPLIBRE_SHARE_MAP
+    )
+    val shareMapExportEngine = EnumValue(
+        "shareMapExportEngine", Default.SHARE_MAP_EXPORT_ENGINE,
+        ShareMapExportEngine::class.java
+    )
+    val experimentalAdvancedShareStyle = BooleanValue(
+        "experimentalAdvancedShareStyle", Default.EXPERIMENTAL_ADVANCED_SHARE_STYLE
+    )
+    val lastShareMapLayout = StringValue(
+        "lastShareMapLayout", Default.LAST_SHARE_MAP_LAYOUT
     )
     val includeAudioRecord = BooleanValue(
         "includeAudioRecord", Default.INCLUDE_AUDIO_RECORD

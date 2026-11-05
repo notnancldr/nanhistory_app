@@ -46,7 +46,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import id.my.nanclouder.nanhistory.R
-import id.my.nanclouder.nanhistory.activity.eventDetail.ui.toBoundingBox
+import id.my.nanclouder.nanhistory.activity.eventDetail.oldUi.toBoundingBox
 import id.my.nanclouder.nanhistory.activity.eventLocation.common.calculateColor
 import id.my.nanclouder.nanhistory.utils.Coordinate
 import id.my.nanclouder.nanhistory.utils.TimeFormatterWithSecond
