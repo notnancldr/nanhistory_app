@@ -55,6 +55,42 @@ class TripMapSnapshotterTest {
     }
 
     @Test
+    fun resolveRegion_customCamera_retainsCustomCameraExactValues() {
+        val coords = listOf(Coordinate(-6.2, 106.8))
+        val region = TripMapSnapshotter.resolveRegion(
+            coords = coords,
+            widthPx = 1080,
+            heightPx = 1080,
+            customCenterLon = 106.85,
+            customCenterLat = -6.25,
+            customZoom = 12.0
+        )
+        assertEquals(-6.25, region.centerLat, 0.001)
+        assertEquals(106.85, region.centerLon, 0.001)
+        assertEquals(12.0, region.zoom, 0.001)
+    }
+
+    @Test
+    fun resolveRegion_noCustomCamera_delegatesToCalculateCenterAndZoom() {
+        val coords = listOf(
+            Coordinate(latitude = -6.2000, longitude = 106.8000),
+            Coordinate(latitude = -6.2100, longitude = 106.8200)
+        )
+        val resolved = TripMapSnapshotter.resolveRegion(
+            coords = coords,
+            widthPx = 1080,
+            heightPx = 1080,
+            customCenterLon = null,
+            customCenterLat = null,
+            customZoom = null
+        )
+        val calculated = TripMapSnapshotter.calculateCenterAndZoom(coords, 1080, 1080)
+        assertEquals(calculated.centerLat, resolved.centerLat, 0.001)
+        assertEquals(calculated.centerLon, resolved.centerLon, 0.001)
+        assertEquals(calculated.zoom, resolved.zoom, 0.001)
+    }
+
+    @Test
     fun captureMapSnapshot_emptyLocations_returnsNullImmediately() = runBlocking {
         val result = TripMapSnapshotter.captureMapSnapshot(
             locations = emptyList(),

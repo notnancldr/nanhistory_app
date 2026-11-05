@@ -143,7 +143,7 @@ To prevent loading tens of thousands of GPS coordinates into memory when viewing
 - **Isolation Boundary**: All MapLibre Compose imports are strictly confined to `id.my.nanclouder.nanhistory.ui.map.maplibre` (`CorridorMap.kt`, `EventLocationMap.kt`, `TripPreviewMap.kt`, `TripMapSnapshotter.kt`, `EventMapGeoJsonBuilder.kt`, `BaseMapStyle.kt`, `MapStyleConfig.kt`). UI screens (`YearlyMapContent.kt`, `MapHistoryView.kt`, `DetailContent.kt`, `EventListHeader.kt`, `ShareMap.kt`) interact exclusively through standard Compose slots and immutable state.
 - **Event Location Replay**: Interactive chronological playback on `EventLocationMap` with real-time coordinate interpolation, bearing azimuth calculation, discrete speed slider (0.25x - 50x), follow-camera centering, dynamic traveled trail styling, pulsing accuracy halo, stationary dwell indicators, and floating telemetry HUD.
 - **Data Mode Colored Polylines**: Full parity with legacy OSMDroid data modes (`SPEED`, `ACCELERATION`, `TIME`, `ACCURACY`, `BEARING`, `ALTITUDE`). `EventMapGeoJsonBuilder` dynamically slices the route into 2-point segments with `"color": "#RRGGBB"` properties, styled dynamically on the GPU by `EventLocationMap` using MapLibre expressions for both the base path and traveled replay trail.
-- **Customizable Drag-and-Drop ShareMap**: Interactive canvas in `ShareMap.kt` powered by `ShareCanvasTransformer`, allowing users to drag, resize, rotate, and style floating elements (Title, Telemetry Badges, Mini Map, Markdown Text) with normalized coordinates across 1:1, 9:16, and 16:9 aspect ratios.
+- **Customizable Drag-and-Drop ShareMap**: Interactive canvas in `ShareMapActivity` powered by `ShareCanvasTransformer`, allowing users to drag, resize, rotate, and style floating elements (Title, Telemetry Badges, Mini Map, Markdown Text, Tags) with normalized coordinates across 1:1, 9:16, and 16:9 aspect ratios. Features full ARGB color picking with alpha transparency, configurable borders/outlines, dedicated Map Adjust mode (drag-to-pan & pinch-to-zoom), light/dark theming for background and floating maps, and custom template tokens (`{start_time:FORMAT}`, `{end_time:FORMAT}`, `{elevation_gain}`, `{description}`).
 - **ShareMap Dual-Engine Image Export**: See Section 6 for details on `MapSnapshotter` and `PixelCopyCapture`.
 - **OSMDroid Coexistence**: OSMDroid remains strictly isolated to legacy old UI paths (`MapHistoryViewOld` in `activity.eventLocation.oldUi` and `MapHistoryPreviewOld` in `activity.eventDetail.oldUi`). All modern screens use MapLibre.
 
@@ -191,6 +191,17 @@ flowchart TD
     
     FinalBitmap --> SaveMedia[Save to MediaStore / Share Intent]
 ```
+
+### Map Camera Customization & Resolution Scaling
+When customizing the background map camera via "Adjust Map" mode:
+1. **Touch Layer Isolation**: In "Adjust Map" mode, `ShareCanvasTransformer` completely omits `pointerInput` modifiers to avoid intercepting touch events. The underlying `TripPreviewMap` directly receives all drag and pinch gestures without wrapping in `key(isInteractive)`, preserving presentation attachment.
+2. **Unified Camera Commit & Undo/Redo**: During active panning/zooming, local state in `ShareMapScreen` tracks the camera. The camera adjustments are automatically committed whenever exiting adjust mode through any path: clicking **Done**, toggling **Adjust Map** on the Action Bar, or clicking **Export** in the Top Bar.
+3. **Export Resolution Scaling**: MapLibre's `MapSnapshotter` takes a logical `DpSize` and a `Density`. To guarantee identical geographic framing between on-screen preview and high-resolution export (1080p, 2K, 4K):
+   - Logical viewport size is set to the card's on-screen DP dimensions: `(previewWidthDp, previewHeightDp)`.
+   - Camera zoom and center match the on-screen camera exactly: `zoom = customZoom`, `center = (customCenterLon, customCenterLat)`.
+   - Target snapshot density is computed as:
+     $$\text{targetDensity} = \frac{W_{\text{exportPx}}}{W_{\text{previewDp}}}$$
+   - This produces physical pixel dimensions matching the export preset ($\text{logicalWidthDp} \times \text{targetDensity} = W_{\text{exportPx}}$) while framing the exact same geographic bounds viewed on-screen.
 
 ### Configuration & Settings
 - Setting key: `Config.shareMapExportEngine` stored in `SharedPreferences`.

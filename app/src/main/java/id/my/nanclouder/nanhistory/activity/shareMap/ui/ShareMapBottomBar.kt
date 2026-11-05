@@ -14,6 +14,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.CropFree
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -27,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,15 +54,16 @@ import id.my.nanclouder.nanhistory.utils.share.ShareCardAspectRatio
 fun ShareMapBottomBar(
     currentAspect: ShareCardAspectRatio,
     selectedElement: CanvasElement?,
-    showBackgroundMap: Boolean,
+    isMapAdjustMode: Boolean,
     onSelectAspect: (ShareCardAspectRatio) -> Unit,
-    onToggleBackgroundMap: () -> Unit,
     onAddElement: (CanvasElementType) -> Unit,
     onDuplicateElement: (String) -> Unit,
     onDeleteElement: (String) -> Unit,
     onOpenStyle: (CanvasElement) -> Unit,
     onLayerUp: (CanvasElement) -> Unit,
     onLayerDown: (CanvasElement) -> Unit,
+    onFitRoute: () -> Unit,
+    onDoneAdjustMap: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var addMenuExpanded by remember { mutableStateOf(false) }
@@ -76,97 +80,138 @@ fun ShareMapBottomBar(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Selected Element Quick Action Bar (shown when an element is selected)
-            if (selectedElement != null) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier.fillMaxWidth()
+            if (isMapAdjustMode) {
+                // Map Adjust Mode Action Bar
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                    Text(
+                        text = stringResource(R.string.share_map_adjust_mode),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = onFitRoute) {
+                            Icon(Icons.Rounded.CropFree, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(stringResource(R.string.share_map_fit_route), fontSize = 12.sp)
+                        }
+
+                        Button(onClick = onDoneAdjustMap) {
+                            Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(stringResource(R.string.share_map_done), fontSize = 12.sp)
+                        }
+                    }
+                }
+            } else {
+                // Selected Element Quick Action Bar
+                if (selectedElement != null) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            text = "Selected: ${selectedElement.type.name.replace("_", " ")}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { onOpenStyle(selectedElement) }) {
-                                Icon(Icons.Rounded.Edit, contentDescription = "Edit Style", modifier = Modifier.size(18.dp))
-                            }
-                            IconButton(onClick = { onDuplicateElement(selectedElement.id) }) {
-                                Icon(Icons.Rounded.Layers, contentDescription = "Duplicate", modifier = Modifier.size(18.dp))
-                            }
-                            IconButton(onClick = { onLayerUp(selectedElement) }) {
-                                Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = "Bring Forward", modifier = Modifier.size(18.dp))
-                            }
-                            IconButton(onClick = { onLayerDown(selectedElement) }) {
-                                Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Send Backward", modifier = Modifier.size(18.dp))
-                            }
-                            IconButton(
-                                onClick = { onDeleteElement(selectedElement.id) },
-                                colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                            ) {
-                                Icon(Icons.Rounded.Delete, contentDescription = "Delete", modifier = Modifier.size(18.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Selected: ${selectedElement.type.name.replace("_", " ")}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = { onOpenStyle(selectedElement) }) {
+                                    Icon(
+                                        Icons.Rounded.Edit,
+                                        contentDescription = "Edit Style",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                IconButton(onClick = { onDuplicateElement(selectedElement.id) }) {
+                                    Icon(
+                                        Icons.Rounded.Layers,
+                                        contentDescription = "Duplicate",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                IconButton(onClick = { onLayerUp(selectedElement) }) {
+                                    Icon(
+                                        Icons.Rounded.KeyboardArrowUp,
+                                        contentDescription = "Bring Forward",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                IconButton(onClick = { onLayerDown(selectedElement) }) {
+                                    Icon(
+                                        Icons.Rounded.KeyboardArrowDown,
+                                        contentDescription = "Send Backward",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { onDeleteElement(selectedElement.id) },
+                                    colors = IconButtonDefaults.iconButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.error
+                                    )
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.Delete,
+                                        contentDescription = "Delete",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            // Main Studio Controls Row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Aspect Ratio Selector
-                ShareCardAspectRatio.values().forEach { aspect ->
-                    FilterChip(
-                        selected = currentAspect == aspect,
-                        onClick = { onSelectAspect(aspect) },
-                        label = { Text(aspect.label, fontSize = 12.sp) }
-                    )
-                }
-
-                // Background Map Toggle
-                FilterChip(
-                    selected = showBackgroundMap,
-                    onClick = onToggleBackgroundMap,
-                    label = { Text("Map BG", fontSize = 12.sp) }
-                )
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // Add Element Dropdown Menu
-                Box {
-                    Button(
-                        onClick = { addMenuExpanded = true }
-                    ) {
-                        Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(stringResource(R.string.share_map_add_element), fontSize = 12.sp)
+                // Main Studio Controls Row (Aspect Ratios + Add Element)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ShareCardAspectRatio.values().forEach { aspect ->
+                        FilterChip(
+                            selected = currentAspect == aspect,
+                            onClick = { onSelectAspect(aspect) },
+                            label = { Text(aspect.label, fontSize = 12.sp) }
+                        )
                     }
 
-                    DropdownMenu(
-                        expanded = addMenuExpanded,
-                        onDismissRequest = { addMenuExpanded = false }
-                    ) {
-                        CanvasElementType.values().forEach { type ->
-                            DropdownMenuItem(
-                                text = { Text(type.name.replace("_", " ")) },
-                                onClick = {
-                                    onAddElement(type)
-                                    addMenuExpanded = false
-                                }
-                            )
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // Add Element Dropdown Menu
+                    Box {
+                        Button(onClick = { addMenuExpanded = true }) {
+                            Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(stringResource(R.string.share_map_add_element), fontSize = 12.sp)
+                        }
+
+                        DropdownMenu(
+                            expanded = addMenuExpanded,
+                            onDismissRequest = { addMenuExpanded = false }
+                        ) {
+                            CanvasElementType.values().forEach { type ->
+                                DropdownMenuItem(
+                                    text = { Text(type.name.replace("_", " ")) },
+                                    onClick = {
+                                        onAddElement(type)
+                                        addMenuExpanded = false
+                                    }
+                                )
+                            }
                         }
                     }
                 }

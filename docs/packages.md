@@ -44,7 +44,8 @@
 - [`MapLibreTest.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/MapLibreTest.kt): Experimental test activity for MapLibre SDK (commented out in manifest).
 - `eventDetail/EventDetailActivity.kt`: Full detail view for recorded events, audio playback, and attached metadata.
 - `shareMap/ShareMapActivity.kt`: Full-screen editing studio for composing and exporting shareable map snapshots with draggable/resizable overlays.
-- `shareMap/ui/ShareMapScreen.kt`, `ShareMapTopBar.kt`, `ShareMapBottomBar.kt`, `ShareExportSheet.kt`: Compose UI components for the share map canvas and controls.
+- `shareMap/ui/ShareMapScreen.kt`, `ShareMapTopBar.kt`, `ShareMapActionBar.kt`, `ShareMapBottomBar.kt`, `ShareCardBitmapRenderer.kt`, `ShareExportSheet.kt`: Compose UI components for the share map canvas and controls.
+- `utils/share/`: `ShareCanvasModel.kt`, `ShareCanvasTransformer.kt`, `ShareCanvasElementRenderer.kt`, `ShareElementInspector.kt`, `ShareElementColorPickerDialog.kt`, `ShareTokenResolver.kt`, `PixelCopyCapture.kt`: ShareMap canvas model, inspector, color pickers, token resolver, and rendering transformers.
 
 ### `config/`
 - [`Config.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/config/Config.kt): Typed configuration accessors reading from Android SharedPreferences.

@@ -1324,6 +1324,7 @@ fun MapShareDialog(
                                         selectedElementId = selectedElementId,
                                         eventTitle = eventData.title,
                                         dateString = dateStr,
+                                        eventData = eventData,
                                         metricsText = metricsMap,
                                         locations = locationsList,
                                         onSelectElement = { selectedElementId = it },

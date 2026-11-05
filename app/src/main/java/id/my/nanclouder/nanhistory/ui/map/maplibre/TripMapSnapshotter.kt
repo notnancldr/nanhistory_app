@@ -88,6 +88,22 @@ object TripMapSnapshotter {
         return BoundingRegion(centerLon, centerLat, zoom)
     }
 
+    fun resolveRegion(
+        coords: List<Coordinate>,
+        widthPx: Int,
+        heightPx: Int,
+        customCenterLon: Double? = null,
+        customCenterLat: Double? = null,
+        customZoom: Double? = null,
+        previewWidthPx: Int? = null
+    ): BoundingRegion {
+        return if (customCenterLon != null && customCenterLat != null && customZoom != null) {
+            BoundingRegion(customCenterLon, customCenterLat, customZoom)
+        } else {
+            calculateCenterAndZoom(coords, widthPx, heightPx)
+        }
+    }
+
     /**
      * Renders a standalone high-resolution vector map snapshot bitmap with the trip route.
      * Tries the primary vector base style first, falling back to local asset styles if offline.
@@ -98,7 +114,12 @@ object TripMapSnapshotter {
         heightPx: Int,
         isDark: Boolean,
         runtime: MapRuntime? = null,
-        coreColor: Color = Color(0xFF38608F)
+        coreColor: Color = Color(0xFF38608F),
+        customCenterLon: Double? = null,
+        customCenterLat: Double? = null,
+        customZoom: Double? = null,
+        previewWidthDp: Float? = null,
+        previewHeightDp: Float? = null
     ): Bitmap? {
         if (locations.isEmpty() || widthPx <= 0 || heightPx <= 0) return null
 
@@ -122,8 +143,6 @@ object TripMapSnapshotter {
             EventMapGeoJsonBuilder.buildStartEndPointsGeoJson(lastCoord, null)
         } else ""
 
-        val region = calculateCenterAndZoom(simplifiedCoords, widthPx, heightPx)
-
         return tryCapture(
             runtime = mapRuntime,
             baseStyle = BaseMapStyle.getBaseStyle(isDark = isDark, isFallback = false),
@@ -132,7 +151,12 @@ object TripMapSnapshotter {
             endPinGeoJson = endPinGeoJson,
             firstCoord = firstCoord,
             lastCoord = lastCoord,
-            region = region,
+            simplifiedCoords = simplifiedCoords,
+            customCenterLon = customCenterLon,
+            customCenterLat = customCenterLat,
+            customZoom = customZoom,
+            previewWidthDp = previewWidthDp,
+            previewHeightDp = previewHeightDp,
             widthPx = widthPx,
             heightPx = heightPx,
             isDark = isDark,
@@ -145,7 +169,12 @@ object TripMapSnapshotter {
             endPinGeoJson = endPinGeoJson,
             firstCoord = firstCoord,
             lastCoord = lastCoord,
-            region = region,
+            simplifiedCoords = simplifiedCoords,
+            customCenterLon = customCenterLon,
+            customCenterLat = customCenterLat,
+            customZoom = customZoom,
+            previewWidthDp = previewWidthDp,
+            previewHeightDp = previewHeightDp,
             widthPx = widthPx,
             heightPx = heightPx,
             isDark = isDark,
@@ -161,13 +190,22 @@ object TripMapSnapshotter {
         endPinGeoJson: String,
         firstCoord: Coordinate?,
         lastCoord: Coordinate?,
-        region: BoundingRegion,
+        simplifiedCoords: List<Coordinate>,
+        customCenterLon: Double?,
+        customCenterLat: Double?,
+        customZoom: Double?,
+        previewWidthDp: Float?,
+        previewHeightDp: Float?,
         widthPx: Int,
         heightPx: Int,
         isDark: Boolean,
         coreColor: Color
     ): Bitmap? {
-        val scaleFactor = (minOf(widthPx, heightPx) / 1080f).coerceAtLeast(1f)
+        val logicalWidthDp = (previewWidthDp ?: 360f).coerceAtLeast(100f)
+        val logicalHeightDp = (previewHeightDp ?: (logicalWidthDp * (heightPx.toFloat() / widthPx.toFloat())))
+            .coerceAtLeast(100f)
+        val targetDensity = (widthPx.toFloat() / logicalWidthDp).coerceAtLeast(1f)
+
         var snapshotter: MapSnapshotter? = null
         return try {
             snapshotter = runtime.createSnapshotter(baseStyle = baseStyle) {
@@ -186,7 +224,7 @@ object TripMapSnapshotter {
                         id = SNAPSHOT_CASING_LAYER,
                         source = routeSource,
                         color = const(if (isDark) Color(0xFF1A1A1A) else Color(0xFF001030)),
-                        width = const((6f * scaleFactor).dp),
+                        width = const(6.dp),
                         cap = const(LineCap.Round),
                         join = const(LineJoin.Round)
                     )
@@ -194,7 +232,7 @@ object TripMapSnapshotter {
                         id = SNAPSHOT_CORE_LAYER,
                         source = routeSource,
                         color = const(coreColor),
-                        width = const((3.5f * scaleFactor).dp),
+                        width = const(3.5.dp),
                         cap = const(LineCap.Round),
                         join = const(LineJoin.Round)
                     )
@@ -202,35 +240,47 @@ object TripMapSnapshotter {
                         CircleLayer(
                             id = SNAPSHOT_START_PIN_LAYER,
                             source = startPinSource,
-                            radius = const((6f * scaleFactor).dp),
+                            radius = const(6.dp),
                             color = const(Color(0xFF4CAF50)),
                             strokeColor = const(Color.White),
-                            strokeWidth = const((2f * scaleFactor).dp)
+                            strokeWidth = const(2.dp)
                         )
                     }
                     if (lastCoord != null && lastCoord != firstCoord) {
                         CircleLayer(
                             id = SNAPSHOT_END_PIN_LAYER,
                             source = endPinSource,
-                            radius = const((6f * scaleFactor).dp),
+                            radius = const(6.dp),
                             color = const(Color(0xFFF44336)),
                             strokeColor = const(Color.White),
-                            strokeWidth = const((2f * scaleFactor).dp)
+                            strokeWidth = const(2.dp)
                         )
                     }
                 }
             }
 
-            val camera = CameraPosition(
-                center = Position(longitude = region.centerLon, latitude = region.centerLat),
-                zoom = region.zoom
-            )
+            val camera = if (customCenterLon != null && customCenterLat != null && customZoom != null) {
+                CameraPosition(
+                    center = Position(longitude = customCenterLon, latitude = customCenterLat),
+                    zoom = customZoom
+                )
+            } else {
+                val region = calculateCenterAndZoom(
+                    coords = simplifiedCoords,
+                    widthPx = logicalWidthDp.toInt(),
+                    heightPx = logicalHeightDp.toInt()
+                )
+                CameraPosition(
+                    center = Position(longitude = region.centerLon, latitude = region.centerLat),
+                    zoom = region.zoom
+                )
+            }
 
             val imageBitmap = snapshotter.capture(
-                size = DpSize(widthPx.dp, heightPx.dp)
+                size = DpSize(logicalWidthDp.dp, logicalHeightDp.dp)
             ) {
                 cameraPosition = camera
-                density = Density(1f)
+                density = Density(targetDensity)
             }
 
             imageBitmap.asAndroidBitmap()

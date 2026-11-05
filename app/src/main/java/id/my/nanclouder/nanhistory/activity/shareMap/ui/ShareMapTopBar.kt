@@ -5,9 +5,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.Redo
-import androidx.compose.material.icons.automirrored.rounded.Undo
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,12 +26,7 @@ import id.my.nanclouder.nanhistory.R
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShareMapTopBar(
-    canUndo: Boolean,
-    canRedo: Boolean,
     onBack: () -> Unit,
-    onUndo: () -> Unit,
-    onRedo: () -> Unit,
-    onReset: () -> Unit,
     onExport: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -51,27 +43,7 @@ fun ShareMapTopBar(
             }
         },
         actions = {
-            IconButton(onClick = onUndo, enabled = canUndo) {
-                Icon(
-                    Icons.AutoMirrored.Rounded.Undo,
-                    contentDescription = stringResource(R.string.share_undo)
-                )
-            }
-            IconButton(onClick = onRedo, enabled = canRedo) {
-                Icon(
-                    Icons.AutoMirrored.Rounded.Redo,
-                    contentDescription = stringResource(R.string.share_redo)
-                )
-            }
-            IconButton(onClick = onReset) {
-                Icon(
-                    Icons.Rounded.Refresh,
-                    contentDescription = stringResource(R.string.share_reset)
-                )
-            }
-            Button(
-                onClick = onExport
-            ) {
+            Button(onClick = onExport) {
                 Icon(
                     Icons.Rounded.Share,
                     contentDescription = null,

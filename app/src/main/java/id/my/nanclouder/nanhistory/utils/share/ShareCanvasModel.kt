@@ -27,7 +27,8 @@ data class ElementStyle(
     val fontSizeSp: Float = 14f,
     val hasShadow: Boolean = true,
     val templateFormat: String = "",
-    val rawCustomProperties: String = ""
+    val rawCustomProperties: String = "",
+    val mapTheme: String = "SYSTEM"
 )
 
 /**

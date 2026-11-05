@@ -126,4 +126,23 @@ class ShareMapViewModelTest {
         assertEquals(9f / 16f, ShareCardAspectRatio.STORY.ratio, 0.001f)
         assertEquals(16f / 9f, ShareCardAspectRatio.LANDSCAPE.ratio, 0.001f)
     }
+
+    @Test
+    fun shareCanvasSnapshot_preservesCameraAndPreviewDimensions() {
+        val snapshot = ShareCanvasSnapshot(
+            elements = emptyList(),
+            centerLat = -6.2,
+            centerLon = 106.8,
+            zoom = 14.5,
+            bgTheme = "DARK",
+            previewWidthDp = 360f,
+            previewHeightDp = 360f
+        )
+        assertEquals(-6.2, snapshot.centerLat!!, 0.001)
+        assertEquals(106.8, snapshot.centerLon!!, 0.001)
+        assertEquals(14.5, snapshot.zoom!!, 0.001)
+        assertEquals("DARK", snapshot.bgTheme)
+        assertEquals(360f, snapshot.previewWidthDp!!, 0.001f)
+        assertEquals(360f, snapshot.previewHeightDp!!, 0.001f)
+    }
 }

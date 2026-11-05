@@ -8,6 +8,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -38,15 +39,21 @@ private const val PREVIEW_START_PIN_LAYER = "trip-preview-start-pin-layer"
 private const val PREVIEW_END_PIN_LAYER = "trip-preview-end-pin-layer"
 
 /**
- * Reusable, lightweight, non-interactive MapLibre Compose preview for trip routes.
+ * Reusable, lightweight MapLibre Compose preview for trip routes.
  *
- * Used across modern Event Detail and Day List Header screens.
- * Camera gestures are disabled, and the route is auto-framed with 20% margin.
+ * Supports optional forced theming (Light/Dark/System) and interactive drag-to-pan & pinch-to-zoom mode.
  */
 @Composable
 fun TripPreviewMap(
     locations: List<LocationData>,
     modifier: Modifier = Modifier,
+    forcedTheme: String? = null,
+    isInteractive: Boolean = false,
+    fitRouteTrigger: Int = 0,
+    initialCenterLat: Double? = null,
+    initialCenterLon: Double? = null,
+    initialZoom: Double? = null,
+    onCameraChanged: ((lat: Double, lon: Double, zoom: Double) -> Unit)? = null,
     onClick: (() -> Unit)? = null
 ) {
     if (locations.isEmpty()) {
@@ -54,7 +61,12 @@ fun TripPreviewMap(
         return
     }
 
-    val isDark = isSystemInDarkTheme()
+    val systemDark = isSystemInDarkTheme()
+    val isDark = when (forcedTheme) {
+        "LIGHT" -> false
+        "DARK" -> true
+        else -> systemDark
+    }
     var isFallbackActive by remember { mutableStateOf(false) }
 
     val baseStyle = remember(isDark, isFallbackActive) {
@@ -180,12 +192,58 @@ fun TripPreviewMap(
         }
     }
 
-    LaunchedEffect(targetBounds) {
-        val bounds = targetBounds ?: return@LaunchedEffect
-        try {
-            mapState.fitCameraToBounds(bounds)
-        } catch (_: Throwable) {
-            // Guard against camera animation interruption
+    var isInitialized by remember { mutableStateOf(false) }
+
+    // Fit to route initially or when fitRouteTrigger increments
+    LaunchedEffect(targetBounds, fitRouteTrigger) {
+        if (!isInitialized && initialCenterLat != null && initialCenterLon != null && initialZoom != null) {
+            try {
+                mapState.setCameraPosition(
+                    mapState.cameraPosition.copy(
+                        center = Position(initialCenterLon, initialCenterLat),
+                        zoom = initialZoom
+                    )
+                )
+                isInitialized = true
+            } catch (_: Throwable) {
+                // Guard against cancellation
+            }
+        } else {
+            val bounds = targetBounds ?: return@LaunchedEffect
+            try {
+                mapState.fitCameraToBounds(bounds)
+                isInitialized = true
+            } catch (_: Throwable) {
+                // Guard against camera animation interruption
+            }
+        }
+    }
+
+    // Restore camera on Undo/Redo only when NOT in interactive adjust mode
+    LaunchedEffect(initialCenterLat, initialCenterLon, initialZoom) {
+        if (!isInteractive && isInitialized && initialCenterLat != null &&
+            initialCenterLon != null && initialZoom != null
+        ) {
+            try {
+                mapState.setCameraPosition(
+                    mapState.cameraPosition.copy(
+                        center = Position(initialCenterLon, initialCenterLat),
+                        zoom = initialZoom
+                    )
+                )
+            } catch (_: Throwable) {
+                // Guard against cancellation
+            }
+        }
+    }
+
+    if (isInteractive && onCameraChanged != null) {
+        LaunchedEffect(mapState) {
+            val initialCam = mapState.cameraPosition
+            onCameraChanged(initialCam.center.latitude, initialCam.center.longitude, initialCam.zoom)
+            snapshotFlow { mapState.cameraPosition }.collect { cam ->
+                onCameraChanged(cam.center.latitude, cam.center.longitude, cam.zoom)
+            }
         }
     }
 
@@ -194,8 +252,8 @@ fun TripPreviewMap(
             state = mapState,
             interactions = MapInteractions {
                 camera {
-                    pan { enabled = false }
-                    zoom { enabled = false }
+                    pan { enabled = isInteractive }
+                    zoom { enabled = isInteractive }
                     rotate { enabled = false }
                     pitch { enabled = false }
                 }
@@ -204,7 +262,7 @@ fun TripPreviewMap(
             modifier = Modifier.fillMaxSize()
         )
 
-        if (onClick != null) {
+        if (!isInteractive && onClick != null) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()

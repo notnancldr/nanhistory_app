@@ -15,6 +15,7 @@ data class ShareMapUiState(
     val eventData: HistoryEvent? = null,
     val locations: List<LocationData> = emptyList(),
     val metrics: Map<String, String> = emptyMap(),
+    val elevationGainMeters: Double? = null,
     val aspectRatio: ShareCardAspectRatio = ShareCardAspectRatio.SQUARE,
     val elements: List<CanvasElement> = emptyList(),
     val selectedElementId: String? = null,
@@ -23,6 +24,13 @@ data class ShareMapUiState(
     val isExporting: Boolean = false,
     val exportProgress: Float = 0f,
     val showBackgroundMap: Boolean = true,
+    val backgroundMapTheme: String = "SYSTEM", // "SYSTEM", "LIGHT", "DARK"
+    val customMapCenterLat: Double? = null,
+    val customMapCenterLon: Double? = null,
+    val customMapZoom: Double? = null,
+    val previewWidthDp: Float? = null,
+    val previewHeightDp: Float? = null,
+    val isMapAdjustMode: Boolean = false,
     val canUndo: Boolean = false,
     val canRedo: Boolean = false
 )

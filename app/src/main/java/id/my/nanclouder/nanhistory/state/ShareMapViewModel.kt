@@ -11,6 +11,7 @@ import id.my.nanclouder.nanhistory.utils.share.CanvasElement
 import id.my.nanclouder.nanhistory.utils.share.CanvasElementType
 import id.my.nanclouder.nanhistory.utils.share.ShareCanvasPresets
 import id.my.nanclouder.nanhistory.utils.share.ShareCardAspectRatio
+import id.my.nanclouder.nanhistory.utils.share.ShareTokenResolver
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +21,16 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
+
+data class ShareCanvasSnapshot(
+    val elements: List<CanvasElement>,
+    val centerLat: Double?,
+    val centerLon: Double?,
+    val zoom: Double?,
+    val bgTheme: String,
+    val previewWidthDp: Float?,
+    val previewHeightDp: Float?
+)
 
 class ShareMapViewModel(
     private val eventId: String,
@@ -31,16 +42,28 @@ class ShareMapViewModel(
     private val _uiState = MutableStateFlow(ShareMapUiState())
     val uiState: StateFlow<ShareMapUiState> = _uiState.asStateFlow()
 
-    private val undoStack = ArrayDeque<List<CanvasElement>>()
-    private val redoStack = ArrayDeque<List<CanvasElement>>()
+    private val undoStack = ArrayDeque<ShareCanvasSnapshot>()
+    private val redoStack = ArrayDeque<ShareCanvasSnapshot>()
 
     init {
         loadEvent()
     }
 
+    private fun getCurrentSnapshot(): ShareCanvasSnapshot {
+        val s = _uiState.value
+        return ShareCanvasSnapshot(
+            elements = s.elements,
+            centerLat = s.customMapCenterLat,
+            centerLon = s.customMapCenterLon,
+            zoom = s.customMapZoom,
+            bgTheme = s.backgroundMapTheme,
+            previewWidthDp = s.previewWidthDp,
+            previewHeightDp = s.previewHeightDp
+        )
+    }
+
     private fun recordHistory() {
-        val currentElements = _uiState.value.elements
-        undoStack.addLast(currentElements)
+        undoStack.addLast(getCurrentSnapshot())
         if (undoStack.size > 20) {
             undoStack.removeFirst()
         }
@@ -59,19 +82,37 @@ class ShareMapViewModel(
 
     fun undo() {
         if (undoStack.isEmpty()) return
-        val currentElements = _uiState.value.elements
-        redoStack.addLast(currentElements)
-        val previousElements = undoStack.removeLast()
-        _uiState.update { it.copy(elements = previousElements) }
+        redoStack.addLast(getCurrentSnapshot())
+        val previous = undoStack.removeLast()
+        _uiState.update {
+            it.copy(
+                elements = previous.elements,
+                customMapCenterLat = previous.centerLat,
+                customMapCenterLon = previous.centerLon,
+                customMapZoom = previous.zoom,
+                backgroundMapTheme = previous.bgTheme,
+                previewWidthDp = previous.previewWidthDp,
+                previewHeightDp = previous.previewHeightDp
+            )
+        }
         updateUndoRedoAvailability()
     }
 
     fun redo() {
         if (redoStack.isEmpty()) return
-        val currentElements = _uiState.value.elements
-        undoStack.addLast(currentElements)
-        val nextElements = redoStack.removeLast()
-        _uiState.update { it.copy(elements = nextElements) }
+        undoStack.addLast(getCurrentSnapshot())
+        val next = redoStack.removeLast()
+        _uiState.update {
+            it.copy(
+                elements = next.elements,
+                customMapCenterLat = next.centerLat,
+                customMapCenterLon = next.centerLon,
+                customMapZoom = next.zoom,
+                backgroundMapTheme = next.bgTheme,
+                previewWidthDp = next.previewWidthDp,
+                previewHeightDp = next.previewHeightDp
+            )
+        }
         updateUndoRedoAvailability()
     }
 
@@ -111,6 +152,7 @@ class ShareMapViewModel(
                 "max_speed" to String.format("%.1f km/h", maxSp)
             )
 
+            val elevationGain = ShareTokenResolver.calculateElevationGain(locations)
             val initialAspect = ShareCardAspectRatio.SQUARE
             val defaultElements = ShareCanvasPresets.getDefaultElements(initialAspect)
 
@@ -122,6 +164,7 @@ class ShareMapViewModel(
                     eventData = historyEvent,
                     locations = locations,
                     metrics = metrics,
+                    elevationGainMeters = elevationGain,
                     aspectRatio = initialAspect,
                     elements = defaultElements
                 )
@@ -147,7 +190,12 @@ class ShareMapViewModel(
         _uiState.update {
             it.copy(
                 elements = defaultElements,
-                selectedElementId = null
+                selectedElementId = null,
+                customMapCenterLat = null,
+                customMapCenterLon = null,
+                customMapZoom = null,
+                previewWidthDp = null,
+                previewHeightDp = null
             )
         }
     }
@@ -221,5 +269,57 @@ class ShareMapViewModel(
 
     fun toggleBackgroundMap() {
         _uiState.update { it.copy(showBackgroundMap = !it.showBackgroundMap) }
+    }
+
+    fun setBackgroundMapTheme(theme: String) {
+        if (_uiState.value.backgroundMapTheme == theme) return
+        recordHistory()
+        _uiState.update { it.copy(backgroundMapTheme = theme) }
+    }
+
+    fun setMapAdjustMode(enabled: Boolean) {
+        _uiState.update { it.copy(isMapAdjustMode = enabled, selectedElementId = null) }
+    }
+
+    fun updateMapCamera(centerLat: Double?, centerLon: Double?, zoom: Double?) {
+        _uiState.update {
+            it.copy(
+                customMapCenterLat = centerLat,
+                customMapCenterLon = centerLon,
+                customMapZoom = zoom
+            )
+        }
+    }
+
+    fun commitMapCamera(
+        centerLat: Double?,
+        centerLon: Double?,
+        zoom: Double?,
+        previewWidthDp: Float?,
+        previewHeightDp: Float?
+    ) {
+        recordHistory()
+        _uiState.update {
+            it.copy(
+                customMapCenterLat = centerLat,
+                customMapCenterLon = centerLon,
+                customMapZoom = zoom,
+                previewWidthDp = previewWidthDp,
+                previewHeightDp = previewHeightDp
+            )
+        }
+    }
+
+    fun resetMapCamera() {
+        recordHistory()
+        _uiState.update {
+            it.copy(
+                customMapCenterLat = null,
+                customMapCenterLon = null,
+                customMapZoom = null,
+                previewWidthDp = null,
+                previewHeightDp = null
+            )
+        }
     }
 }
