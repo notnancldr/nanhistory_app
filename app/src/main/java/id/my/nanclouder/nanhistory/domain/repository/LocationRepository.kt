@@ -36,5 +36,5 @@ interface LocationRepository {
         endMillis: Long
     ): List<LocationData> = emptyList()
     suspend fun insertLocations(eventId: String, locations: List<LocationData>) {}
-    suspend fun getLocationBoundsInRange(from: String, until: String): LocationBounds? = null
+    suspend fun getLocationBoundsInRange(from: String?, until: String?): LocationBounds? = null
 }

@@ -94,7 +94,7 @@ class RoomLocationRepository(
         }
     }
 
-    override suspend fun getLocationBoundsInRange(from: String, until: String): LocationBounds? = withContext(ioDispatcher) {
+    override suspend fun getLocationBoundsInRange(from: String?, until: String?): LocationBounds? = withContext(ioDispatcher) {
         daoProvider().getLocationBoundsInRange(from, until)?.let {
             LocationBounds(it.minLat, it.maxLat, it.minLon, it.maxLon)
         }

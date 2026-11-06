@@ -10,8 +10,11 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import id.my.nanclouder.nanhistory.db.AppDatabase
-import id.my.nanclouder.nanhistory.db.CorridorNetworkEntity
+import id.my.nanclouder.nanhistory.NanHistoryApplication
+import id.my.nanclouder.nanhistory.domain.model.CorridorSnapshot
+import id.my.nanclouder.nanhistory.domain.repository.CorridorRepository
+import id.my.nanclouder.nanhistory.domain.repository.EventRepository
+import id.my.nanclouder.nanhistory.domain.repository.LocationRepository
 import id.my.nanclouder.nanhistory.ui.map.CorridorNetworkBuilder
 import id.my.nanclouder.nanhistory.ui.map.MapPoint
 import id.my.nanclouder.nanhistory.ui.map.YearlyMapCacheManager
@@ -24,7 +27,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * Background worker that precomputes and refreshes topologic corridor networks during device idle/charging windows.
- * Saves precomputed networks to disk binary cache and the Room [CorridorNetworkEntity] table.
+ * Saves precomputed networks to disk binary cache and the Room [CorridorNetworkEntity] table via [CorridorRepository].
  */
 class CorridorPrecomputeWorker(
     context: Context,
@@ -33,21 +36,22 @@ class CorridorPrecomputeWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
-            val db = AppDatabase.getInstance(applicationContext)
-            val appDao = db.appDao()
-            val corridorDao = db.corridorNetworkDao()
+            val container = (applicationContext as NanHistoryApplication).container
+            val eventRepository = container.eventRepository
+            val corridorRepository = container.corridorRepository
+            val locationRepository = container.locationRepository
 
-            val allEvents = appDao.getEventsInDateRange(null, null)
+            val allEvents = eventRepository.getEventsInDateRange(null, null)
             if (allEvents.isEmpty()) return@withContext Result.success()
 
             // Group events by year
-            val years = allEvents.map { it.date.year }.distinct()
+            val years = allEvents.map { it.time.year }.distinct()
 
             for (year in years) {
                 if (isStopped) return@withContext Result.retry()
 
                 val rangeKey = "year_$year"
-                val existing = corridorDao.getCorridorNetwork(rangeKey, YearlyMapCacheManager.ALGO_VERSION)
+                val existing = corridorRepository.getCorridorNetwork(rangeKey, YearlyMapCacheManager.ALGO_VERSION)
                 val startDate = "$year-01-01"
                 val endDate = "$year-12-31"
 
@@ -60,21 +64,21 @@ class CorridorPrecomputeWorker(
                     rangeKey = rangeKey,
                     startDate = startDate,
                     endDate = endDate,
-                    appDao = appDao,
-                    corridorDao = corridorDao
+                    locationRepository = locationRepository,
+                    corridorRepository = corridorRepository
                 )
             }
 
             // Also check all-time if stale
             val allTimeKey = "all_time"
-            val existingAllTime = corridorDao.getCorridorNetwork(allTimeKey, YearlyMapCacheManager.ALGO_VERSION)
+            val existingAllTime = corridorRepository.getCorridorNetwork(allTimeKey, YearlyMapCacheManager.ALGO_VERSION)
             if (existingAllTime == null || existingAllTime.updatedAt == 0L) {
                 precomputeRange(
                     rangeKey = allTimeKey,
                     startDate = null,
                     endDate = null,
-                    appDao = appDao,
-                    corridorDao = corridorDao
+                    locationRepository = locationRepository,
+                    corridorRepository = corridorRepository
                 )
             }
 
@@ -89,15 +93,15 @@ class CorridorPrecomputeWorker(
         rangeKey: String,
         startDate: String?,
         endDate: String?,
-        appDao: id.my.nanclouder.nanhistory.db.AppDao,
-        corridorDao: id.my.nanclouder.nanhistory.db.CorridorNetworkDao
+        locationRepository: LocationRepository,
+        corridorRepository: CorridorRepository
     ) {
-        val bounds = appDao.getLocationBoundsInRange(startDate, endDate) ?: return
+        val bounds = locationRepository.getLocationBoundsInRange(startDate, endDate) ?: return
         if (bounds.minLat == null || bounds.maxLat == null || bounds.minLon == null || bounds.maxLon == null) {
             return
         }
 
-        val locations = appDao.getRenderedYearlyLocations(
+        val locations = locationRepository.getRenderedYearlyLocations(
             startDate = startDate,
             endDate = endDate,
             minLat = bounds.minLat,
@@ -108,8 +112,8 @@ class CorridorPrecomputeWorker(
         )
         if (locations.size < 2) return
 
-        val tracks = locations.groupBy { it.eventId }.map { (eventId, locs) ->
-            Pair(eventId, locs.map { MapPoint(it.latitude, it.longitude, it.timestamp, it.accuracy) })
+        val tracks = locations.groupBy { it.eventId ?: "" }.map { (eventId, locs) ->
+            Pair(eventId, locs.map { MapPoint(it.location.latitude, it.location.longitude, it.time.toInstant().toEpochMilli(), it.accuracy) })
         }
 
         val merged = YearlyMapMergeLogic.mergeParallelCorridors(tracks)
@@ -118,10 +122,10 @@ class CorridorPrecomputeWorker(
         // Save binary cache file
         YearlyMapCacheManager.saveNetworkBinary(applicationContext, rangeKey, network)
 
-        // Save DB entity
+        // Save snapshot via repository
         val baos = ByteArrayOutputStream()
         network.writeTo(baos)
-        val entity = CorridorNetworkEntity(
+        val snapshot = CorridorSnapshot(
             rangeKey = rangeKey,
             startDate = startDate,
             endDate = endDate,
@@ -135,7 +139,7 @@ class CorridorPrecomputeWorker(
             totalDistanceMeters = network.totalDistanceMeters,
             networkBlob = baos.toByteArray()
         )
-        corridorDao.insertCorridorNetwork(entity)
+        corridorRepository.insertCorridorNetwork(snapshot)
         Log.d("CorridorPrecompute", "Precomputed and cached corridor network for $rangeKey")
     }
 
@@ -143,9 +147,6 @@ class CorridorPrecomputeWorker(
         const val WORK_NAME_PERIODIC: String = "corridor_precompute_periodic"
         const val WORK_NAME_ONETIME: String = "corridor_precompute_onetime"
 
-        /**
-         * Schedules periodic background precomputation constrained to charging and idle state.
-         */
         fun schedulePeriodic(context: Context) {
             val constraints = Constraints.Builder()
                 .setRequiresCharging(true)
@@ -167,9 +168,6 @@ class CorridorPrecomputeWorker(
             )
         }
 
-        /**
-         * Enqueues a one-time deferred precomputation job (e.g. after a recording session completes).
-         */
         fun scheduleOneTime(context: Context) {
             val constraints = Constraints.Builder()
                 .setRequiresBatteryNotLow(true)

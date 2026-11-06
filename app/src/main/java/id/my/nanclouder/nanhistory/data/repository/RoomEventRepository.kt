@@ -200,4 +200,18 @@ class RoomEventRepository(
             start to end
         } else null
     }
+
+    override suspend fun getExpiredTrashEvents(nowEpochMilli: Long): List<HistoryEvent> {
+        return withContext(ioDispatcher) {
+            daoProvider().getDeletedEvents()
+                .filter { (it.event.deletePermanently ?: Long.MAX_VALUE) <= nowEpochMilli }
+                .map { it.toHistoryEvent() }
+        }
+    }
+
+    override suspend fun getEventsAfter(lastEventTimeEpochMilli: Long): List<HistoryEvent> {
+        return withContext(ioDispatcher) {
+            daoProvider().getEventsAfter(lastEventTimeEpochMilli).map { it.toHistoryEvent() }
+        }
+    }
 }

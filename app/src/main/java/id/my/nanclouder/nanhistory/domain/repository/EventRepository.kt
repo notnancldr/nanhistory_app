@@ -42,5 +42,14 @@ interface EventRepository {
     suspend fun toggleFavoriteEvent(eventId: String) {}
     suspend fun toggleFavoriteDay(date: LocalDate) {}
     suspend fun getEventSiblingTimes(previousEventOf: String?, nextEventOf: String?): Pair<ZonedDateTime, ZonedDateTime>? = null
-}
 
+    /**
+     * Retrieves deleted events whose permanent deletion deadline is <= [nowEpochMilli].
+     */
+    suspend fun getExpiredTrashEvents(nowEpochMilli: Long): List<HistoryEvent> = emptyList()
+
+    /**
+     * Retrieves events whose timestamp is strictly after [lastEventTimeEpochMilli].
+     */
+    suspend fun getEventsAfter(lastEventTimeEpochMilli: Long): List<HistoryEvent> = emptyList()
+}

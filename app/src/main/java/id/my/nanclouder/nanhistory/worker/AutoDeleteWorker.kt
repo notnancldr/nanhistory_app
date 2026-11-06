@@ -8,12 +8,10 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat.getSystemService
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import id.my.nanclouder.nanhistory.NanHistoryApplication
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
-import id.my.nanclouder.nanhistory.db.AppDatabase
-import id.my.nanclouder.nanhistory.db.toHistoryEvent
-import id.my.nanclouder.nanhistory.utils.history.safeDelete
-import java.time.Instant
+import id.my.nanclouder.nanhistory.domain.usecase.PurgeExpiredTrashUseCase
 
 class AutoDeleteWorker(
     context: Context,
@@ -32,27 +30,23 @@ class AutoDeleteWorker(
 
         notificationManager?.createNotificationChannel(notificationChannel)
 
-        Log.d("AutoDeleteWorker", "Running auto-delete...")
+        Log.d("AutoDeleteWorker", "Running auto-delete via PurgeExpiredTrashUseCase...")
 
-        val db = AppDatabase.getInstance(applicationContext)
-        val dao = db.appDao()
+        val container = (applicationContext as NanHistoryApplication).container
+        val purgeUseCase = PurgeExpiredTrashUseCase(
+            eventRepository = container.eventRepository,
+            attachmentStorageRepository = container.attachmentStorageRepository
+        )
 
-        val deleted = dao.getDeletedEvents()
-        var deletedEvents = 0
+        val purgedEvents = purgeUseCase()
+        val deletedCount = purgedEvents.size
 
         val notifyUser = Config.autoDeleteNotifyUser.get(applicationContext)
 
-        for (event in deleted) {
-            if ((event.event.deletePermanently ?: Long.MAX_VALUE) <= Instant.now().toEpochMilli()) {
-                event.toHistoryEvent().safeDelete(applicationContext)
-                deletedEvents++
-            }
-        }
-
-        if (deletedEvents > 0 && notifyUser) {
+        if (deletedCount > 0 && notifyUser) {
             val notification = NotificationCompat.Builder(applicationContext, notificationChannelId)
                 .setContentTitle("Events deleted permanently")
-                .setContentText("$deletedEvents events deleted permanently after more than 30 days deleted temporarily")
+                .setContentText("$deletedCount events deleted permanently after more than 30 days deleted temporarily")
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .build()
@@ -60,7 +54,6 @@ class AutoDeleteWorker(
             notificationManager?.notify(4, notification)
         }
 
-        // Return Result.success(), Result.failure(), or Result.retry()
         return Result.success()
     }
 }

@@ -4,9 +4,8 @@ import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import id.my.nanclouder.nanhistory.NanHistoryApplication
 import id.my.nanclouder.nanhistory.config.Config
-import id.my.nanclouder.nanhistory.db.AppDatabase
-import id.my.nanclouder.nanhistory.db.toHistoryEvent
 import id.my.nanclouder.nanhistory.ui.map.YearlyMapCacheManager
 import id.my.nanclouder.nanhistory.ui.map.YearlyMapPersistentState
 import id.my.nanclouder.nanhistory.ui.map.processEventsToState
@@ -23,7 +22,7 @@ class YearlyMapWorker(
         // 1. Check Config
         if (!Config.yearlyMapBackgroundProcessing.get(context)) {
             Log.d("YearlyMapWorker", "Background processing disabled in config.")
-            return Result.success() // Should we count this as success? Yes, work done (nothing to do).
+            return Result.success()
         }
         
         // 2. Determine Year (Current Year for now)
@@ -38,15 +37,11 @@ class YearlyMapWorker(
         val isRecording = RecordService.RecordState.isRecording.value
         val activeEventId = RecordService.RecordState.eventId.value
         
-        // 5. Fetch New Events
-        val db = AppDatabase.getInstance(context)
-        val dao = db.appDao()
+        // 5. Fetch New Events via EventRepository
+        val container = (context as NanHistoryApplication).container
+        val eventRepository = container.eventRepository
         
-        // We only care about events AFTER the last processed time
-        // And strictly completed events (endTime != null is implicit in event structure but we filter in code)
-        // Also filtering out active event
-        
-        val newEvents = dao.getEventsAfter(state.lastEventTime).map { it.toHistoryEvent() }
+        val newEvents = eventRepository.getEventsAfter(state.lastEventTime)
             .filter { event ->
                 // Ensure event belongs to the target year
                 event.time.year == year

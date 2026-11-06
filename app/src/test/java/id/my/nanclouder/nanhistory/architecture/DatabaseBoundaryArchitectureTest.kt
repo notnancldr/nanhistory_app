@@ -30,9 +30,6 @@ class DatabaseBoundaryArchitectureTest {
         "DetailContent.kt",
         "OldDetailContent.kt",
         // Workers & Services
-        "AutoDeleteWorker.kt",
-        "CorridorPrecomputeWorker.kt",
-        "YearlyMapWorker.kt",
         "DataProcessService.kt",
         "RecordService.kt"
     )
