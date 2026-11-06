@@ -6,8 +6,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import id.my.nanclouder.nanhistory.NanHistoryApplication
 import id.my.nanclouder.nanhistory.activity.shareMap.ui.ShareMapScreen
-import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.state.ShareMapViewModel
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 
@@ -24,11 +24,11 @@ class ShareMapActivity : ComponentActivity() {
 
         setContent {
             val context = LocalContext.current
-            val db = remember { AppDatabase.getInstance(context.applicationContext) }
+            val container = (context.applicationContext as NanHistoryApplication).container
             val viewModel = remember(eventId) {
                 ShareMapViewModel(
                     eventId = eventId,
-                    dao = db.appDao(),
+                    eventRepository = container.eventRepository,
                     context = context.applicationContext
                 )
             }

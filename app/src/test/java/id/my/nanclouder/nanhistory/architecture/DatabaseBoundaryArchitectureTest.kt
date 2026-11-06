@@ -29,15 +29,12 @@ class DatabaseBoundaryArchitectureTest {
         // Activities
         "DetailContent.kt",
         "OldDetailContent.kt",
-        "ShareMapActivity.kt",
         // Workers & Services
         "AutoDeleteWorker.kt",
         "CorridorPrecomputeWorker.kt",
         "YearlyMapWorker.kt",
         "DataProcessService.kt",
-        "RecordService.kt",
-        // State
-        "ShareMapViewModel.kt"
+        "RecordService.kt"
     )
 
     @Test

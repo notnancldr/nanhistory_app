@@ -3,8 +3,7 @@ package id.my.nanclouder.nanhistory.state
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import id.my.nanclouder.nanhistory.db.AppDao
-import id.my.nanclouder.nanhistory.db.toHistoryEvent
+import id.my.nanclouder.nanhistory.domain.repository.EventRepository
 import id.my.nanclouder.nanhistory.utils.getLocationData
 import id.my.nanclouder.nanhistory.utils.history.EventRange
 import id.my.nanclouder.nanhistory.utils.history.getLocations
@@ -35,7 +34,7 @@ data class ShareCanvasSnapshot(
 
 class ShareMapViewModel(
     private val eventId: String,
-    private val dao: AppDao,
+    private val eventRepository: EventRepository,
     private val context: Context,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : ViewModel() {
@@ -120,13 +119,12 @@ class ShareMapViewModel(
     fun loadEvent() {
         viewModelScope.launch(ioDispatcher) {
             _uiState.update { it.copy(isLoading = true) }
-            val eventWithTags = dao.getEventById(eventId)
-            if (eventWithTags == null) {
+            val historyEvent = eventRepository.getEventById(eventId)
+            if (historyEvent == null) {
                 _uiState.update { it.copy(isLoading = false) }
                 return@launch
             }
 
-            val historyEvent = eventWithTags.toHistoryEvent()
             val locations = historyEvent.getLocations(context)
             val historyLocations = locations.getLocationData()
 
