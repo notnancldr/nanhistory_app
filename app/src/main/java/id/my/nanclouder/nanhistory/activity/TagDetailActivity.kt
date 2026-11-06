@@ -53,7 +53,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,12 +63,14 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.ViewModelProvider
+import id.my.nanclouder.nanhistory.NanHistoryApplication
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.activity.eventDetail.getActivity
 import id.my.nanclouder.nanhistory.config.Config
-import id.my.nanclouder.nanhistory.db.AppDatabase
-import id.my.nanclouder.nanhistory.db.toHistoryTag
-import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
+import id.my.nanclouder.nanhistory.domain.model.HistoryEvent
+import id.my.nanclouder.nanhistory.domain.model.HistoryTag
+import id.my.nanclouder.nanhistory.state.TagDetailViewModel
 import id.my.nanclouder.nanhistory.state.rememberSelectionState
 import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
 import id.my.nanclouder.nanhistory.ui.EventList
@@ -81,9 +82,6 @@ import id.my.nanclouder.nanhistory.ui.main.EventSelectMode
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import id.my.nanclouder.nanhistory.utils.DateFormatter
 import id.my.nanclouder.nanhistory.utils.history.EventRange
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.time.Month
 
 class TagDetailActivity : ComponentActivity() {
@@ -105,21 +103,22 @@ class TagDetailActivity : ComponentActivity() {
 fun TaggedEventList(tagId: String) {
     val context = LocalContext.current
 
-    val scope = rememberCoroutineScope()
+    val container = (context.applicationContext as NanHistoryApplication).container
+    val tagDetailViewModel: TagDetailViewModel = remember(context, tagId) {
+        (context as? ComponentActivity)?.let { activity ->
+            ViewModelProvider(activity, TagDetailViewModel.Factory(tagId, container))[TagDetailViewModel::class.java]
+        } ?: TagDetailViewModel(tagId, container.tagRepository, container.eventRepository)
+    }
 
-    val db = AppDatabase.getInstance(context)
-    val dao = db.appDao()
+    val tagData by tagDetailViewModel.tag.collectAsState()
 
-    val viewModel = remember {
+    val eventListViewModel = remember {
         EventListViewModel(
             context = context,
             mode = EventSelectMode.Tagged,
             tagId = tagId
         )
     }
-
-    val tagFlow by dao.getTagById(tagId).collectAsState(null)
-    val tagData = tagFlow?.toHistoryTag()
 
     val selectionState = rememberSelectionState<HistoryEvent>()
     val selectionMode by selectionState.isSelectionMode.collectAsState()
@@ -134,7 +133,7 @@ fun TaggedEventList(tagId: String) {
     var showTagInfo by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
 
-    val eventList by viewModel.events.collectAsState(emptyList())
+    val eventList by eventListViewModel.events.collectAsState(emptyList())
 
     val useOldUi by Config.appearanceOldUi.getState()
 
@@ -144,14 +143,12 @@ fun TaggedEventList(tagId: String) {
         selectionState.reset()
     }
 
-    viewModel.events
-
     Scaffold(
         topBar = {
             if (!selectionMode) TopAppBar(
                 title = {
                     if (tagData != null)
-                        Text(tagData.name ?: "")
+                        Text(tagData?.name ?: "")
                     else
                         ComponentPlaceholder(Modifier.size(72.dp, 16.dp))
                 },
@@ -189,7 +186,6 @@ fun TaggedEventList(tagId: String) {
                 actions = {
                     var dropdownExpanded by remember { mutableStateOf(false) }
 
-                    // TODO: 'delete permanently' button
                     Box {
                         IconButton(
                             onClick = {
@@ -238,7 +234,7 @@ fun TaggedEventList(tagId: String) {
     ) { padding ->
         Column(Modifier.padding(padding)) {
             EventList(
-                viewModel = viewModel,
+                viewModel = eventListViewModel,
                 selectionState = selectionState,
                 lazyListState = listState,
                 loadHeaderData = false
@@ -275,11 +271,9 @@ fun TaggedEventList(tagId: String) {
                 if (!deleteDialogLock) Button(
                     onClick = {
                         deleteDialogLock = true
-                        scope.launch {
-                            withContext(Dispatchers.IO) {
-                                AppDatabase.moveToTrash(dao, context, selectedItems.map { it.id })
-                            }
+                        tagDetailViewModel.moveToTrash(selectedItems.map { it.id }) {
                             deleteDialogState = false
+                            deleteDialogLock = false
                             deleteDialogProgress = null
                             selectionState.reset()
                         }
@@ -299,7 +293,7 @@ fun TaggedEventList(tagId: String) {
             onDismissRequest = {
                 showTagInfo = false
             },
-            tagId = tagId,
+            tag = tagData,
             events = eventList
         )
 
@@ -318,18 +312,11 @@ fun TaggedEventList(tagId: String) {
 fun TagInfoDialog(
     state: Boolean,
     onDismissRequest: () -> Unit,
-    tagId: String,
+    tag: HistoryTag?,
     events: List<HistoryEvent>
 ) {
-    val context = LocalContext.current
-    val db = AppDatabase.getInstance(context)
-    val dao = db.appDao()
-
-    val tagFlow by dao.getTagById(tagId).collectAsState(null)
-    val tag = tagFlow?.toHistoryTag()
-
     if (state) {
-        BasicAlertDialog (
+        BasicAlertDialog(
             onDismissRequest = onDismissRequest,
             properties = DialogProperties(
                 usePlatformDefaultWidth = false
@@ -357,7 +344,7 @@ fun TagInfoDialog(
                                 style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.Bold
                             )
-                            IconButton (
+                            IconButton(
                                 onClick = {
                                     onDismissRequest()
                                 }
@@ -382,6 +369,7 @@ fun TagInfoDialog(
                                     modifier = Modifier
                                         .height(196.dp)
                                         .fillMaxWidth()
+                                        .padding(horizontal = 0.dp)
                                 )
                         }
 
@@ -401,6 +389,7 @@ fun TagInfoDialog(
                                     modifier = Modifier
                                         .height(196.dp)
                                         .fillMaxWidth()
+                                        .padding(horizontal = 0.dp)
                                 )
                         }
 
@@ -453,13 +442,9 @@ private fun TagUsageChart(
     events: List<HistoryEvent>,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    val db = AppDatabase.getInstance(context)
-    val dao = db.appDao()
-
     val usageCounted = events.groupBy { Pair(it.time.year, it.time.month) }
         .let {
-            val list = mutableMapOf<Int,MutableMap<Month,Float>>()
+            val list = mutableMapOf<Int, MutableMap<Month, Float>>()
             it.forEach { item ->
                 if (list[item.key.first] == null) {
                     list[item.key.first] = mutableMapOf(
@@ -484,7 +469,7 @@ private fun TagUsageChart(
         }
 
     val pagerState = rememberPagerState(
-        initialPage = usageCounted.size - 1,
+        initialPage = (usageCounted.size - 1).coerceAtLeast(0),
         pageCount = {
             usageCounted.size
         }
@@ -527,13 +512,9 @@ private fun TagTotalHourChart(
     events: List<HistoryEvent>,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    val db = AppDatabase.getInstance(context)
-    val dao = db.appDao()
-
     val usageCounted = events.groupBy { Pair(it.time.year, it.time.month) }
         .let {
-            val list = mutableMapOf<Int,MutableMap<Month,Float>>()
+            val list = mutableMapOf<Int, MutableMap<Month, Float>>()
             it.forEach { item ->
                 if (list[item.key.first] == null) {
                     list[item.key.first] = mutableMapOf(
@@ -566,7 +547,7 @@ private fun TagTotalHourChart(
         }
 
     val pagerState = rememberPagerState(
-        initialPage = usageCounted.size - 1,
+        initialPage = (usageCounted.size - 1).coerceAtLeast(0),
         pageCount = {
             usageCounted.size
         }

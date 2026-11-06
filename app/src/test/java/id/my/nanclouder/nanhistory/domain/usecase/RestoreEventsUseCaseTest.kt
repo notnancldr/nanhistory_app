@@ -22,6 +22,8 @@ class RestoreEventsUseCaseTest {
         override suspend fun permanentlyDeleteEvents(events: List<HistoryEvent>) {}
 
         override suspend fun getEventById(id: String): HistoryEvent? = null
+
+        override suspend fun moveToTrash(eventIds: List<String>) {}
     }
 
     @Test

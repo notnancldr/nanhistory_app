@@ -26,6 +26,7 @@ class TrashViewModelTest {
         override suspend fun restoreEvents(ids: List<String>) { restored.addAll(ids) }
         override suspend fun permanentlyDeleteEvents(events: List<HistoryEvent>) { deleted.addAll(events) }
         override suspend fun getEventById(id: String): HistoryEvent? = null
+        override suspend fun moveToTrash(eventIds: List<String>) {}
     }
 
     private class TestAttachmentRepository : AttachmentStorageRepository {

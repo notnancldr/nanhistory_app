@@ -11,4 +11,5 @@ interface EventRepository {
     suspend fun restoreEvents(ids: List<String>)
     suspend fun permanentlyDeleteEvents(events: List<HistoryEvent>)
     suspend fun getEventById(id: String): HistoryEvent?
+    suspend fun moveToTrash(eventIds: List<String>)
 }

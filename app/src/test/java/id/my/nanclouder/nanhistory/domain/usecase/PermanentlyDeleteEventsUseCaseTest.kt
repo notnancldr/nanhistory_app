@@ -22,6 +22,7 @@ class PermanentlyDeleteEventsUseCaseTest {
             deletedEvents.addAll(events)
         }
         override suspend fun getEventById(id: String): HistoryEvent? = null
+        override suspend fun moveToTrash(eventIds: List<String>) {}
     }
 
     private class FakeAttachmentStorageRepository : AttachmentStorageRepository {

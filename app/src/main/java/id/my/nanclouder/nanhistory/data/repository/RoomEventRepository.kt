@@ -43,4 +43,10 @@ class RoomEventRepository(
     override suspend fun getEventById(id: String): HistoryEvent? = withContext(ioDispatcher) {
         daoProvider().getEventById(id)?.toHistoryEvent()
     }
+
+    override suspend fun moveToTrash(eventIds: List<String>) = withContext(ioDispatcher) {
+        if (eventIds.isNotEmpty()) {
+            daoProvider().softDeleteEvents(eventIds)
+        }
+    }
 }

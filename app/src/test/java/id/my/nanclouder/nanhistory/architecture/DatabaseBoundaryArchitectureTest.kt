@@ -37,7 +37,6 @@ class DatabaseBoundaryArchitectureTest {
         "DetailContent.kt",
         "OldDetailContent.kt",
         "EventLocationActivity.kt",
-        "TagDetailActivity.kt",
         "EditEventActivity.kt",
         "EventLocationOldUi.kt",
         "ShareMapActivity.kt",
