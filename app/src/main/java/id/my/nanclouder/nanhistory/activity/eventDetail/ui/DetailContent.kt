@@ -1199,7 +1199,7 @@ fun DetailContent(eventId: String, path: String) {
                         scope.launch {
                             AppDatabase.moveToTrash(
                                 dao,
-                                context,
+                                Config.developer1hourAutoDelete.get(context) && Config.developerModeEnabled.get(context),
                                 listOf(eventData.id)
                             )
                         }

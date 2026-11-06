@@ -82,7 +82,8 @@ fun ReplayTelemetryHud(
             }
 
             // 2. Altitude
-            if (telemetry.altitudeMeters != null) {
+            val altitudeMeters = telemetry.altitudeMeters
+            if (altitudeMeters != null) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -94,7 +95,7 @@ fun ReplayTelemetryHud(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "${telemetry.altitudeMeters.roundToInt()} m",
+                        text = "${altitudeMeters.roundToInt()} m",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -125,7 +126,8 @@ fun ReplayTelemetryHud(
             }
 
             // 4. Accuracy
-            if (telemetry.accuracyMeters != null) {
+            val accuracyMeters = telemetry.accuracyMeters
+            if (accuracyMeters != null) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -137,7 +139,7 @@ fun ReplayTelemetryHud(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "±${telemetry.accuracyMeters.roundToInt()}m",
+                        text = "±${accuracyMeters.roundToInt()}m",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

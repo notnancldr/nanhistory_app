@@ -1,5 +1,7 @@
 package id.my.nanclouder.nanhistory.activity.eventDetail.oldUi
 
+import id.my.nanclouder.nanhistory.config.Config
+
 import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -772,7 +774,7 @@ fun OldDetailContent(eventId: String, path: String) {
                                 scope.launch {
                                     AppDatabase.moveToTrash(
                                         dao,
-                                        context,
+                                        Config.developer1hourAutoDelete.get(context) && Config.developerModeEnabled.get(context),
                                         listOf(eventData.id)
                                     )
                                 }

@@ -140,6 +140,10 @@ kotlin {
 
 dependencies {
     implementation(project(":core:common"))
+    implementation(project(":core:domain"))
+    implementation(project(":core:database"))
+    implementation(project(":core:data"))
+    implementation(project(":core:ui"))
     implementation("androidx.documentfile:documentfile:1.0.1")
     implementation(libs.capturable)
     implementation(libs.androidx.work.runtime.ktx)

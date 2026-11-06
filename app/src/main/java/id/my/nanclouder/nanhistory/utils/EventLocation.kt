@@ -21,15 +21,7 @@ fun calculateDistance(startPoint: GeoPoint, endPoint: GeoPoint): Float =
 fun calculateSpeed(startPoint: GeoPoint, endPoint: GeoPoint, timeHours: Float): Float =
     calculateDistance(startPoint, endPoint) / 1000 / timeHours
 
-data class HistoryLocationData(
-    val speed: Float,
-    val acceleration: Float,
-    val points: List<Coordinate>,
-    val locationData: List<LocationData>,
-    val start: ZonedDateTime,
-    val end: ZonedDateTime,
-    val distance: Float,
-)
+typealias HistoryLocationData = id.my.nanclouder.nanhistory.domain.model.HistoryLocationData
 
 @Deprecated(
     "Use function with List of LocationData as the receiver instead",

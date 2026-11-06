@@ -923,20 +923,23 @@ fun MainView() {
                             Icon(painterResource(R.drawable.ic_delete), "Delete")
                         }
                     }
-                    else if (page == NanHistoryPages.Search) SearchAppBar(
-                        viewModel = searchViewModel,
-                        isLoading = isLoading,
-                        showTags = !pagerState.isScrollInProgress,
-                        onSearch = { query, tagIds ->
-                            searchViewModel.search(query, tagIds)
-                        },
-                        onChange = { query, tagIds ->
-                            searchViewModel.search(query, tagIds)
-                        },
-                        onCancel = {
-                            searchViewModel.cancelLoading()
-                        }
-                    )
+                    else if (page == NanHistoryPages.Search) {
+                        val searchTags by searchViewModel.tags.collectAsState()
+                        SearchAppBar(
+                            availableTags = searchTags,
+                            isLoading = isLoading,
+                            showTags = !pagerState.isScrollInProgress,
+                            onSearch = { query, tagIds ->
+                                searchViewModel.search(query, tagIds)
+                            },
+                            onChange = { query, tagIds ->
+                                searchViewModel.search(query, tagIds)
+                            },
+                            onCancel = {
+                                searchViewModel.cancelLoading()
+                            }
+                        )
+                    }
                     else MainAppBar(
                         title = page.name,
                         scrollBehavior = scrollBehavior,

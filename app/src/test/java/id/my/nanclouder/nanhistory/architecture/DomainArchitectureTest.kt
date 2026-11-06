@@ -15,7 +15,9 @@ class DomainArchitectureTest {
         // Path relative to module root or project root
         val domainDir = listOf(
             File("src/main/java/id/my/nanclouder/nanhistory/domain"),
-            File("app/src/main/java/id/my/nanclouder/nanhistory/domain")
+            File("app/src/main/java/id/my/nanclouder/nanhistory/domain"),
+            File("../core/domain/src/main/kotlin/id/my/nanclouder/nanhistory/domain"),
+            File("core/domain/src/main/kotlin/id/my/nanclouder/nanhistory/domain")
         ).firstOrNull { it.exists() }
 
         // Before Phase 1 creation of domain layer, test passes gracefully

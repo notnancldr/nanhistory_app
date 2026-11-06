@@ -97,17 +97,18 @@ class CorridorPrecomputeWorker(
         corridorRepository: CorridorRepository
     ) {
         val bounds = locationRepository.getLocationBoundsInRange(startDate, endDate) ?: return
-        if (bounds.minLat == null || bounds.maxLat == null || bounds.minLon == null || bounds.maxLon == null) {
-            return
-        }
+        val minLat = bounds.minLat ?: return
+        val maxLat = bounds.maxLat ?: return
+        val minLon = bounds.minLon ?: return
+        val maxLon = bounds.maxLon ?: return
 
         val locations = locationRepository.getRenderedYearlyLocations(
             startDate = startDate,
             endDate = endDate,
-            minLat = bounds.minLat,
-            maxLat = bounds.maxLat,
-            minLon = bounds.minLon,
-            maxLon = bounds.maxLon,
+            minLat = minLat,
+            maxLat = maxLat,
+            minLon = minLon,
+            maxLon = maxLon,
             step = 1
         )
         if (locations.size < 2) return

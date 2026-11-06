@@ -389,34 +389,15 @@ fun TransportModeParameterItem(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            if (model.idealAvgSpeed != null) {
-                                ParameterRow("Ideal Avg Speed", model.idealAvgSpeed.roundTo(2))
-                            }
-                            if (model.idealTopSpeed != null) {
-                                ParameterRow("Ideal Top Speed", model.idealTopSpeed.roundTo(2))
-                            }
-                            if (model.idealAvgAccel != null) {
-                                ParameterRow("Ideal Avg Accel", model.idealAvgAccel.roundTo(2))
-                            }
-                            if (model.idealStopDuration != null) {
-                                ParameterRow("Ideal Stop Duration", model.idealStopDuration.roundTo(2))
-                            }
-                            if (model.idealDistance != null) {
-                                ParameterRow("Ideal Distance", model.idealDistance.roundTo(2))
-                            }
-
-                            if (model.idealMaxCoastingDuration05 != null) {
-                                ParameterRow("Ideal Coasting 500", model.idealMaxCoastingDuration05.roundTo(2))
-                            }
-                            if (model.idealMaxCoastingDuration10 != null) {
-                                ParameterRow("Ideal Coasting 1000", model.idealMaxCoastingDuration10.roundTo(2))
-                            }
-                            if (model.idealMaxCoastingDuration20 != null) {
-                                ParameterRow("Ideal Coasting 2000", model.idealMaxCoastingDuration20.roundTo(2))
-                            }
-                            if (model.idealMaxCoastingDuration40 != null) {
-                                ParameterRow("Ideal Coasting 4000", model.idealMaxCoastingDuration40.roundTo(2))
-                            }
+                            model.idealAvgSpeed?.let { ParameterRow("Ideal Avg Speed", it.roundTo(2)) }
+                            model.idealTopSpeed?.let { ParameterRow("Ideal Top Speed", it.roundTo(2)) }
+                            model.idealAvgAccel?.let { ParameterRow("Ideal Avg Accel", it.roundTo(2)) }
+                            model.idealStopDuration?.let { ParameterRow("Ideal Stop Duration", it.roundTo(2)) }
+                            model.idealDistance?.let { ParameterRow("Ideal Distance", it.roundTo(2)) }
+                            model.idealMaxCoastingDuration05?.let { ParameterRow("Ideal Coasting 500", it.roundTo(2)) }
+                            model.idealMaxCoastingDuration10?.let { ParameterRow("Ideal Coasting 1000", it.roundTo(2)) }
+                            model.idealMaxCoastingDuration20?.let { ParameterRow("Ideal Coasting 2000", it.roundTo(2)) }
+                            model.idealMaxCoastingDuration40?.let { ParameterRow("Ideal Coasting 4000", it.roundTo(2)) }
                         }
                     }
 

@@ -328,16 +328,19 @@ class YearlyMapViewModel(
     }
 
     private fun LocationBounds.toPaddedBoundingBox(): BoundingBox? {
-        if (minLat == null || maxLat == null || minLon == null || maxLon == null) return null
-        val latSpan = maxLat - minLat
-        val lonSpan = maxLon - minLon
+        val minLatitude = minLat ?: return null
+        val maxLatitude = maxLat ?: return null
+        val minLongitude = minLon ?: return null
+        val maxLongitude = maxLon ?: return null
+        val latSpan = maxLatitude - minLatitude
+        val lonSpan = maxLongitude - minLongitude
         val latMargin = if (latSpan > 0.0) latSpan * 0.2 else 0.01
         val lonMargin = if (lonSpan > 0.0) lonSpan * 0.2 else 0.01
         return BoundingBox(
-            (maxLat + latMargin).coerceAtMost(85.0),
-            (maxLon + lonMargin).coerceAtMost(180.0),
-            (minLat - latMargin).coerceAtLeast(-85.0),
-            (minLon - lonMargin).coerceAtLeast(-180.0)
+            (maxLatitude + latMargin).coerceAtMost(85.0),
+            (maxLongitude + lonMargin).coerceAtMost(180.0),
+            (minLatitude - latMargin).coerceAtLeast(-85.0),
+            (minLongitude - lonMargin).coerceAtLeast(-180.0)
         )
     }
 

@@ -61,9 +61,11 @@ object EventMapGeoJsonBuilder {
                 calculateColor(speed.roundToInt())
             }
             DataMode.ACCELERATION -> {
-                val a = if (p1.speed != null && p2.speed != null) {
+                val s1 = p1.speed
+                val s2 = p2.speed
+                val a = if (s1 != null && s2 != null) {
                     val dt = (p2.time.toInstant().toEpochMilli() - p1.time.toInstant().toEpochMilli()).coerceAtLeast(1L) / 1000f
-                    ((p2.speed - p1.speed) / dt).roundToInt()
+                    ((s2 - s1) / dt).roundToInt()
                 } else 0
                 calculateAccelerationColor(a)
             }

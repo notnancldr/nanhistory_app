@@ -91,14 +91,18 @@ fun MapHistoryView(
                     selectedSpeed = seg.speed.roundToInt()
                     val firstData = seg.locationData.firstOrNull()
                     val lastData = seg.locationData.lastOrNull()
+                    val firstAlt = firstData?.altitude
+                    val lastAlt = lastData?.altitude
+                    val firstAcc = firstData?.accuracy
+                    val lastAcc = lastData?.accuracy
                     selectedLocation = firstData?.location
-                    selectedAltitude = if (firstData?.altitude != null && lastData?.altitude != null) {
-                        "${(firstData.altitude * 10.0).roundToInt() / 10.0} - " +
-                            "${(lastData.altitude * 10.0).roundToInt() / 10.0} m"
+                    selectedAltitude = if (firstAlt != null && lastAlt != null) {
+                        "${(firstAlt * 10.0).roundToInt() / 10.0} - " +
+                            "${(lastAlt * 10.0).roundToInt() / 10.0} m"
                     } else null
-                    selectedAccuracy = if (firstData?.accuracy != null && lastData?.accuracy != null) {
-                        "${(firstData.accuracy * 10.0).roundToInt() / 10.0} - " +
-                            "${(lastData.accuracy * 10.0).roundToInt() / 10.0} m"
+                    selectedAccuracy = if (firstAcc != null && lastAcc != null) {
+                        "${(firstAcc * 10.0).roundToInt() / 10.0} - " +
+                            "${(lastAcc * 10.0).roundToInt() / 10.0} m"
                     } else null
                     isSelected = true
                 }

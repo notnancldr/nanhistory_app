@@ -78,18 +78,21 @@ class EventLocationViewModel(
                 val first = locationRepository.getFirstLocationByEventId(eventId)
                 val last = locationRepository.getLastLocationByEventId(eventId)
 
-                val initialBoundingBox = if (bounds?.minLat != null && bounds.maxLat != null &&
-                    bounds.minLon != null && bounds.maxLon != null
-                ) {
-                    val latSpan = (bounds.maxLat - bounds.minLat).coerceAtLeast(0.001)
-                    val lonSpan = (bounds.maxLon - bounds.minLon).coerceAtLeast(0.001)
+                val minLat = bounds?.minLat
+                val maxLat = bounds?.maxLat
+                val minLon = bounds?.minLon
+                val maxLon = bounds?.maxLon
+
+                val initialBoundingBox = if (minLat != null && maxLat != null && minLon != null && maxLon != null) {
+                    val latSpan = (maxLat - minLat).coerceAtLeast(0.001)
+                    val lonSpan = (maxLon - minLon).coerceAtLeast(0.001)
                     val paddingFactor = 0.2
 
                     BoundingBox(
-                        (bounds.maxLat + latSpan * paddingFactor).coerceIn(-90.0, 90.0),
-                        (bounds.maxLon + lonSpan * paddingFactor).coerceIn(-180.0, 180.0),
-                        (bounds.minLat - latSpan * paddingFactor).coerceIn(-90.0, 90.0),
-                        (bounds.minLon - lonSpan * paddingFactor).coerceIn(-180.0, 180.0)
+                        (maxLat + latSpan * paddingFactor).coerceIn(-90.0, 90.0),
+                        (maxLon + lonSpan * paddingFactor).coerceIn(-180.0, 180.0),
+                        (minLat - latSpan * paddingFactor).coerceIn(-90.0, 90.0),
+                        (minLon - lonSpan * paddingFactor).coerceIn(-180.0, 180.0)
                     )
                 } else null
 
