@@ -1,8 +1,7 @@
 package id.my.nanclouder.nanhistory.ui.map
 
 import android.content.Context
-import id.my.nanclouder.nanhistory.db.AppDao
-import id.my.nanclouder.nanhistory.db.toHistoryEvent
+import id.my.nanclouder.nanhistory.domain.repository.EventRepository
 import id.my.nanclouder.nanhistory.utils.history.TransportationType
 import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
 import id.my.nanclouder.nanhistory.utils.history.EventRange
@@ -240,7 +239,7 @@ fun stateToData(state: YearlyMapPersistentState): YearlyMapData {
 
 fun loadYearlyMapData(
     context: Context,
-    dao: AppDao,
+    eventRepository: EventRepository,
     year: Int,
     precisionMeters: Int,
     simplificationCm: Int
@@ -250,11 +249,10 @@ fun loadYearlyMapData(
 
     val startOfYear = LocalDate.of(year, 1, 1)
     val endOfYear = LocalDate.of(year, 12, 31)
-    val formatter = DateTimeFormatter.ISO_LOCAL_DATE
-    
+
     // 1. Try Load Cache
     var state = YearlyMapCacheManager.loadCache(context, year)
-    
+
     // get first location for centering (placeholder, updated later)
     var firstLoc: GeoPoint? = null
 
@@ -267,7 +265,7 @@ fun loadYearlyMapData(
         if (state.nodes.isNotEmpty()) {
              firstLoc = state.nodes.first().toGeoPoint()
         }
-        
+
         emit(YearlyMapLoadingState(
             data = cachedData, 
             progress = 0.5f, // Arbitrary "halfway" since we have data
@@ -277,10 +275,9 @@ fun loadYearlyMapData(
     } else {
         state = YearlyMapPersistentState()
     }
-    
+
     // 2. Fetch Events
-    val eventsFlow = dao.getEventsInRange(startOfYear.format(formatter), endOfYear.format(formatter))
-    val allEvents = eventsFlow.first().map { it.toHistoryEvent() }
+    val allEvents = eventRepository.observeEventsInRange(startOfYear, endOfYear).first()
     
     if (allEvents.isEmpty() && state.nodes.isEmpty()) {
         emit(YearlyMapLoadingState(isComplete = true, progress = 1f))

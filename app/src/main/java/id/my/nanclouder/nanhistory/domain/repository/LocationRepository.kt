@@ -21,6 +21,15 @@ interface LocationRepository {
         maxLon: Double,
         step: Int
     ): List<LocationData> = emptyList()
+    suspend fun getRenderedYearlyLocations(
+        startDate: String?,
+        endDate: String?,
+        minLat: Double,
+        maxLat: Double,
+        minLon: Double,
+        maxLon: Double,
+        step: Int
+    ): List<LocationData> = emptyList()
     suspend fun getLocationsBetweenTimestamps(
         eventId: String,
         startMillis: Long,

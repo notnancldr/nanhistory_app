@@ -13,8 +13,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import id.my.nanclouder.nanhistory.NanHistoryApplication
 import id.my.nanclouder.nanhistory.activity.eventDetail.EventDetailActivity
-import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.state.TimeRangeSelection
 import id.my.nanclouder.nanhistory.state.YearlyMapViewModel
 import id.my.nanclouder.nanhistory.ui.map.maplibre.CorridorMap
@@ -27,8 +27,15 @@ fun YearlyMapScreen(
     modifier: Modifier = Modifier,
     viewModel: YearlyMapViewModel = run {
         val context = LocalContext.current
-        val db = remember { AppDatabase.getInstance(context.applicationContext) }
-        remember { YearlyMapViewModel(dao = db.appDao(), context = context.applicationContext) }
+        val container = (context.applicationContext as NanHistoryApplication).container
+        remember {
+            YearlyMapViewModel(
+                eventRepository = container.eventRepository,
+                locationRepository = container.locationRepository,
+                corridorRepository = container.corridorRepository,
+                context = context.applicationContext
+            )
+        }
     }
 ) {
     val context = LocalContext.current

@@ -59,6 +59,26 @@ class RoomLocationRepository(
         ).map { it.toLocationData() }
     }
 
+    override suspend fun getRenderedYearlyLocations(
+        startDate: String?,
+        endDate: String?,
+        minLat: Double,
+        maxLat: Double,
+        minLon: Double,
+        maxLon: Double,
+        step: Int
+    ): List<LocationData> = withContext(ioDispatcher) {
+        daoProvider().getRenderedYearlyLocations(
+            startDate = startDate,
+            endDate = endDate,
+            minLat = minLat,
+            maxLat = maxLat,
+            minLon = minLon,
+            maxLon = maxLon,
+            step = step
+        ).map { it.toLocationData() }
+    }
+
     override suspend fun getLocationsBetweenTimestamps(
         eventId: String,
         startMillis: Long,

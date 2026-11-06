@@ -35,6 +35,7 @@ interface EventRepository {
     suspend fun restoreEvents(ids: List<String>) {}
     suspend fun permanentlyDeleteEvents(events: List<HistoryEvent>) {}
     suspend fun getEventById(id: String): HistoryEvent? = null
+    suspend fun getEventsInDateRange(startDate: String?, endDate: String?): List<HistoryEvent> = emptyList()
     suspend fun moveToTrash(eventIds: List<String>) {}
     suspend fun saveEvent(event: HistoryEvent, isNew: Boolean) {}
     suspend fun updateEvent(event: HistoryEvent) {}

@@ -17,8 +17,6 @@ class DatabaseBoundaryArchitectureTest {
         // Debug
         "FilePlayerActivity.kt",
         // UI
-        "YearlyMapLogic.kt",
-        "YearlyMapScreen.kt",
         "Components.kt",
         // Utils
         "Events.kt",
@@ -39,8 +37,6 @@ class DatabaseBoundaryArchitectureTest {
         "DataProcessService.kt",
         "RecordService.kt",
         // State
-        "YearlyMapViewModel.kt",
-        "YearlyMapViewModelFactory.kt",
         "ShareMapViewModel.kt"
     )
 

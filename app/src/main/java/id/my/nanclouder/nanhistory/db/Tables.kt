@@ -260,39 +260,41 @@ fun TagEntity.toHistoryTag() = HistoryTag(
     tintValue = tint.toArgb().toLong() and 0xFFFFFFFFL
 )
 
-fun EventWithTags.toHistoryEvent(): HistoryEvent {
-    val historyEvent = when (event.type) {
+fun EventEntity.toHistoryEvent(tags: List<TagEntity> = emptyList()): HistoryEvent {
+    val historyEvent = when (type) {
         EventTypes.Point -> EventPoint(
-            id = event.id,
-            title = event.title,
-            description = event.description,
-            time = event.time,
+            id = id,
+            title = title,
+            description = description,
+            time = time,
         )
         EventTypes.Range -> EventRange(
-            id = event.id,
-            title = event.title,
-            description = event.description,
-            time = event.time,
-            end = event.end ?: ZonedDateTime.now(),
-            transportationType = event.transportationType,
-            locationDescriptions = event.locationDescriptions?.map {
+            id = id,
+            title = title,
+            description = description,
+            time = time,
+            end = end ?: ZonedDateTime.now(),
+            transportationType = transportationType,
+            locationDescriptions = locationDescriptions?.map {
                 val key = ZonedDateTime.parse(it.key)
                 key to it.value.toString()
             }?.toMap()?.toMutableMap() ?: mutableMapOf()
         )
     }
-    historyEvent.signature = event.signature ?: ""
-    historyEvent.favorite = event.favorite
+    historyEvent.signature = signature ?: ""
+    historyEvent.favorite = favorite
     historyEvent.tags = tags.map { it.toHistoryTag() }
-    historyEvent.created = event.created
-    historyEvent.modified = event.modified
-    historyEvent.metadata = event.metadata.toMutableMap()
-    historyEvent.audio = event.audio
-    historyEvent.locationPath = event.locationPath
-    historyEvent.versionNumber = event.versionNumber
+    historyEvent.created = created
+    historyEvent.modified = modified
+    historyEvent.metadata = metadata.toMutableMap()
+    historyEvent.audio = audio
+    historyEvent.locationPath = locationPath
+    historyEvent.versionNumber = versionNumber
 
     return historyEvent
 }
+
+fun EventWithTags.toHistoryEvent(): HistoryEvent = event.toHistoryEvent(tags)
 
 fun DayWithTags.toHistoryDay() = HistoryDay(
     date = day.date,
@@ -356,6 +358,7 @@ fun LocationEntity.toLocationData() = LocationData(
     speedAccuracy = speedAccuracy,
     bearingAccuracy = bearingAccuracy,
     verticalAccuracy = verticalAccuracy,
+    eventId = eventId
 )
 
 fun LocationData.toLocationEntity(eventId: String) = LocationEntity(

@@ -121,6 +121,13 @@ class RoomEventRepository(
         daoProvider().getEventById(id)?.toHistoryEvent()
     }
 
+    override suspend fun getEventsInDateRange(
+        startDate: String?,
+        endDate: String?
+    ): List<HistoryEvent> = withContext(ioDispatcher) {
+        daoProvider().getEventsInDateRange(startDate, endDate).map { it.toHistoryEvent() }
+    }
+
     override suspend fun moveToTrash(eventIds: List<String>) = withContext(ioDispatcher) {
         if (eventIds.isNotEmpty()) {
             val dao = daoProvider()

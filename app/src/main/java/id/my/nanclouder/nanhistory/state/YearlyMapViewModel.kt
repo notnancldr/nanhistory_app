@@ -2,15 +2,15 @@ package id.my.nanclouder.nanhistory.state
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import id.my.nanclouder.nanhistory.db.AppDao
-import id.my.nanclouder.nanhistory.db.AppDatabase
-import id.my.nanclouder.nanhistory.db.CorridorNetworkDao
-import id.my.nanclouder.nanhistory.db.CorridorNetworkEntity
-import id.my.nanclouder.nanhistory.db.EventEntity
-import id.my.nanclouder.nanhistory.db.EventLocationBounds
-import id.my.nanclouder.nanhistory.db.toHistoryEvent
+import id.my.nanclouder.nanhistory.domain.model.CorridorSnapshot
+import id.my.nanclouder.nanhistory.domain.model.EventRange
+import id.my.nanclouder.nanhistory.domain.model.HistoryEvent
+import id.my.nanclouder.nanhistory.domain.model.LocationBounds
+import id.my.nanclouder.nanhistory.domain.model.TransportationType
+import id.my.nanclouder.nanhistory.domain.repository.CorridorRepository
+import id.my.nanclouder.nanhistory.domain.repository.EventRepository
+import id.my.nanclouder.nanhistory.domain.repository.LocationRepository
 import id.my.nanclouder.nanhistory.ui.map.CorridorNetwork
 import id.my.nanclouder.nanhistory.ui.map.CorridorNetworkBuilder
 import id.my.nanclouder.nanhistory.ui.map.CorridorRender
@@ -18,13 +18,9 @@ import id.my.nanclouder.nanhistory.ui.map.CorridorSegment
 import id.my.nanclouder.nanhistory.ui.map.MapPoint
 import id.my.nanclouder.nanhistory.ui.map.YearlyMapCacheManager
 import id.my.nanclouder.nanhistory.ui.map.YearlyMapMergeLogic
-import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
-import id.my.nanclouder.nanhistory.utils.history.TransportationType
 import id.my.nanclouder.nanhistory.utils.map.YearlyMapPerfTracer
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
-import java.time.LocalDate
-import java.time.Year
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -41,15 +37,13 @@ import org.osmdroid.util.BoundingBox
  * ViewModel managing whole-range corridor network generation, binary caching, and decoupled vector map serving.
  */
 class YearlyMapViewModel(
-    private val dao: AppDao,
+    private val eventRepository: EventRepository,
+    private val locationRepository: LocationRepository,
+    private val corridorRepository: CorridorRepository? = null,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
-    private val context: Context? = null,
-    private val corridorNetworkDao: CorridorNetworkDao? = null
+    private val context: Context? = null
 ) : ViewModel() {
-
-    private val networkDao: CorridorNetworkDao? =
-        corridorNetworkDao ?: context?.let { AppDatabase.getInstance(it).corridorNetworkDao() }
 
     private val _uiState = MutableStateFlow(YearlyMapUiState())
     val uiState: StateFlow<YearlyMapUiState> = _uiState.asStateFlow()
@@ -68,7 +62,7 @@ class YearlyMapViewModel(
         val rangeKey = getRangeKey(_uiState.value.timeRange)
         context?.let { YearlyMapCacheManager.clearRangeCache(it, rangeKey) }
         viewModelScope.launch(ioDispatcher) {
-            networkDao?.deleteCorridorNetwork(rangeKey)
+            corridorRepository?.deleteCorridorNetwork(rangeKey)
             loadRangeData(_uiState.value.timeRange)
         }
     }
@@ -79,7 +73,7 @@ class YearlyMapViewModel(
     fun clearAllCachesAndRecompute() {
         context?.let { YearlyMapCacheManager.clearAllCorridorCaches(it) }
         viewModelScope.launch(ioDispatcher) {
-            networkDao?.deleteAllCorridorNetworks()
+            corridorRepository?.deleteAllCorridorNetworks()
             loadRangeData(_uiState.value.timeRange)
         }
     }
@@ -105,11 +99,9 @@ class YearlyMapViewModel(
 
     /**
      * Decoupled viewport notification from the map.
-     * In the vector pipeline, the corridor network is precomputed and globally normalized for the entire range,
-     * so map panning and zooming are handled natively on the GPU without triggering Room queries.
      */
     fun onViewportChanged(boundingBox: BoundingBox, zoomLevel: Double) {
-        // Maintained for API compatibility; no database queries or corridor re-merges on pan/zoom
+        // Maintained for API compatibility; map handles vector panning on GPU
     }
 
     /**
@@ -123,7 +115,7 @@ class YearlyMapViewModel(
         viewModelScope.launch(ioDispatcher) {
             val eventIds = _uiState.value.render.getEventIdsForEdge(edgeId)
             val events = eventIds.mapNotNull { id ->
-                dao.getEventById(id)?.toHistoryEvent()
+                eventRepository.getEventById(id)
             }
             _uiState.update {
                 it.copy(
@@ -141,7 +133,7 @@ class YearlyMapViewModel(
     fun selectSegment(eventIds: Set<String>) {
         viewModelScope.launch(ioDispatcher) {
             val events = eventIds.mapNotNull { id ->
-                dao.getEventById(id)?.toHistoryEvent()
+                eventRepository.getEventById(id)
             }
             _uiState.update {
                 it.copy(
@@ -175,19 +167,19 @@ class YearlyMapViewModel(
             // Fast path: load precomputed binary network snapshot (<50ms)
             var cachedNetwork = context?.let { YearlyMapCacheManager.loadNetworkBinary(it, rangeKey) }
             if (cachedNetwork == null) {
-                val dbEntity = networkDao?.getCorridorNetwork(rangeKey, YearlyMapCacheManager.ALGO_VERSION)
+                val dbEntity = corridorRepository?.getCorridorNetwork(rangeKey, YearlyMapCacheManager.ALGO_VERSION)
                 if (dbEntity != null) {
                     try {
                         cachedNetwork = CorridorNetwork.readFrom(ByteArrayInputStream(dbEntity.networkBlob))
                     } catch (_: Throwable) {
-                        networkDao.deleteCorridorNetwork(rangeKey)
+                        corridorRepository.deleteCorridorNetwork(rangeKey)
                     }
                 }
             }
             if (cachedNetwork != null) {
                 renderVersion++
                 val cachedRender = cachedNetwork.toCorridorRender(renderVersion)
-                val events = dao.getEventsInDateRange(startStr, endStr)
+                val events = eventRepository.getEventsInDateRange(startStr, endStr)
                 val stats = computeTransportStats(events)
 
                 _uiState.update {
@@ -210,10 +202,10 @@ class YearlyMapViewModel(
                 _uiState.update { it.copy(render = provisionalRender) }
             }
 
-            val bounds = dao.getLocationBoundsInRange(startStr, endStr)
+            val bounds = locationRepository.getLocationBoundsInRange(startStr ?: "", endStr ?: "")
             val paddedBounds = bounds?.toPaddedBoundingBox()
 
-            val events = dao.getEventsInDateRange(startStr, endStr)
+            val events = eventRepository.getEventsInDateRange(startStr, endStr)
             val stats = computeTransportStats(events)
 
             _uiState.update {
@@ -235,7 +227,7 @@ class YearlyMapViewModel(
             }
 
             val tFetch0 = System.currentTimeMillis()
-            val locations = dao.getRenderedYearlyLocations(
+            val locations = locationRepository.getRenderedYearlyLocations(
                 startDate = startStr,
                 endDate = endStr,
                 minLat = paddedBounds.latSouth,
@@ -247,8 +239,8 @@ class YearlyMapViewModel(
             val fetchMs = System.currentTimeMillis() - tFetch0
             _uiState.update { it.copy(networkComputeProgress = 0.50f) }
 
-            val tracks = locations.groupBy { it.eventId }.map { (eventId, locs) ->
-                Pair(eventId, locs.map { MapPoint(it.latitude, it.longitude, it.timestamp, it.accuracy) })
+            val tracks = locations.groupBy { it.eventId ?: "" }.map { (eventId, locs) ->
+                Pair(eventId, locs.map { MapPoint(it.location.latitude, it.location.longitude, it.time.toInstant().toEpochMilli(), it.accuracy) })
             }
 
             val currentJob = coroutineContext[Job]
@@ -268,8 +260,8 @@ class YearlyMapViewModel(
             try {
                 val baos = ByteArrayOutputStream()
                 network.writeTo(baos)
-                networkDao?.insertCorridorNetwork(
-                    CorridorNetworkEntity(
+                corridorRepository?.insertCorridorNetwork(
+                    CorridorSnapshot(
                         rangeKey = rangeKey,
                         startDate = startStr,
                         endDate = endStr,
@@ -318,11 +310,11 @@ class YearlyMapViewModel(
         }
     }
 
-    private fun computeTransportStats(events: List<EventEntity>): Map<TransportationType, Float> {
+    private fun computeTransportStats(events: List<HistoryEvent>): Map<TransportationType, Float> {
         val counts = mutableMapOf<TransportationType, Long>()
         var total = 0L
         events.forEach { event ->
-            val type = event.transportationType
+            val type = (event as? EventRange)?.transportationType ?: TransportationType.Unspecified
             if (type != TransportationType.Unspecified) {
                 counts[type] = (counts[type] ?: 0L) + 1L
                 total += 1L
@@ -335,7 +327,7 @@ class YearlyMapViewModel(
         }
     }
 
-    private fun EventLocationBounds.toPaddedBoundingBox(): BoundingBox? {
+    private fun LocationBounds.toPaddedBoundingBox(): BoundingBox? {
         if (minLat == null || maxLat == null || minLon == null || maxLon == null) return null
         val latSpan = maxLat - minLat
         val lonSpan = maxLon - minLon

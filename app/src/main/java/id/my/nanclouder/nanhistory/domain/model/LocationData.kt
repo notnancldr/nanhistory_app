@@ -14,6 +14,7 @@ data class LocationData(
     val speedAccuracy: Float? = null,
     val bearingAccuracy: Float? = null,
     val verticalAccuracy: Float? = null,
+    val eventId: String? = null
 ) {
     override fun toString(): String {
         val formatter = DecimalFormat("#.####").apply {
