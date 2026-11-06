@@ -6,38 +6,67 @@
   - [`app/src/main/java/id/my/nanclouder/nanhistory/activity/`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/)
   - [`app/src/main/java/id/my/nanclouder/nanhistory/ui/`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/)
   - [`app/src/main/java/id/my/nanclouder/nanhistory/state/`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/state/)
+  - [`app/src/main/java/id/my/nanclouder/nanhistory/domain/`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/domain/)
+  - [`app/src/main/java/id/my/nanclouder/nanhistory/data/`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/data/)
+  - [`app/src/main/java/id/my/nanclouder/nanhistory/di/`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/di/)
   - [`app/src/main/java/id/my/nanclouder/nanhistory/db/`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/db/)
   - [`app/src/main/java/id/my/nanclouder/nanhistory/service/`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/service/)
   - [`app/src/main/java/id/my/nanclouder/nanhistory/worker/`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/worker/)
-- **Last Verified Against**: 2026-11-01
+- **Last Verified Against**: 2026-11-06
 
 ---
 
-## 1. High-Level Architecture
+## 1. High-Level Clean Architecture
 
-NanHistory uses a multi-Activity Android architecture with Jetpack Compose for UI rendering, Room for persistent local storage, and custom/ViewModel state holders.
+NanHistory follows Clean Architecture principles with strict unidirectional dependencies:
 
 ```mermaid
 flowchart TD
-    Activity["Activity Layer (activity/*)"] --> UI["UI Layer (ui/*)"]
-    UI --> State["State Layer (state/*)"]
-    State --> DB["Database Layer (db/*)"]
-    State --> Settings["Settings Layer (settings/*)"]
-    State --> Utils["Utils Layer (utils/*)"]
-    
-    Service["Service Layer (service/*)"] --> DB
-    Worker["Worker Layer (worker/*)"] --> DB
+    subgraph Presentation["Presentation Layer (activity/*, ui/*, state/*)"]
+        Activity["Activity"] --> UI["Compose UI"]
+        UI --> ViewModel["ViewModel (state/*)"]
+    end
+
+    subgraph DI["Dependency Injection (di/*)"]
+        AppContainer["AppContainer (Composition Root)"]
+    end
+
+    subgraph Domain["Domain Layer (domain/* - Pure Kotlin, Zero Android/AndroidX)"]
+        UseCase["Use Cases (usecase/*)"]
+        RepositoryPort["Repository Interfaces (repository/*)"]
+        DomainLogic["Pure Domain Math & Logic (logic/*)"]
+        DomainModel["Domain Models (model/*)"]
+    end
+
+    subgraph Data["Data Layer (data/*, db/*, config/*)"]
+        RepoImpl["Repository Implementations (data/repository/*)"]
+        RoomDB["Room DB & DAOs (db/*)"]
+        ConfigStorage["Config & Settings (config/*)"]
+    end
+
+    subgraph Platform["Platform / Background (service/*, worker/*, receiver/*)"]
+        Workers["Workers (worker/*)"]
+        Services["Foreground Services (service/*)"]
+    end
+
+    Presentation --> Domain
+    Platform --> Domain
+    Data --> Domain
+    AppContainer --> Presentation
+    AppContainer --> Domain
+    AppContainer --> Data
+    AppContainer --> Platform
 ```
 
 ### Layer Responsibilities
 
 | Layer | Primary Packages | Responsibilities | Forbidden Access |
 |---|---|---|---|
-| **Activity** | `id.my.nanclouder.nanhistory.activity` | Entry points, Intent handling, window configuration, hosting Compose roots | Directly executing Room queries or DAOs |
-| **UI** | `id.my.nanclouder.nanhistory.ui` | Declarative Composables, Material 3 layouts, user interaction callbacks | Directly calling Room DAOs or instantiating services |
-| **State** | `id.my.nanclouder.nanhistory.state` | ViewModels and state holders (e.g. `SelectionState`), business logic, StateFlow emissions | UI rendering details, View references |
-| **Database** | `id.my.nanclouder.nanhistory.db` | Room database instance (`AppDatabase`), entity definitions, DAO interfaces, schema migrations | Referencing `ui`, `state`, or `service` layers |
-| **Background** | `id.my.nanclouder.nanhistory.service`, `worker` | Audio recording (`RecordService`), data syncing (`DataProcessService`), periodic cleanup (`AutoDeleteWorker`) | Direct UI references |
+| **Presentation** | `activity`, `ui`, `state` | UI rendering, Jetpack Compose layouts, ViewModel UI state flows, user interactions | Directly calling Room DAOs or `AppDatabase`. Must interact solely via domain ports or ViewModels. |
+| **Domain** | `domain.model`, `domain.repository`, `domain.usecase`, `domain.logic` | Pure business entities, repository interfaces, use cases, mathematical algorithms (corridor simplification, replay interpolation, scoring, graph evaluation) | Absolutely NO `android.*` or `androidx.*` imports (enforced by `DomainArchitectureTest`). |
+| **Data** | `data.repository`, `db`, `config` | Implementation of domain repositories (`RoomEventRepository`, `RoomLocationRepository`, `RoomTagRepository`, `ConfigSettingsRepository`), database entities, DAOs, migrations | Referencing `ui`, `activity`, or `state` layers. |
+| **Platform** | `service`, `worker`, `receiver` | Background jobs (`AutoDeleteWorker`, `CorridorPrecomputeWorker`, `YearlyMapWorker`), recording services | Direct UI references. Accesses repositories/usecases via `AppContainer`. |
+| **DI** | `di` | Composition root (`AppContainer`) instantiating repositories, dynamic DAO provider lambdas, and use cases | No UI or rendering logic. |
 
 ---
 
@@ -48,33 +77,4 @@ Screens follow a unidirectional data flow pattern:
 1. **State Emission**: ViewModels and state holders in `state/` expose immutable `StateFlow<T>` streams to UI consumers.
 2. **State Consumption**: Screen-level composables collect states using lifecycle-aware collectors (`collectAsStateWithLifecycle()`).
 3. **Event Propagation**: Composables below screen level receive read-only state models and lambda event triggers (`onClick: () -> Unit`).
-4. **Data Mutation**: ViewModels execute business logic on `Dispatchers.IO` / `Dispatchers.Default` and update underlying database entities via Room DAOs.
-
-```mermaid
-sequenceDiagram
-    participant UI as Composable UI
-    participant VM as ViewModel (state)
-    participant Room as Room DAO (db)
-
-    UI->>VM: User action (e.g., selectDay, toggleFavorite)
-    VM->>Room: Suspend function or Flow query (Dispatchers.IO)
-    Room-->>VM: Updated database entity/view Flow
-    VM-->>UI: Emits updated StateFlow
-    UI->>UI: Recomposes affected Composables
-```
-
----
-
-## 3. Design Decisions & Fragile Areas
-
-- **Multi-Activity Design**: The application uses separate Activities for major feature flows (e.g., `MainActivity`, `EditEventActivity`, `EventDetailActivity`, `ShareMapActivity`, `TrashActivity`, `YearlyMapActivity`) rather than Single-Activity Navigation Compose. Inter-screen navigation uses Android explicit `Intent`s.
-- **Markdown & Text Formatting Architecture**: Markdown display is handled via `utils/TextFormat.kt` (using `compose-markdown` for rich rendering, segmented with interactive `ui/component/CodeBlockCard.kt` for syntax-highlighted code blocks with language header, copy action, and line numbers) and `utils/TextParser.kt` (parsing into `AnnotatedString`). Text field syntax highlighting is powered by Foundation's `OutputTransformation` and `TextFieldState` with multi-language code highlighting (`dev.snipme:highlights` via `CodeSyntaxHighlighter.kt`), LRU token caching, and cursor-aware code fence hiding (`MarkdownOutputTransformation.kt`, `CustomExpressionOutputTransformation.kt`).
-- **Direct Service/Worker DAO Access**: Because background services (`RecordService`, `DataProcessService`) and workers (`AutoDeleteWorker`) operate without UI lifecycles, they instantiate and query Room DAOs directly via `AppDatabase.getInstance(context)`.
-- **Known Fragile Areas**:
-  - `RecordService`: If invoked from the background without proper Android 12+/14 foreground service exemptions, Android will throw `ForegroundServiceStartNotAllowedException`.
-  - `AutoDeleteWorker`: Deletion queries must enforce a hard minimum threshold of 30 days to avoid accidental data loss.
-
----
-
-## 4. Open Questions & Unverified Items
-- None. All architectural paths and boundaries are verified against the codebase.
+4. **Repository Interaction**: ViewModels execute business transactions by delegating to pure domain repositories or use cases off the main thread (`Dispatchers.IO`).

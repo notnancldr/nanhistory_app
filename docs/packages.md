@@ -3,7 +3,7 @@
 - **Purpose**: Directory of all packages and classes with their distinct responsibilities and dependency constraints.
 - **Audience**: Both (Human & Agent)
 - **Related Source Paths**: [`app/src/main/java/id/my/nanclouder/nanhistory/`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/)
-- **Last Verified Against**: 2026-11-01
+- **Last Verified Against**: 2026-11-06
 
 ---
 
@@ -11,105 +11,47 @@
 
 | Package | Purpose | Permitted Dependencies |
 |---|---|---|
-| `activity` | Application entry points, multi-Activity navigation, hosting Compose roots | `ui`, `state`, `utils`, `config` |
+| `activity` | Application entry points, multi-Activity navigation, hosting Compose roots | `ui`, `state`, `domain`, `di` |
+| `domain.model` | Pure business entities (`HistoryEvent`, `HistoryTag`, `LocationData`, `CorridorSnapshot`) | Pure Kotlin standard library only. ZERO Android dependencies. |
+| `domain.repository` | Domain ports/interfaces (`EventRepository`, `LocationRepository`, `TagRepository`, `CorridorRepository`, `AttachmentStorageRepository`, `SettingsRepository`) | Pure Kotlin standard library and `kotlinx.coroutines` only. |
+| `domain.usecase` | Interactors and domain rules (`SaveEventUseCase`, `RestoreEventsUseCase`, `PermanentlyDeleteEventsUseCase`, `PurgeExpiredTrashUseCase`) | `domain.model`, `domain.repository` |
+| `domain.logic` | Pure mathematical models and algorithms (Corridors, ReplayMath, ShareCanvasLogic, Graph Evaluator, Transport scoring) | Pure Kotlin standard library only. |
+| `data.repository` | Implementations of domain ports (`RoomEventRepository`, `RoomLocationRepository`, `RoomTagRepository`, `RoomCorridorRepository`, `AndroidAttachmentStorageRepository`, `ConfigSettingsRepository`) | `domain`, `db`, `config`, Android platform APIs |
+| `di` | Composition root (`AppContainer`) wiring dependencies | All packages (pure composition root) |
 | `config` | Preferences and configuration key declarations (`Config.kt`) | Android Context, primitive types |
-| `db` | Room database schema, tables, DAOs, views, migrations | `utils` only. NEVER `ui`, `state`, or `service` |
-| `debug` | Diagnostic screens and development tools (file previews, log inspection) | Development only; never referenced by release code paths |
-| `receiver` | Broadcast receivers for activity recognition transitions and automation intents | `service`, `config`, Google Play Services |
-| `service` | Background recording, data processing, and Quick Settings tile | `db`, `utils`, `config`, Android system services |
-| `settings` | User settings activities, backup configurations, appearance options | `ui`, `state`, `config`, `utils` |
-| `state` | UI ViewModels and custom state holders (e.g. `SelectionState`) | `db`, `settings`, `utils`, `config` |
-| `ui` | Reusable Jetpack Compose components, themes, lists, screens | `state`, `utils`, `config` |
-| `ui.graph` | Multi-series graph rendering, tooltips, and canvas visualization | Compose, `utils.graph` |
-| `utils` | Helper classes (location, audio processing, formatting, sensors) | Android platform APIs, standard libraries |
-| `utils.graph` | Graph configuration models, math expression evaluator, preset templates, preferences persistence | Pure Kotlin, Android Context, Gson |
-| `worker` | Deferrable background work via WorkManager (`AutoDeleteWorker`) | `db`, `utils`, `config`, AndroidX Work |
+| `db` | Room database schema, tables, DAOs, views, migrations | `utils` only. NEVER `ui`, `state`, `domain`, or `service` |
+| `state` | UI ViewModels and custom state holders (e.g. `SelectionState`, `TrashViewModel`, `EditEventViewModel`, `EventListViewModel`, `ShareMapViewModel`) | `domain`, `settings`, `utils`, `config` |
+| `ui` | Reusable Jetpack Compose components, themes, lists, screens | `state`, `domain.model`, `utils`, `config` |
+| `service` | Background recording, data processing, and Quick Settings tile | `domain`, `di`, `utils`, `config`, Android system services |
+| `worker` | Deferrable background work via WorkManager (`AutoDeleteWorker`, `CorridorPrecomputeWorker`, `YearlyMapWorker`) | `domain`, `di`, `config`, AndroidX Work |
 
 ---
 
 ## 2. Detailed Class Catalog
 
+### `domain/`
+- `domain.model`: Pure Kotlin data models (`HistoryEvent`, `EventPoint`, `EventRange`, `HistoryTag`, `LocationData`, `Coordinate`, `LocationBounds`, `CorridorSnapshot`, `EventSelectMode`).
+- `domain.repository`: Interfaces decoupling business rules from data layers (`EventRepository`, `TagRepository`, `LocationRepository`, `CorridorRepository`, `AttachmentStorageRepository`, `SettingsRepository`).
+- `domain.usecase`: Focused business interactors (`SaveEventUseCase`, `RestoreEventsUseCase`, `PermanentlyDeleteEventsUseCase`, `PurgeExpiredTrashUseCase`).
+- `domain.logic`: Extracted algorithms with zero platform dependencies (`CorridorLogic`, `ReplayMath`, `ShareCanvasLogic`, `domain.logic.graph.*`, `domain.logic.transport.*`).
+
+### `data/`
+- `data.repository`: Concrete repository adapters implementing domain ports (`RoomEventRepository`, `RoomTagRepository`, `RoomLocationRepository`, `RoomCorridorRepository`, `AndroidAttachmentStorageRepository`, `ConfigSettingsRepository`).
+
+### `di/`
+- [`AppContainer.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/di/AppContainer.kt): Manual dependency injection container providing single-source instantiation and dynamic DAO resolution.
+
 ### `activity/`
 - [`MainActivity.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/MainActivity.kt): Primary application entry point displaying event lists and history views.
-- [`EditEventActivity.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/EditEventActivity.kt): Activity for creating or modifying events and tags.
-- [`EventLocationActivity.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/EventLocationActivity.kt): Entry point activity hosting event location map and routing to New UI or Old UI.
-- `eventLocation/common/EventLocationHelpers.kt`: Shared color calculations, bearing arcs, and distance/speed utilities.
-- `eventLocation/oldUi/EventLocationOldUi.kt`, `MapHistoryViewOld.kt`: Preserved legacy implementation of event location map.
-- `eventLocation/ui/EventLocationScreen.kt`, `MapHistoryView.kt`, `EventLocationControls.kt`: Modular modern event location map screen with dynamic rendered viewport queries.
-- `eventLocation/ui/replay/ReplayBottomSheet.kt`, `ReplayTelemetryHud.kt`: Interactive location replay controls (scrubber, discrete speed slider, follow-camera toggle, step controls) and real-time floating telemetry HUD.
-- [`YearlyMapActivity.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/YearlyMapActivity.kt): Renders annual aggregate trip and location maps.
-- [`TagDetailActivity.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/TagDetailActivity.kt): Details and event filtering for specific tags.
-- [`TrashActivity.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/TrashActivity.kt): Displays soft-deleted events with options to restore or permanently delete.
-- [`EncryptionKey.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/EncryptionKey.kt): Helper routines for database encryption key resolution.
-- [`MapLibreTest.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/MapLibreTest.kt): Experimental test activity for MapLibre SDK (commented out in manifest).
-- `eventDetail/EventDetailActivity.kt`: Full detail view for recorded events, audio playback, and attached metadata.
-- `shareMap/ShareMapActivity.kt`: Full-screen editing studio for composing and exporting shareable map snapshots with draggable/resizable overlays.
-- `shareMap/ui/ShareMapScreen.kt`, `ShareMapTopBar.kt`, `ShareMapActionBar.kt`, `ShareMapBottomBar.kt`, `ShareCardBitmapRenderer.kt`, `ShareExportSheet.kt`: Compose UI components for the share map canvas and controls.
-- `utils/share/`: `ShareCanvasModel.kt`, `ShareCanvasTransformer.kt`, `ShareCanvasElementRenderer.kt`, `ShareElementInspector.kt`, `ShareElementColorPickerDialog.kt`, `ShareTokenResolver.kt`, `PixelCopyCapture.kt`: ShareMap canvas model, inspector, color pickers, token resolver, and rendering transformers.
+- [`EditEventActivity.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/EditEventActivity.kt): Activity for creating or modifying events and tags via `EditEventViewModel` and `SaveEventUseCase`.
+- [`EventLocationActivity.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/EventLocationActivity.kt): Map replay and track viewing using `EventLocationViewModel` and `LocationRepository`.
+- [`YearlyMapActivity.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/YearlyMapActivity.kt): Renders annual aggregate trip and location maps using `YearlyMapViewModel` and `CorridorRepository`.
+- [`TagDetailActivity.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/TagDetailActivity.kt): Details and event filtering for specific tags using `TagDetailViewModel` and `TagRepository`.
+- [`TrashActivity.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/activity/TrashActivity.kt): Displays soft-deleted events with options to restore or permanently delete via `TrashViewModel`.
+- `shareMap/ShareMapActivity.kt`: Full-screen editing studio for composing and exporting shareable map snapshots using `ShareMapViewModel` and `EventRepository`.
 
-### `config/`
-- [`Config.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/config/Config.kt): Typed configuration accessors reading from Android SharedPreferences.
-
-### `db/`
-- [`AppDatabase.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/db/AppDatabase.kt): Room database abstract class, singleton manager, checkpointing, and range query helpers.
-- [`Tables.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/db/Tables.kt): Room entity declarations (`EventEntity`, `DayEntity`, `TagEntity`, `LocationEntity`, `EventTagCrossRef`, `DayTagCrossRef`).
-- [`Dao.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/db/Dao.kt): Data Access Object (`AppDao`) containing all database SQL queries.
-- [`Views.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/db/Views.kt): Database views (`EventsTimeWithTag`) for joined queries.
-- [`Converters.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/db/Converters.kt): Type converters for `LocalDate`, `Instant`, `List<String>`, and `Map<String, Any>`.
-- [`Migrations.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/db/Migrations.kt): Manual Room migration scripts (`1 -> 2`, `2 -> 3`, `3 -> 4`).
-
-### `receiver/`
-- [`ActivityRecognitionEngine.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/receiver/ActivityRecognitionEngine.kt): Helper object managing Play Services Activity Recognition transition subscriptions.
-- [`ActivityTransitionReceiver.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/receiver/ActivityTransitionReceiver.kt): Receives activity enter/exit events (vehicle, bicycle, running, walking, still) and dispatches start/stop/still intents to `RecordService`.
-- [`RecordAutomationReceiver.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/receiver/RecordAutomationReceiver.kt): Exported broadcast receiver allowing third-party tools (Tasker, Automate, Quick Tap) to start, stop, or toggle recording.
-
-### `service/`
-- [`RecordService.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/service/RecordService.kt): Foreground service recording audio and location breadcrumbs (`location|microphone`).
-- [`DataProcessService.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/service/DataProcessService.kt): Foreground service processing background data, exports, and imports (`dataSync`).
-- [`RecordTileService.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/service/RecordTileService.kt): Quick Settings tile to toggle event recording.
-- [`YearlyMapWorker.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/service/YearlyMapWorker.kt): Background processing routine for compiling yearly map breadcrumb caches.
-
-### `worker/`
-- [`AutoDeleteWorker.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/worker/AutoDeleteWorker.kt): WorkManager `CoroutineWorker` handling scheduled purging of expired soft-deleted events.
-
-### `state/`
-- [`SelectionState.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/state/SelectionState.kt): State holder managing multi-item selection flows across UI lists.
-- [`EventLocationViewModel.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/state/EventLocationViewModel.kt): ViewModel managing viewport downsampling queries, debounce, cut mode, slicing operations, and replay delegation.
-- [`ReplayState.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/state/ReplayState.kt) & [`ReplayController.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/state/ReplayController.kt): Location replay domain state models, coordinate/telemetry interpolation mathematics, and playback ticker loop.
-- [`YearlyMapViewModel.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/state/YearlyMapViewModel.kt): ViewModel managing dynamic Room queries across All Time, Years, and Custom Date Ranges with corridor merging and transportation stats.
-- [`ShareMapViewModel.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/state/ShareMapViewModel.kt): ViewModel managing share canvas elements, aspect ratio adaptations, metrics calculations, and 20-step Undo/Redo stack.
-- [`ShareMapUiState.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/state/ShareMapUiState.kt): Immutable UI state container for the ShareMap full-screen studio.
-
-### `ui/map/`
-- [`YearlyMapScreen.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/map/YearlyMapScreen.kt): Stateful screen connecting `YearlyMapViewModel` to `YearlyMapContent` and `CorridorMap`.
-- [`YearlyMapContent.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/map/YearlyMapContent.kt): Stateless UI composable with time-range dropdown, transportation stats, bottom sheet, and isolated map content slot.
-- [`YearlyMapView.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/map/YearlyMapView.kt): Entry point delegating directly to `YearlyMapScreen`.
-- [`CorridorRender.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/map/CorridorRender.kt): Immutable render contract containing version, GeoJSON string, and edge-to-events lookup map.
-- [`CorridorColorScale.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/map/CorridorColorScale.kt): Pure Kotlin mathematical color and stroke width scaling utilities.
-- [`CorridorGeoJsonBuilder.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/map/CorridorGeoJsonBuilder.kt): Pure Kotlin builder constructing GeoJSON LineString feature collections with 6-decimal precision.
-- [`MapZoomUtils.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/map/MapZoomUtils.kt): Standardized zoom offset conversion helpers (`osmEquivalentZoom`).
-- [`DateRangePickerModal.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/map/DateRangePickerModal.kt): Material 3 date range picker dialog for custom trip map ranges.
-- [`CodeBlockCard.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/component/CodeBlockCard.kt): Interactive Markdown code block card with language header, clipboard copy action, line numbers gutter, and horizontally scrollable syntax-highlighted code.
-- [`YearlyMapMergeLogic.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/map/YearlyMapMergeLogic.kt): Pure geometry utilities for Ramer-Douglas-Peucker track simplification, polyline resampling, and corridor vertex network snapping into canonical edges.
-- [`YearlyMapLogic.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/map/YearlyMapLogic.kt) & [`YearlyMapCacheManager.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/ui/map/YearlyMapCacheManager.kt): Legacy file-based trip cache management routines.
-- `ui/map/maplibre/CorridorMap.kt`: Isolated MapLibre Compose map component rendering `LineLayer` with data-driven sort keys, interpolation, and click gestures.
-- `ui/map/maplibre/EventLocationMap.kt`: Isolated MapLibre Compose map component rendering event track, cut mode slice, touch points, pins, and animated replay marker with accuracy halo and follow-camera.
-- `ui/map/maplibre/EventMapGeoJsonBuilder.kt`: Helper constructing compact GeoJSON strings for `EventLocationMap`.
-- `ui/map/maplibre/BaseMapStyle.kt`: MapLibre base raster style definitions (OpenStreetMap 256px raster tiles).
-
-### `settings/`
-- `SettingsActivity.kt`, `AppearanceSettingsActivity.kt`, `RecordSettingsActivity.kt`, `StorageSettingsActivity.kt`, `AutoDeleteSettingsActivity.kt`, `BackupActivity.kt`, `DeveloperOptionsActivity.kt`, `AboutActivity.kt`, `ExperimentalSettingsActivity.kt`: Preferences management screens.
-
-### `utils/`
-- [`TextFormat.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/utils/TextFormat.kt): Rich Markdown display composables (`FormattedText`) powered by `compose-markdown` with mention routing and inline content preservation.
-- [`TextParser.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/utils/TextParser.kt): Core parser converting Markdown and @mention syntax to Compose `AnnotatedString`.
-- [`FormattedOutlinedTextField.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/utils/FormattedOutlinedTextField.kt): Outlined text field wrapper with `TextFieldState`, `OutputTransformation`, and full-width code block background support.
-- [`MarkdownVisualTransformation.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/utils/MarkdownVisualTransformation.kt): Compose `VisualTransformation` providing live Markdown syntax styling with identity offset mapping.
-- [`CodeSyntaxHighlighter.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/utils/CodeSyntaxHighlighter.kt): Multi-language code syntax tokenization using `dev.snipme:highlights` and LRU token caching.
-- [`MarkdownOutputTransformation.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/utils/MarkdownOutputTransformation.kt): Zero-copy `OutputTransformation` for Markdown with cursor-aware code fence hiding.
-- [`CustomExpressionOutputTransformation.kt`](file:///home/nandaahmad/Projects/AndroidStudio/NanHistory/app/src/main/java/id/my/nanclouder/nanhistory/utils/CustomExpressionOutputTransformation.kt): `OutputTransformation` providing syntax coloring for mathematical/telemetry graph expressions.
-
----
-
-## 3. Open Questions & Unverified Items
-- None. All packages and source files are directly mapped from the repository file tree.
+### `worker/` & `service/`
+- `AutoDeleteWorker.kt`: Enforces 30-day trash retention policy via `PurgeExpiredTrashUseCase`.
+- `CorridorPrecomputeWorker.kt`: Precomputes corridor network topology in background windows via `CorridorRepository`.
+- `YearlyMapWorker.kt`: Aggregates yearly event location traces via `EventRepository`.
+- `RecordService.kt`: Foreground service for recording audio and GPS location.
