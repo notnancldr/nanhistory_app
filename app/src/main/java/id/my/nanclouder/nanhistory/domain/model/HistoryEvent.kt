@@ -31,7 +31,7 @@ abstract class HistoryEvent(
 data class EventPoint(
     override var id: String = generateEventId(),
     override var title: String,
-    override var description: String,
+    override var description: String = "",
     override var time: ZonedDateTime,
     override var favorite: Boolean = false,
     override var tags: List<HistoryTag> = listOf(),
@@ -63,7 +63,7 @@ data class EventPoint(
 data class EventRange(
     override var id: String = generateEventId(),
     override var title: String,
-    override var description: String,
+    override var description: String = "",
     override var time: ZonedDateTime,
     override var favorite: Boolean = false,
     override var tags: List<HistoryTag> = listOf(),

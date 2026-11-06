@@ -35,7 +35,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -43,20 +42,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModelProvider
+import id.my.nanclouder.nanhistory.NanHistoryApplication
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.activity.eventDetail.getActivity
-import id.my.nanclouder.nanhistory.db.AppDatabase
-import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
-import id.my.nanclouder.nanhistory.utils.history.safeDelete
+import id.my.nanclouder.nanhistory.domain.model.HistoryEvent
+import id.my.nanclouder.nanhistory.state.TrashViewModel
 import id.my.nanclouder.nanhistory.state.rememberSelectionState
 import id.my.nanclouder.nanhistory.ui.EventList
 import id.my.nanclouder.nanhistory.ui.SelectionAppBar
 import id.my.nanclouder.nanhistory.ui.main.EventListViewModel
 import id.my.nanclouder.nanhistory.ui.main.EventSelectMode
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class TrashActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -76,15 +73,20 @@ class TrashActivity : ComponentActivity() {
 @Composable
 fun TrashView() {
     val context = LocalContext.current
-    val viewModel = EventListViewModel(
+    val eventListViewModel = EventListViewModel(
         context = context,
         mode = EventSelectMode.Deleted,
     )
 
-    val scope = rememberCoroutineScope()
+    val container = (context.applicationContext as NanHistoryApplication).container
+    val trashViewModel: TrashViewModel = remember(context) {
+        (context as? ComponentActivity)?.let { activity ->
+            ViewModelProvider(activity, TrashViewModel.Factory(container))[TrashViewModel::class.java]
+        } ?: TrashViewModel(container.restoreEventsUseCase, container.permanentlyDeleteEventsUseCase)
+    }
 
-    val db = AppDatabase.getInstance(context)
-    val dao = db.appDao()
+    val deleteProgress by trashViewModel.deleteProgress.collectAsState()
+    val restoreProgress by trashViewModel.restoreProgress.collectAsState()
 
     val selectionState = rememberSelectionState<HistoryEvent>()
     val selectionMode by selectionState.isSelectionMode.collectAsState()
@@ -100,7 +102,6 @@ fun TrashView() {
     var restoreDialogLock by remember { mutableStateOf(false) }
     var restoreDialogTitle by remember { mutableStateOf("") }
     var restoreDialogText by remember { mutableStateOf("") }
-    var restoreDialogProgress by remember { mutableStateOf<Float?>(null) }
 
     val listState = rememberLazyListState()
 
@@ -132,7 +133,6 @@ fun TrashView() {
                 onCancel = { selectionState.reset() },
                 actions = {
                     var dropdownExpanded by remember { mutableStateOf(false) }
-                    // TODO: 'delete permanently' button
                     IconButton(
                         onClick = {
                             restoreDialogTitle = "Restore events?"
@@ -144,7 +144,6 @@ fun TrashView() {
                     ) {
                         Icon(painterResource(R.drawable.ic_undo), "Restore")
                     }
-                    // TODO: 'delete permanently' button
                     Box {
                         IconButton(
                             onClick = {
@@ -174,6 +173,7 @@ fun TrashView() {
                                     deleteDialogText =
                                         "${selectedItems.size} event(s) will be deleted FOREVER"
                                     deleteDialogLock = false
+                                    deleteDialogProgress = null
                                     deleteDialogState = true
                                 },
                                 colors = MenuItemColors(
@@ -193,7 +193,7 @@ fun TrashView() {
     ) { padding ->
         Column(Modifier.padding(padding)) {
             EventList(
-                viewModel = viewModel,
+                viewModel = eventListViewModel,
                 selectionState = selectionState,
                 lazyListState = listState,
                 loadHeaderData = false,
@@ -219,23 +219,24 @@ fun TrashView() {
 
         if (deleteDialogState) AlertDialog(
             onDismissRequest = {
-                if (!deleteDialogLock)
+                if (!deleteDialogLock && !deleteProgress.isRunning)
                     deleteDialogState = false
             },
             title = {
                 Text(deleteDialogTitle)
             },
             text = {
-                val progress = deleteDialogProgress
+                val currentText = if (deleteProgress.isRunning) deleteProgress.text else deleteDialogText
+                val progress = if (deleteProgress.isRunning) deleteProgress.progress else deleteDialogProgress
                 Column {
-                    Text(deleteDialogText)
+                    Text(currentText)
                     if (progress != null) LinearProgressIndicator(
                         progress = { progress }
                     )
                 }
             },
             dismissButton = {
-                if (!deleteDialogLock) TextButton(
+                if (!deleteDialogLock && !deleteProgress.isRunning) TextButton(
                     onClick = {
                         deleteDialogState = false
                     },
@@ -244,19 +245,12 @@ fun TrashView() {
                 }
             },
             confirmButton = {
-                if (!deleteDialogLock) Button(
+                if (!deleteDialogLock && !deleteProgress.isRunning) Button(
                     onClick = {
                         deleteDialogLock = true
-                        scope.launch {
-                            withContext(Dispatchers.IO) {
-                                for ((index, selectedItem) in selectedItems.withIndex()) {
-                                    selectedItem.safeDelete(context)
-                                    deleteDialogText =
-                                        "Deleting items: ${index + 1} of ${selectedItems.size}"
-                                    deleteDialogProgress = (index + 1f) / selectedItems.size
-                                }
-                            }
+                        trashViewModel.deletePermanently(selectedItems) {
                             deleteDialogState = false
+                            deleteDialogLock = false
                             deleteDialogProgress = null
                             selectionState.reset()
                         }
@@ -272,17 +266,18 @@ fun TrashView() {
         )
         if (restoreDialogState) AlertDialog(
             onDismissRequest = {
-                if (!restoreDialogLock)
+                if (!restoreDialogLock && !restoreProgress.isRunning)
                     restoreDialogState = false
             },
             title = {
                 Text(restoreDialogTitle)
             },
             text = {
-                Text(restoreDialogText)
+                val currentText = if (restoreProgress.isRunning) restoreProgress.text else restoreDialogText
+                Text(currentText)
             },
             dismissButton = {
-                if (!restoreDialogLock) TextButton(
+                if (!restoreDialogLock && !restoreProgress.isRunning) TextButton(
                     onClick = {
                         restoreDialogState = false
                     },
@@ -291,16 +286,12 @@ fun TrashView() {
                 }
             },
             confirmButton = {
-                if (!restoreDialogLock) Button(
+                if (!restoreDialogLock && !restoreProgress.isRunning) Button(
                     onClick = {
                         restoreDialogLock = true
-                        scope.launch {
-                            withContext(Dispatchers.IO) {
-                                restoreDialogText = "Restoring events..."
-                                dao.restoreEvents(selectedItems.map { it.id })
-                            }
+                        trashViewModel.restore(selectedItems) {
                             restoreDialogState = false
-                            restoreDialogProgress = null
+                            restoreDialogLock = false
                             selectionState.reset()
                         }
                     }

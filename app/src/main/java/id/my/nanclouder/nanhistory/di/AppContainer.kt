@@ -1,8 +1,14 @@
 package id.my.nanclouder.nanhistory.di
 
 import android.content.Context
+import id.my.nanclouder.nanhistory.data.repository.AndroidAttachmentStorageRepository
+import id.my.nanclouder.nanhistory.data.repository.RoomEventRepository
 import id.my.nanclouder.nanhistory.db.AppDao
 import id.my.nanclouder.nanhistory.db.AppDatabase
+import id.my.nanclouder.nanhistory.domain.repository.AttachmentStorageRepository
+import id.my.nanclouder.nanhistory.domain.repository.EventRepository
+import id.my.nanclouder.nanhistory.domain.usecase.PermanentlyDeleteEventsUseCase
+import id.my.nanclouder.nanhistory.domain.usecase.RestoreEventsUseCase
 import java.time.Clock
 
 class AppContainer(private val context: Context) {
@@ -11,5 +17,24 @@ class AppContainer(private val context: Context) {
     // Dynamic DAO provider guarantees active handle even after AppDatabase.clearInstance()
     val daoProvider: () -> AppDao = {
         AppDatabase.getInstance(context).appDao()
+    }
+
+    val eventRepository: EventRepository by lazy {
+        RoomEventRepository(daoProvider = daoProvider)
+    }
+
+    val attachmentStorageRepository: AttachmentStorageRepository by lazy {
+        AndroidAttachmentStorageRepository(context = context)
+    }
+
+    val restoreEventsUseCase: RestoreEventsUseCase by lazy {
+        RestoreEventsUseCase(eventRepository = eventRepository)
+    }
+
+    val permanentlyDeleteEventsUseCase: PermanentlyDeleteEventsUseCase by lazy {
+        PermanentlyDeleteEventsUseCase(
+            eventRepository = eventRepository,
+            attachmentStorageRepository = attachmentStorageRepository
+        )
     }
 }
