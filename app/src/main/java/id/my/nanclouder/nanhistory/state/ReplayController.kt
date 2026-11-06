@@ -1,9 +1,9 @@
 package id.my.nanclouder.nanhistory.state
 
-import id.my.nanclouder.nanhistory.db.AppDao
-import id.my.nanclouder.nanhistory.db.toLocationData
+import id.my.nanclouder.nanhistory.domain.repository.LocationRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,10 +18,10 @@ import java.time.Duration
  * Manages route playback state, coordinate interpolation, and ticker loop.
  */
 class ReplayController(
-    private val dao: AppDao,
+    private val locationRepository: LocationRepository,
     private val eventId: String,
     private val scope: CoroutineScope,
-    private val ioDispatcher: CoroutineDispatcher
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     private val _replayState = MutableStateFlow(ReplayUiState())
     val replayState: StateFlow<ReplayUiState> = _replayState.asStateFlow()
@@ -31,7 +31,7 @@ class ReplayController(
 
     fun startReplay() {
         scope.launch(ioDispatcher) {
-            val allLocs = dao.getLocationsByEventId(eventId).first().map { it.toLocationData() }
+            val allLocs = locationRepository.observeLocationsByEventId(eventId).first()
             if (allLocs.size < 2) return@launch
 
             cumulativeDistances = ReplayInterpolator.computeCumulativeDistances(allLocs)

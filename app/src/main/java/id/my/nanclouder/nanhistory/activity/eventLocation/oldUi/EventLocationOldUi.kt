@@ -31,12 +31,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import id.my.nanclouder.nanhistory.NanHistoryApplication
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.activity.eventDetail.getActivity
-import id.my.nanclouder.nanhistory.db.AppDatabase
-import id.my.nanclouder.nanhistory.db.toEventEntity
-import id.my.nanclouder.nanhistory.db.toHistoryEvent
-import id.my.nanclouder.nanhistory.db.toLocationEntity
 import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
 import id.my.nanclouder.nanhistory.utils.history.EventRange
 import id.my.nanclouder.nanhistory.utils.history.LocationData
@@ -57,11 +54,12 @@ fun EventLocationView_Old(eventId: String, startAsCutMode: Boolean = false) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    val db = AppDatabase.getInstance(context)
-    val dao = db.appDao()
+    val container = (context.applicationContext as NanHistoryApplication).container
+    val eventRepository = container.eventRepository
+    val locationRepository = container.locationRepository
 
-    val eventState by dao.getEventFlowById(eventId).collectAsState(null)
-    val eventData = eventState?.toHistoryEvent()
+    val eventDataState by eventRepository.observeEventById(eventId).collectAsState(null)
+    val eventData = eventDataState
 
     val recording = matchOrNull<Boolean>(eventData?.metadata?.get("recording")) ?: false
 
@@ -143,9 +141,8 @@ fun EventLocationView_Old(eventId: String, startAsCutMode: Boolean = false) {
                                             }
                                         }
                                 val locationsData =
-                                    eventLocations.mapNotNull {
-                                        if (it.time >= cutStart!! && it.time <= cutEnd!!) return@mapNotNull null
-                                        it.toLocationEntity(newEvent.id)
+                                    eventLocations.filter {
+                                        !(it.time >= cutStart!! && it.time <= cutEnd!!)
                                     }
 
                                 if (eventData.audio != null) {
@@ -163,15 +160,12 @@ fun EventLocationView_Old(eventId: String, startAsCutMode: Boolean = false) {
                                     }
                                 }
 
-                                val eventDb = AppDatabase.getInstance(context)
-                                val eventDao = eventDb.appDao()
-
                                 scope.launch {
                                     if (eventData.validateSignature(context = context)) {
                                         newEvent.generateSignature(context, true)
                                     }
-                                    eventDao.insertEvent(newEvent.toEventEntity())
-                                    eventDao.insertLocations(locationsData)
+                                    eventRepository.saveEvent(newEvent, isNew = true)
+                                    locationRepository.insertLocations(newEvent.id, locationsData)
                                 }
 
                                 cutMode = false

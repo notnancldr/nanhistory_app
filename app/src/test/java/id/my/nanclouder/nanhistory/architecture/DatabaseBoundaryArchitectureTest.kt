@@ -31,8 +31,6 @@ class DatabaseBoundaryArchitectureTest {
         // Activities
         "DetailContent.kt",
         "OldDetailContent.kt",
-        "EventLocationActivity.kt",
-        "EventLocationOldUi.kt",
         "ShareMapActivity.kt",
         // Workers & Services
         "AutoDeleteWorker.kt",
@@ -41,10 +39,8 @@ class DatabaseBoundaryArchitectureTest {
         "DataProcessService.kt",
         "RecordService.kt",
         // State
-        "EventLocationViewModel.kt",
         "YearlyMapViewModel.kt",
         "YearlyMapViewModelFactory.kt",
-        "ReplayController.kt",
         "ShareMapViewModel.kt"
     )
 

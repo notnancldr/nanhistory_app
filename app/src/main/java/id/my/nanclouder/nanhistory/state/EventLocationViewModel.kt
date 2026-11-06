@@ -4,16 +4,12 @@ import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import id.my.nanclouder.nanhistory.db.AppDao
-import id.my.nanclouder.nanhistory.db.AppDatabase
-import id.my.nanclouder.nanhistory.db.toEventEntity
-import id.my.nanclouder.nanhistory.db.toHistoryEvent
-import id.my.nanclouder.nanhistory.db.toLocationData
-import id.my.nanclouder.nanhistory.db.toLocationEntity
-import id.my.nanclouder.nanhistory.utils.history.EventRange
-import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
-import id.my.nanclouder.nanhistory.utils.history.LocationData
-import id.my.nanclouder.nanhistory.utils.history.generateEventId
+import id.my.nanclouder.nanhistory.domain.model.EventRange
+import id.my.nanclouder.nanhistory.domain.model.HistoryEvent
+import id.my.nanclouder.nanhistory.domain.model.LocationData
+import id.my.nanclouder.nanhistory.domain.model.generateEventId
+import id.my.nanclouder.nanhistory.domain.repository.EventRepository
+import id.my.nanclouder.nanhistory.domain.repository.LocationRepository
 import id.my.nanclouder.nanhistory.utils.matchOrNull
 import id.my.nanclouder.nanhistory.utils.signature.generateSignature
 import id.my.nanclouder.nanhistory.utils.signature.validateSignature
@@ -24,12 +20,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.osmdroid.util.BoundingBox
 import java.io.File
-import java.time.Duration
 import java.time.ZonedDateTime
 import kotlin.math.roundToInt
 
@@ -48,7 +42,8 @@ data class EventLocationUiState(
 )
 
 class EventLocationViewModel(
-    private val dao: AppDao,
+    private val eventRepository: EventRepository,
+    private val locationRepository: LocationRepository,
     private val eventId: String,
     startAsCutMode: Boolean = false,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
@@ -62,11 +57,11 @@ class EventLocationViewModel(
     private var debounceJob: Job? = null
     private var lastQueriedBounds: BoundingBox? = null
     private var lastQueriedStep: Int = -1
-    private val replayController = ReplayController(dao, eventId, viewModelScope, ioDispatcher)
+    private val replayController = ReplayController(locationRepository, eventId, viewModelScope, ioDispatcher)
 
     init {
         loadInitialData()
-        viewModelScope.launch {
+        viewModelScope.launch(ioDispatcher) {
             replayController.replayState.collect { rState ->
                 _uiState.update { it.copy(replayState = rState) }
             }
@@ -76,13 +71,12 @@ class EventLocationViewModel(
     private fun loadInitialData() {
         viewModelScope.launch(ioDispatcher) {
             _uiState.update { it.copy(isLoading = true) }
-            dao.getEventFlowById(eventId).collect { entity ->
-                val historyEvent = entity?.toHistoryEvent()
+            eventRepository.observeEventById(eventId).collect { historyEvent ->
                 val isRecording = matchOrNull<Boolean>(historyEvent?.metadata?.get("recording")) ?: false
 
-                val bounds = dao.getLocationBoundsByEventId(eventId)
-                val first = dao.getFirstLocationByEventId(eventId)?.toLocationData()
-                val last = dao.getLastLocationByEventId(eventId)?.toLocationData()
+                val bounds = locationRepository.getLocationBoundsByEventId(eventId)
+                val first = locationRepository.getFirstLocationByEventId(eventId)
+                val last = locationRepository.getLastLocationByEventId(eventId)
 
                 val initialBoundingBox = if (bounds?.minLat != null && bounds.maxLat != null &&
                     bounds.minLon != null && bounds.maxLon != null
@@ -132,14 +126,14 @@ class EventLocationViewModel(
         debounceJob = viewModelScope.launch(ioDispatcher) {
             delay(200)
 
-            val locations = dao.getRenderedLocations(
+            val locations = locationRepository.getRenderedLocations(
                 id = eventId,
                 minLat = minLat,
                 maxLat = maxLat,
                 minLon = minLon,
                 maxLon = maxLon,
                 step = step
-            ).map { it.toLocationData() }
+            )
 
             lastQueriedBounds = box
             lastQueriedStep = step
@@ -228,8 +222,7 @@ class EventLocationViewModel(
 
             val startMillis = cutStart.toInstant().toEpochMilli()
             val endMillis = cutEnd.toInstant().toEpochMilli()
-            val sliceEntities = dao.getLocationsBetweenTimestamps(eventData.id, startMillis, endMillis)
-            val locationsData = sliceEntities.map { it.toLocationData().toLocationEntity(newEvent.id) }
+            val sliceLocations = locationRepository.getLocationsBetweenTimestamps(eventData.id, startMillis, endMillis)
 
             if (eventData.audio != null) {
                 val audioFile = File(context.filesDir, "audio/${eventData.audio}")
@@ -247,8 +240,8 @@ class EventLocationViewModel(
                 newEvent.generateSignature(context, true)
             }
 
-            dao.insertEvent(newEvent.toEventEntity())
-            dao.insertLocations(locationsData)
+            eventRepository.saveEvent(newEvent, isNew = true)
+            locationRepository.insertLocations(newEvent.id, sliceLocations)
 
             _uiState.update {
                 it.copy(cutMode = false, cutStart = null, cutEnd = null)

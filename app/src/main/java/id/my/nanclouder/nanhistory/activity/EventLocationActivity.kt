@@ -11,10 +11,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import id.my.nanclouder.nanhistory.NanHistoryApplication
 import id.my.nanclouder.nanhistory.activity.eventLocation.oldUi.EventLocationView_Old
 import id.my.nanclouder.nanhistory.activity.eventLocation.ui.EventLocationScreen
 import id.my.nanclouder.nanhistory.config.Config
-import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.state.EventLocationViewModel
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import id.my.nanclouder.nanhistory.utils.history.generateEventId
@@ -54,10 +54,11 @@ fun EventLocationView(
     val useOldUi = Config.appearanceOldUi.getCache()
     if (!useOldUi) {
         val context = LocalContext.current
-        val db = remember { AppDatabase.getInstance(context.applicationContext) }
+        val container = (context.applicationContext as NanHistoryApplication).container
         val viewModel = remember(eventId) {
             EventLocationViewModel(
-                dao = db.appDao(),
+                eventRepository = container.eventRepository,
+                locationRepository = container.locationRepository,
                 eventId = eventId,
                 startAsCutMode = startAsCutMode
             )
