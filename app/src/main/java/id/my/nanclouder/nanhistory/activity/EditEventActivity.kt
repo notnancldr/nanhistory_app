@@ -75,11 +75,11 @@ import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.activity.eventDetail.getActivity
 import id.my.nanclouder.nanhistory.config.Config
-import id.my.nanclouder.nanhistory.db.AppDatabase
-import id.my.nanclouder.nanhistory.db.toEventEntity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.text.input.rememberTextFieldState
-import id.my.nanclouder.nanhistory.db.toHistoryEvent
+import androidx.lifecycle.ViewModelProvider
+import id.my.nanclouder.nanhistory.NanHistoryApplication
+import id.my.nanclouder.nanhistory.state.EditEventViewModel
 import id.my.nanclouder.nanhistory.utils.DateFormatter
 import id.my.nanclouder.nanhistory.utils.DatePickerModal
 import id.my.nanclouder.nanhistory.utils.FormattedOutlinedTextField
@@ -135,11 +135,16 @@ fun EditEventView_Old(eventId: String?) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
-    val db = remember { AppDatabase.getInstance(context) }
-    val dao = remember { db.appDao() }
 
-    val oldEventState by dao.getEventFlowById(eventId ?: "").collectAsState(null)
-    val oldEvent = oldEventState?.toHistoryEvent()
+    val container = (context.applicationContext as NanHistoryApplication).container
+    val editEventViewModel: EditEventViewModel = remember(context, eventId) {
+        (context as? ComponentActivity)?.let { activity ->
+            ViewModelProvider(activity, EditEventViewModel.Factory(eventId, null, null, container))[EditEventViewModel::class.java]
+        } ?: EditEventViewModel(eventId, null, null, container.eventRepository, container.saveEventUseCase)
+    }
+
+    val oldEventState by editEventViewModel.event.collectAsState()
+    val oldEvent = oldEventState
     var newEvent by rememberSaveable { mutableStateOf<HistoryEvent?>(null) }
 
     val addMode = eventId == null
@@ -153,19 +158,10 @@ fun EditEventView_Old(eventId: String?) {
 
     val saveEvent = {
         if (newEvent != null) {
-            // newEvent!!.save(context)
-            scope.launch {
-                AppDatabase.ensureDayExists(dao, newEvent!!.time.toLocalDate())
-                if (oldEvent != null) {
-                    dao.updateEvent(newEvent!!.toEventEntity())
-                }
-                else {
-                    dao.insertEvent(newEvent!!.toEventEntity())
-                }
+            editEventViewModel.saveEvent(newEvent!!, isNew = (oldEvent == null)) {
+                context.getActivity()?.setResult(1)
+                context.getActivity()?.finish()
             }
-
-            context.getActivity()?.setResult(1)
-            context.getActivity()?.finish()
         }
     }
 
@@ -581,11 +577,25 @@ fun EditEventView_New(eventId: String?, previousEventOf: String?, nextEventOf: S
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
-    val db = remember { AppDatabase.getInstance(context) }
-    val dao = remember { db.appDao() }
 
-    val oldEventState by dao.getEventFlowById(eventId ?: "").collectAsState(null)
-    val oldEvent = oldEventState?.toHistoryEvent()
+    val container = (context.applicationContext as NanHistoryApplication).container
+    val editEventViewModel: EditEventViewModel = remember(context, eventId, previousEventOf, nextEventOf) {
+        (context as? ComponentActivity)?.let { activity ->
+            ViewModelProvider(
+                activity,
+                EditEventViewModel.Factory(eventId, previousEventOf, nextEventOf, container)
+            )[EditEventViewModel::class.java]
+        } ?: EditEventViewModel(
+            eventId,
+            previousEventOf,
+            nextEventOf,
+            container.eventRepository,
+            container.saveEventUseCase
+        )
+    }
+
+    val oldEventState by editEventViewModel.event.collectAsState()
+    val oldEvent = oldEventState
     var newEvent by rememberSaveable { mutableStateOf<HistoryEvent?>(null) }
 
     val addMode = eventId == null
@@ -619,24 +629,11 @@ fun EditEventView_New(eventId: String?, previousEventOf: String?, nextEventOf: S
             return@LaunchedEffect
         }
 
-        lateinit var firstSiblingTime: ZonedDateTime
-        lateinit var secondSiblingTime: ZonedDateTime
-
-        if (previousEventOf != null) {
-            val firstSibling = dao.getPreviousEvent(previousEventOf)
-            firstSiblingTime = firstSibling?.end ?: firstSibling?.time ?: ZonedDateTime.now()
-            val secondSibling = dao.getEventById(previousEventOf)
-            secondSiblingTime = secondSibling?.event?.time ?: ZonedDateTime.now()
+        val siblingTimes = editEventViewModel.loadSiblingTimes()
+        if (siblingTimes != null) {
+            startTimeFromSibling = siblingTimes.first
+            endTimeFromSibling = siblingTimes.second
         }
-        if (nextEventOf != null) {
-            val firstSibling = dao.getNextEvent(nextEventOf)
-            firstSiblingTime = firstSibling?.time ?: ZonedDateTime.now()
-            val secondSibling = dao.getEventById(nextEventOf)
-            secondSiblingTime = secondSibling?.event?.end ?: secondSibling?.event?.time ?: ZonedDateTime.now()
-        }
-
-        startTimeFromSibling = if (firstSiblingTime < secondSiblingTime) firstSiblingTime else secondSiblingTime
-        endTimeFromSibling = if (firstSiblingTime > secondSiblingTime) firstSiblingTime else secondSiblingTime
 
         siblingEventsLoaded = true
     }
@@ -644,7 +641,7 @@ fun EditEventView_New(eventId: String?, previousEventOf: String?, nextEventOf: S
     val saveEvent = {
         if (oldEvent != null) {
             val newEventRange = newEvent as? EventRange
-            (oldEvent.metadata["accel_data"] as? String)?.let { paths ->
+            (oldEvent?.metadata?.get("accel_data") as? String)?.let { paths ->
                 paths.split(",").forEach a@{ path ->
                     File(path).let { file ->
                         if (!file.exists()) {
@@ -676,18 +673,10 @@ fun EditEventView_New(eventId: String?, previousEventOf: String?, nextEventOf: S
         if (newEvent != null) {
             newEvent!!.metadata.remove("transport_detection_unconfirmed")
 
-            scope.launch {
-                AppDatabase.ensureDayExists(dao, newEvent!!.time.toLocalDate())
-                if (oldEvent != null) {
-                    dao.updateEvent(newEvent!!.toEventEntity())
-                }
-                else {
-                    dao.insertEvent(newEvent!!.toEventEntity())
-                }
+            editEventViewModel.saveEvent(newEvent!!, isNew = (oldEvent == null)) {
+                context.getActivity()?.setResult(1)
+                context.getActivity()?.finish()
             }
-
-            context.getActivity()?.setResult(1)
-            context.getActivity()?.finish()
         }
     }
 
