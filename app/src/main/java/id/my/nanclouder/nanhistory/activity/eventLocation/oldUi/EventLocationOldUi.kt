@@ -41,6 +41,7 @@ import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
 import id.my.nanclouder.nanhistory.utils.history.EventRange
 import id.my.nanclouder.nanhistory.utils.history.LocationData
 import id.my.nanclouder.nanhistory.utils.history.generateEventId
+import id.my.nanclouder.nanhistory.utils.history.getLocations
 import id.my.nanclouder.nanhistory.utils.matchOrNull
 import id.my.nanclouder.nanhistory.utils.signature.generateSignature
 import id.my.nanclouder.nanhistory.utils.signature.validateSignature

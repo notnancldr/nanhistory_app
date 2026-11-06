@@ -80,6 +80,7 @@ import id.my.nanclouder.nanhistory.ui.rememberMentionModalState
 import id.my.nanclouder.nanhistory.ui.tags.TagsView
 import id.my.nanclouder.nanhistory.utils.FormattedText
 import id.my.nanclouder.nanhistory.utils.history.TransportationType
+import id.my.nanclouder.nanhistory.utils.history.iconId
 import id.my.nanclouder.nanhistory.utils.parseFormattedText
 import id.my.nanclouder.nanhistory.utils.transportModel.toTransportMode
 import kotlinx.coroutines.CoroutineDispatcher

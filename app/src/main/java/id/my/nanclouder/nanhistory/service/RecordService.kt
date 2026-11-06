@@ -58,6 +58,7 @@ import id.my.nanclouder.nanhistory.utils.history.EventPoint
 import id.my.nanclouder.nanhistory.utils.history.EventRange
 import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
 import id.my.nanclouder.nanhistory.utils.history.generateEventId
+import id.my.nanclouder.nanhistory.utils.history.getLocations
 import id.my.nanclouder.nanhistory.utils.signature.generateSignature
 import id.my.nanclouder.nanhistory.utils.history.updateModifiedTime
 import java.io.File

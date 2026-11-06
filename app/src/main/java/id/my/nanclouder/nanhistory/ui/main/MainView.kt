@@ -145,6 +145,7 @@ import id.my.nanclouder.nanhistory.utils.RecordStatus
 import id.my.nanclouder.nanhistory.utils.ServiceBroadcast
 import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
 import id.my.nanclouder.nanhistory.utils.history.HistoryFileData
+import id.my.nanclouder.nanhistory.utils.history.tint
 import id.my.nanclouder.nanhistory.utils.migration.MigrationState
 import id.my.nanclouder.nanhistory.service.RecordService
 import id.my.nanclouder.nanhistory.ui.SearchAppBar

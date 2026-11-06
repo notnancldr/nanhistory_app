@@ -5,6 +5,7 @@ import com.google.gson.Gson
 import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
 import id.my.nanclouder.nanhistory.utils.history.HistoryEventProperty
 import id.my.nanclouder.nanhistory.utils.history.HistoryEventSignatureExcluded
+import id.my.nanclouder.nanhistory.utils.history.getLocations
 import id.my.nanclouder.nanhistory.utils.history.toMap
 import java.security.MessageDigest
 

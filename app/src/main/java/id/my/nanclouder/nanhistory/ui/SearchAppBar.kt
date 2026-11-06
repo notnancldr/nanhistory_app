@@ -61,6 +61,7 @@ import id.my.nanclouder.nanhistory.ui.main.EventListViewModel
 import id.my.nanclouder.nanhistory.utils.backgroundTagColor
 import id.my.nanclouder.nanhistory.utils.borderTagColor
 import id.my.nanclouder.nanhistory.utils.textTagColor
+import id.my.nanclouder.nanhistory.utils.history.tint
 import kotlin.math.max
 
 @Composable

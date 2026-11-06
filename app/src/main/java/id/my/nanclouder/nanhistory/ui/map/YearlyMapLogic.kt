@@ -6,6 +6,7 @@ import id.my.nanclouder.nanhistory.db.toHistoryEvent
 import id.my.nanclouder.nanhistory.utils.history.TransportationType
 import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
 import id.my.nanclouder.nanhistory.utils.history.EventRange
+import id.my.nanclouder.nanhistory.utils.history.getLocations
 import id.my.nanclouder.nanhistory.utils.toGeoPoint
 import java.time.LocalDate
 import org.osmdroid.util.GeoPoint

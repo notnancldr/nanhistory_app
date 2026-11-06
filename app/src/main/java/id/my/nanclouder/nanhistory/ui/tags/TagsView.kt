@@ -31,6 +31,7 @@ import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.utils.backgroundTagColor
 import id.my.nanclouder.nanhistory.utils.borderTagColor
 import id.my.nanclouder.nanhistory.utils.history.HistoryTag
+import id.my.nanclouder.nanhistory.utils.history.tint
 import id.my.nanclouder.nanhistory.utils.textTagColor
 import id.my.nanclouder.nanhistory.ui.TagDetailDialogState
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme

@@ -120,6 +120,7 @@ import id.my.nanclouder.nanhistory.utils.history.EventPoint
 import id.my.nanclouder.nanhistory.utils.history.EventRange
 import id.my.nanclouder.nanhistory.utils.history.LocationData
 import id.my.nanclouder.nanhistory.utils.history.TransportationType
+import id.my.nanclouder.nanhistory.utils.history.iconId
 import id.my.nanclouder.nanhistory.utils.history.getBrokenReason
 import id.my.nanclouder.nanhistory.utils.history.isBroken
 import id.my.nanclouder.nanhistory.utils.history.repairEvent

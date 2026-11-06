@@ -18,6 +18,7 @@ import id.my.nanclouder.nanhistory.utils.Coordinate
 import id.my.nanclouder.nanhistory.utils.HistoryLocationData
 import id.my.nanclouder.nanhistory.utils.getLocationData
 import id.my.nanclouder.nanhistory.utils.history.LocationData
+import id.my.nanclouder.nanhistory.utils.history.getLocations
 import java.io.File
 import kotlin.math.abs
 import kotlin.math.max

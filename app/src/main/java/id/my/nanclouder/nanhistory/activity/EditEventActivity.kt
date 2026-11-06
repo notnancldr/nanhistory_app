@@ -91,6 +91,7 @@ import id.my.nanclouder.nanhistory.utils.history.EventPoint
 import id.my.nanclouder.nanhistory.utils.history.EventRange
 import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
 import id.my.nanclouder.nanhistory.utils.history.TransportationType
+import id.my.nanclouder.nanhistory.utils.history.iconId
 import id.my.nanclouder.nanhistory.utils.signature.generateSignature
 import id.my.nanclouder.nanhistory.utils.signature.validateSignature
 import id.my.nanclouder.nanhistory.utils.withHaptic
@@ -483,9 +484,9 @@ fun EditEventView_Old(eventId: String?) {
                                 TransportationType.entries.forEach { option ->
                                     DropdownMenuItem(
                                         leadingIcon = {
-                                            if (option.iconId != null) Icon(
-                                                painterResource(option.iconId), "Transportation type"
-                                            )
+                                            option.iconId?.let {
+                                                Icon(painterResource(it), "Transportation type")
+                                            }
                                         },
                                         text = { Text(option.name, style = MaterialTheme.typography.bodyLarge) },
                                         onClick = {
@@ -1224,10 +1225,9 @@ fun EditEventView_New(eventId: String?, previousEventOf: String?, nextEventOf: S
                                 TransportationType.entries.forEach { option ->
                                     DropdownMenuItem(
                                         leadingIcon = {
-                                            if (option.iconId != null) Icon(
-                                                painterResource(option.iconId),
-                                                "Transportation type"
-                                            )
+                                            option.iconId?.let {
+                                                Icon(painterResource(it), "Transportation type")
+                                            }
                                         },
                                         text = { Text(option.name, style = MaterialTheme.typography.bodyMedium) },
                                         onClick = {

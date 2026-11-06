@@ -62,6 +62,7 @@ import id.my.nanclouder.nanhistory.utils.DateFormatter
 import id.my.nanclouder.nanhistory.utils.history.HistoryDay
 import id.my.nanclouder.nanhistory.ui.tags.TagsView
 import id.my.nanclouder.nanhistory.utils.history.LocationData
+import id.my.nanclouder.nanhistory.utils.history.getLocations
 import id.my.nanclouder.nanhistory.ui.map.maplibre.TripPreviewMap
 import id.my.nanclouder.nanhistory.utils.simplifyPoints
 import kotlinx.coroutines.Dispatchers

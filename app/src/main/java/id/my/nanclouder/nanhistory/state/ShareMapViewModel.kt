@@ -7,6 +7,7 @@ import id.my.nanclouder.nanhistory.db.AppDao
 import id.my.nanclouder.nanhistory.db.toHistoryEvent
 import id.my.nanclouder.nanhistory.utils.getLocationData
 import id.my.nanclouder.nanhistory.utils.history.EventRange
+import id.my.nanclouder.nanhistory.utils.history.getLocations
 import id.my.nanclouder.nanhistory.utils.share.CanvasElement
 import id.my.nanclouder.nanhistory.utils.share.CanvasElementType
 import id.my.nanclouder.nanhistory.utils.share.ShareCanvasPresets

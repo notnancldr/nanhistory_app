@@ -83,6 +83,7 @@ import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.utils.history.EventRange
 import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
 import id.my.nanclouder.nanhistory.utils.history.TransportationType
+import id.my.nanclouder.nanhistory.utils.history.iconId
 import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.ui.map.maplibre.TripPreviewMap
 import id.my.nanclouder.nanhistory.utils.history.LocationData

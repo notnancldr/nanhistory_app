@@ -93,6 +93,8 @@ import id.my.nanclouder.nanhistory.utils.getLocationData
 import id.my.nanclouder.nanhistory.utils.history.EventPoint
 import id.my.nanclouder.nanhistory.utils.history.EventRange
 import id.my.nanclouder.nanhistory.utils.history.LocationData
+import id.my.nanclouder.nanhistory.utils.history.getLocations
+import id.my.nanclouder.nanhistory.utils.history.iconId
 import id.my.nanclouder.nanhistory.utils.shareFile
 import id.my.nanclouder.nanhistory.utils.signature.validateSignature
 import kotlinx.coroutines.launch

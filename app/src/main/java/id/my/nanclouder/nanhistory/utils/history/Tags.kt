@@ -1,7 +1,6 @@
 package id.my.nanclouder.nanhistory.utils.history
 
 import android.content.Context
-import androidx.compose.ui.graphics.Color
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import id.my.nanclouder.nanhistory.utils.FILE_VERSION
@@ -10,20 +9,13 @@ import id.my.nanclouder.nanhistory.utils.toZonedDateTimeOrNull
 import java.io.File
 import java.time.Instant
 import java.time.ZonedDateTime
-import kotlin.random.Random
+
+typealias HistoryTag = id.my.nanclouder.nanhistory.domain.model.HistoryTag
 
 private const val FILE_PATH = "tags.json"
 
 fun generateTagId(instant: Instant = Instant.now()): String =
-    "TAG-${instant.toEpochMilli().toString(16)}-${Random.nextLong().toString(16)}"
-
-data class HistoryTag(
-    var id: String = generateTagId(),
-    var name: String,
-    var description: String = "",
-    var created: ZonedDateTime = ZonedDateTime.now(),
-    var tint: Color
-) { companion object }
+    id.my.nanclouder.nanhistory.domain.model.generateTagId(instant)
 
 data class HistoryTagsData(
     var fileVersion: Int = FILE_VERSION,
@@ -62,14 +54,14 @@ fun Map<String, Any>.toHistoryTag(): HistoryTag {
         val colorData =
             if (it != null) try { it.toLong(16) } catch(_: Exception) { null }
             else null
-        Color(colorData ?: 0xFF808080)
+        colorData ?: 0xFF808080L
     }
     return HistoryTag(
         id = id,
         name = name,
         description = description,
         created = created,
-        tint = tint
+        tintValue = tint
     )
 }
 
@@ -78,7 +70,7 @@ fun HistoryTag.toMap(): Map<String, Any> = mapOf(
     "name" to this.name,
     "description" to this.description,
     "created" to this.created.toOffsetDateTime().toString(),
-    "tint" to this.tint.value.toString(16)
+    "tint" to this.tintValue.toString(16)
 )
 
 fun HistoryTagsData.Companion.get(context: Context): HistoryTagsData? {
@@ -95,7 +87,7 @@ fun HistoryTagsData.Companion.getOrCreateNew(context: Context): HistoryTagsData 
     )
 }
 
-fun HistoryTag.Companion.get(context: Context, id: String): HistoryTag? {
+fun id.my.nanclouder.nanhistory.domain.model.HistoryTag.Companion.get(context: Context, id: String): HistoryTag? {
     return HistoryTagsData.get(context)?.tags?.first { it.id == id }
 }
 
@@ -117,7 +109,7 @@ fun HistoryTag.save(context: Context) {
     fileData.save(context)
 }
 
-fun HistoryTag.Companion.remove(context: Context, id: String) {
+fun id.my.nanclouder.nanhistory.domain.model.HistoryTag.Companion.remove(context: Context, id: String) {
     val fileData = HistoryTagsData.getOrCreateNew(context)
 
     fileData.tags.removeAll { it.id == id }

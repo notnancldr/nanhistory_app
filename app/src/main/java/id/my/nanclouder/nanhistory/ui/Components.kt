@@ -122,6 +122,7 @@ import id.my.nanclouder.nanhistory.db.EventTagCrossRef
 import id.my.nanclouder.nanhistory.db.TagEntity
 import id.my.nanclouder.nanhistory.db.toHistoryTag
 import id.my.nanclouder.nanhistory.utils.history.HistoryTag
+import id.my.nanclouder.nanhistory.utils.history.tint
 import id.my.nanclouder.nanhistory.utils.history.generateTagId
 import id.my.nanclouder.nanhistory.utils.readableTimeHours
 import id.my.nanclouder.nanhistory.service.DataProcessService

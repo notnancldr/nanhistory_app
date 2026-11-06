@@ -19,6 +19,7 @@ import id.my.nanclouder.nanhistory.utils.history.delete
 import id.my.nanclouder.nanhistory.utils.signature.generateOldSignature
 import id.my.nanclouder.nanhistory.utils.signature.generateSignature
 import id.my.nanclouder.nanhistory.utils.history.getFileListStream
+import id.my.nanclouder.nanhistory.utils.history.getLocations
 import id.my.nanclouder.nanhistory.utils.history.toHistoryEvent
 import id.my.nanclouder.nanhistory.utils.signature.validateSignature
 import id.my.nanclouder.nanhistory.utils.matchOrNull

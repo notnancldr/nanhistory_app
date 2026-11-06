@@ -55,9 +55,7 @@ object RecordStatus {
     const val RUNNING = 2
 }
 
-data class Coordinate(val latitude: Double, val longitude: Double) {
-    override fun toString(): String = "$latitude,$longitude"
-}
+typealias Coordinate = id.my.nanclouder.nanhistory.domain.model.Coordinate
 
 fun Coordinate.toGeoPoint(): GeoPoint {
     return GeoPoint(this.latitude, this.longitude)

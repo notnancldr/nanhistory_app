@@ -1,6 +1,7 @@
 package id.my.nanclouder.nanhistory.db
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.room.ColumnInfo
 import androidx.room.Embedded
 import androidx.room.Entity
@@ -248,7 +249,7 @@ fun HistoryTag.toTagEntity() = TagEntity(
     name = name,
     description = description,
     created = created,
-    tint = tint
+    tint = Color(tintValue)
 )
 
 fun TagEntity.toHistoryTag() = HistoryTag(
@@ -256,7 +257,7 @@ fun TagEntity.toHistoryTag() = HistoryTag(
     name = name,
     description = description,
     created = created,
-    tint = tint
+    tintValue = tint.toArgb().toLong() and 0xFFFFFFFFL
 )
 
 fun EventWithTags.toHistoryEvent(): HistoryEvent {
