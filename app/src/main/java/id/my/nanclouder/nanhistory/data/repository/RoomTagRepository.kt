@@ -55,6 +55,12 @@ class RoomTagRepository(
         daoProvider().deleteTag(tag.toTagEntity())
     }
 
+    override suspend fun deleteTags(tags: List<HistoryTag>) = withContext(ioDispatcher) {
+        if (tags.isNotEmpty()) {
+            daoProvider().deleteTags(tags.map { it.toTagEntity() })
+        }
+    }
+
     override suspend fun getTagById(tagId: String): HistoryTag? = withContext(ioDispatcher) {
         daoProvider().getTagById(tagId).firstOrNull()?.toHistoryTag()
     }

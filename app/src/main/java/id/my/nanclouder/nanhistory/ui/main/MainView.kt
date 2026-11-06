@@ -162,10 +162,8 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.ZonedDateTime
 import androidx.core.net.toUri
+import id.my.nanclouder.nanhistory.NanHistoryApplication
 import id.my.nanclouder.nanhistory.activity.TagDetailActivity
-import id.my.nanclouder.nanhistory.db.AppDatabase
-import id.my.nanclouder.nanhistory.db.toHistoryTag
-import id.my.nanclouder.nanhistory.db.toTagEntity
 import id.my.nanclouder.nanhistory.activity.eventDetail.getActivity
 import id.my.nanclouder.nanhistory.service.RecordService.RecordState
 import id.my.nanclouder.nanhistory.utils.history.HistoryTag
@@ -368,8 +366,9 @@ fun MainView() {
 
     val context = LocalContext.current
 
-    val db = AppDatabase.getInstance(context)
-    val dao = db.appDao()
+    val container = (context.applicationContext as NanHistoryApplication).container
+    val eventRepository = container.eventRepository
+    val tagRepository = container.tagRepository
 
     val recordPermissionState = rememberMultiplePermissionsState(
         listOf(
@@ -910,7 +909,7 @@ fun MainView() {
                                     lock = true
                                     if (page == NanHistoryPages.Events) withContext(Dispatchers.IO) {
                                         eventsSelectionState.selectedItems.value.forEach {
-                                            dao.toggleFavoriteEvent(it.id)
+                                            eventRepository.toggleFavoriteEvent(it.id)
                                         }
                                     }
                                     lock = false
@@ -1383,7 +1382,7 @@ fun MainView() {
                                 }
                                 deleteDialogText =
                                     "Moving items to trash..."
-                                AppDatabase.moveToTrash(dao, context, selectedItems.map { it.id })
+                                eventRepository.moveToTrash(selectedItems.map { it.id })
                             }
                             lock = false
                             resetSelectionMode()
@@ -1395,12 +1394,10 @@ fun MainView() {
                             deleteButtonState = false
                             deleteDialogTitle = "Deleting Tags"
                             deleteDialogText = "Deleting..."
-                            withContext(Dispatchers.IO) {
-                                val selectedItems = tagListSelectionState.selectedItems.value
-                                deleteDialogText =
-                                    "Deleting tags..."
-                                dao.deleteTags(selectedItems.map { it.toTagEntity() })
-                            }
+                            val selectedItems = tagListSelectionState.selectedItems.value
+                            deleteDialogText =
+                                "Deleting tags..."
+                            tagRepository.deleteTags(selectedItems)
                             lock = false
                             resetSelectionMode()
                             vibrator.vibrate(VibrationEffect.createOneShot(25, VibrationEffect.DEFAULT_AMPLITUDE))
@@ -1498,14 +1495,12 @@ private fun ModernTagList(
 
     val haptic = LocalHapticFeedback.current
 
-    val db = AppDatabase.getInstance(context)
-    val dao = db.appDao()
+    val tagRepository = (context.applicationContext as NanHistoryApplication).container.tagRepository
 
     val selectionMode by selectionState.isSelectionMode.collectAsState(false)
     val selectedItems by selectionState.selectedItems.collectAsState(emptyList())
 
-    val tagsFlow by dao.getAllTags().collectAsState(emptyList())
-    val tags = tagsFlow.map { it.toHistoryTag() }
+    val tags by tagRepository.observeAllTags().collectAsState(emptyList())
 
     if (tags.isNotEmpty()) Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -1722,14 +1717,12 @@ private fun TagList_Old(
 
     val haptic = LocalHapticFeedback.current
 
-    val db = AppDatabase.getInstance(context)
-    val dao = db.appDao()
+    val tagRepository = (context.applicationContext as NanHistoryApplication).container.tagRepository
 
     val selectionMode by selectionState.isSelectionMode.collectAsState(false)
     val selectedItems by selectionState.selectedItems.collectAsState(emptyList())
 
-    val tagsFlow by dao.getAllTags().collectAsState(emptyList())
-    val tags = tagsFlow.map { it.toHistoryTag() }
+    val tags by tagRepository.observeAllTags().collectAsState(emptyList())
 
     if (tags.isNotEmpty()) Box(Modifier.fillMaxSize()) {
         LazyColumn(

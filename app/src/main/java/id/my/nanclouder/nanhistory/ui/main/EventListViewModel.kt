@@ -7,43 +7,52 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import id.my.nanclouder.nanhistory.db.AppDao
-import id.my.nanclouder.nanhistory.db.AppDatabase
-import id.my.nanclouder.nanhistory.db.toHistoryEvent
-import id.my.nanclouder.nanhistory.db.toHistoryTag
-import id.my.nanclouder.nanhistory.utils.history.HistoryDay
-import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
-import id.my.nanclouder.nanhistory.utils.history.HistoryTag
+import id.my.nanclouder.nanhistory.NanHistoryApplication
+import id.my.nanclouder.nanhistory.domain.model.EventSelectMode
+import id.my.nanclouder.nanhistory.domain.model.HistoryDay
+import id.my.nanclouder.nanhistory.domain.model.HistoryEvent
+import id.my.nanclouder.nanhistory.domain.model.HistoryTag
+import id.my.nanclouder.nanhistory.domain.repository.EventRepository
+import id.my.nanclouder.nanhistory.domain.repository.TagRepository
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
-enum class EventSelectMode {
-    Default, FavoriteEvent, FavoriteDay, Search, Deleted, Tagged
-}
+typealias EventSelectMode = id.my.nanclouder.nanhistory.domain.model.EventSelectMode
 
 class EventListViewModel(
-    context: Context,
+    context: Context? = null,
     val from: LocalDate = LocalDate.MIN,
     val until: LocalDate = LocalDate.parse("9999-12-31"),
     val mode: EventSelectMode = EventSelectMode.Default,
-    val tagId: String? = null
+    val tagId: String? = null,
+    eventRepository: EventRepository? = null,
+    tagRepository: TagRepository? = null,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : ViewModel() {
-    private val _events = MutableStateFlow<List<HistoryEvent>>(emptyList()) // Holds loaded data
-    val events: StateFlow<List<HistoryEvent>> = _events // Expose sorted list
+    private val eventRepository: EventRepository = eventRepository
+        ?: (context?.applicationContext as? NanHistoryApplication)?.container?.eventRepository
+        ?: error("EventRepository must be provided or context must be NanHistoryApplication")
 
-    private val _days = MutableStateFlow<List<HistoryDay>>(emptyList()) // Holds loaded data
-    val days: StateFlow<List<HistoryDay>> = _days // Expose sorted list
+    private val tagRepository: TagRepository = tagRepository
+        ?: (context?.applicationContext as? NanHistoryApplication)?.container?.tagRepository
+        ?: error("TagRepository must be provided or context must be NanHistoryApplication")
 
-    private val _tags = MutableStateFlow<List<HistoryTag>>(emptyList()) // Holds loaded data
+    private val _events = MutableStateFlow<List<HistoryEvent>>(emptyList())
+    val events: StateFlow<List<HistoryEvent>> = _events
+
+    private val _days = MutableStateFlow<List<HistoryDay>>(emptyList())
+    val days: StateFlow<List<HistoryDay>> = _days
+
+    private val _tags = MutableStateFlow<List<HistoryTag>>(emptyList())
     val tags: StateFlow<List<HistoryTag>> = _tags
 
-    private val _isLoading = MutableStateFlow(false) // Loading state
-    val isLoading: StateFlow<Boolean> = _isLoading // Expose as immutable
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading
 
     private var _currentEvents = emptyList<HistoryEvent>()
     val currentEvents
@@ -60,23 +69,19 @@ class EventListViewModel(
     private var _onGotoDay: ((LocalDate) -> Unit)? = null
     private var _onGotoEvent: ((String) -> Unit)? = null
 
-    private val db: AppDatabase = AppDatabase.getInstance(context)
-    private val dao: AppDao = db.appDao()
-
     init {
-        // Start loading files when ViewModel initializes
         load()
-        viewModelScope.launch {
+        viewModelScope.launch(ioDispatcher) {
             _events.collect {
                 _currentEvents = it
             }
         }
-        viewModelScope.launch {
+        viewModelScope.launch(ioDispatcher) {
             _days.collect {
                 _currentDays = it
             }
         }
-        viewModelScope.launch {
+        viewModelScope.launch(ioDispatcher) {
             _tags.collect {
                 _currentTags = it
             }
@@ -101,22 +106,14 @@ class EventListViewModel(
     }
 
     fun search(query: String, tags: List<String> = emptyList(), matchWholeWord: Boolean = false) {
-        viewModelScope.launch(Dispatchers.IO) {
-            if (tags.isNotEmpty()) AppDatabase.searchWithTagIds(dao, query, tags).collect{
+        viewModelScope.launch(ioDispatcher) {
+            eventRepository.searchEvents(query, tags, matchWholeWord).collect {
                 _events.value = it
             }
-            else if (matchWholeWord) AppDatabase.searchMatchWholeWord(dao, query).collect {
-                _events.value = it
-            }
-            else if (query.isNotBlank()) AppDatabase.search(dao, query).collect {
-                if (query.isNotBlank())
-                    _events.value = it
-            }
-            else _events.value = emptyList()
         }
-        viewModelScope.launch(Dispatchers.IO) {
-            dao.getAllTags().collect {
-                _tags.value = it.map { tag -> tag.toHistoryTag() }
+        viewModelScope.launch(ioDispatcher) {
+            tagRepository.observeAllTags().collect {
+                _tags.value = it
             }
         }
     }
@@ -124,32 +121,34 @@ class EventListViewModel(
     private fun load() {
         if (_isLoading.value) return
         _isLoading.value = true
-        if (mode == EventSelectMode.Tagged) viewModelScope.launch(Dispatchers.IO) {
-            _isLoading.value = false
-            dao.getEventsByTagIds(listOf(tagId!!)).map{
-                it.map { event -> event.toHistoryEvent() }
-            }.collect { events ->
-                _events.value = events
-                Log.d("NanHistoryDebug", "Loaded ${events.size} events")
+        if (mode == EventSelectMode.Tagged) {
+            viewModelScope.launch(ioDispatcher) {
+                _isLoading.value = false
+                val id = tagId ?: return@launch
+                eventRepository.observeEventsByTagIds(listOf(id)).collect { events ->
+                    _events.value = events
+                    Log.d("NanHistoryDebug", "Loaded ${events.size} events")
+                }
+            }
+        } else if (mode != EventSelectMode.Search) {
+            viewModelScope.launch(ioDispatcher) {
+                _isLoading.value = false
+                eventRepository.observeEventsInRange(from, until, mode).collect { events ->
+                    _events.value = events
+                    Log.d("NanHistoryDebug", "Loaded ${events.size} events")
+                }
+            }
+        } else {
+            viewModelScope.launch(ioDispatcher) {
+                search("")
             }
         }
-        else if (mode != EventSelectMode.Search) viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(ioDispatcher) {
             _isLoading.value = false
-            AppDatabase.getEventsInRange(dao, from, until, mode).collect { events ->
-                _events.value = events
-                Log.d("NanHistoryDebug", "Loaded ${events.size} events")
-            }
-        }
-        else viewModelScope.launch(Dispatchers.IO) {
-            search("")
-        }
-        viewModelScope.launch(Dispatchers.IO) {
-            _isLoading.value = false
-            AppDatabase.getDaysInRange(dao, from, until, mode == EventSelectMode.FavoriteDay).collect { days ->
+            eventRepository.observeDaysInRange(from, until, mode == EventSelectMode.FavoriteDay).collect { days ->
                 _days.value = days
                 Log.d("NanHistoryDebug", "Loaded ${days.size} days")
             }
-//            _isLoading.value = false
         }
     }
 

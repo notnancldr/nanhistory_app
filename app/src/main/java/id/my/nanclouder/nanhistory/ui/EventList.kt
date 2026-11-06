@@ -50,10 +50,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import id.my.nanclouder.nanhistory.NanHistoryApplication
 import id.my.nanclouder.nanhistory.activity.EditEventActivity
 import id.my.nanclouder.nanhistory.activity.eventDetail.EventDetailActivity
 import id.my.nanclouder.nanhistory.config.Config
-import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.service.RecordService
 import id.my.nanclouder.nanhistory.state.SelectionState
 import id.my.nanclouder.nanhistory.ui.list.EventListHeader
@@ -92,8 +92,9 @@ fun EventList(
 
     val tagDetailDialogState = rememberTagDetailDialogState()
 
-    val db = remember { AppDatabase.getInstance(context) }
-    val dao = remember { db.appDao() }
+    val eventRepository = remember {
+        (context.applicationContext as NanHistoryApplication).container.eventRepository
+    }
 
     val dayList by viewModel.days.collectAsState(viewModel.currentDays)
     val eventListState by viewModel.events.collectAsState(viewModel.currentEvents)
@@ -223,7 +224,7 @@ fun EventList(
                         eventCount = events.size,
                         selected = selected,
                     ) {
-                        scope.launch { dao.toggleFavoriteDay(date) }
+                        scope.launch { eventRepository.toggleFavoriteDay(date) }
                     }
                     else if (loadHeaderData) ListItem(
                         headlineContent = {

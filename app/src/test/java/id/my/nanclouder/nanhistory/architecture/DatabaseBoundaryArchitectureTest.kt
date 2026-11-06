@@ -17,13 +17,8 @@ class DatabaseBoundaryArchitectureTest {
         // Debug
         "FilePlayerActivity.kt",
         // UI
-        "MainView.kt",
-        "EventListViewModel.kt",
         "YearlyMapLogic.kt",
         "YearlyMapScreen.kt",
-        "EventListItem.kt",
-        "EventListHeader.kt",
-        "EventList.kt",
         "Components.kt",
         // Utils
         "Events.kt",

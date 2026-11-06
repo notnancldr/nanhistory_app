@@ -54,10 +54,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.viewinterop.AndroidView
+import id.my.nanclouder.nanhistory.NanHistoryApplication
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
-import id.my.nanclouder.nanhistory.db.AppDatabase
-import id.my.nanclouder.nanhistory.db.toHistoryEvent
 import id.my.nanclouder.nanhistory.utils.DateFormatter
 import id.my.nanclouder.nanhistory.utils.history.HistoryDay
 import id.my.nanclouder.nanhistory.ui.tags.TagsView
@@ -207,15 +206,14 @@ fun EventListHeader_New(
     val headlineFontWeight = FontWeight.W600
     var favorite by remember { mutableStateOf(historyDay.favorite) }
 
-    val db = AppDatabase.getInstance(context)
-    val dao = db.appDao()
+    val eventRepository = remember { (context.applicationContext as NanHistoryApplication).container.eventRepository }
 
     var isExpanded by remember { mutableStateOf(false) }
     var tripLocations by remember { mutableStateOf<List<LocationData>>(emptyList()) }
     var isLoadingMap by remember { mutableStateOf(false) }
     var mapLoadError by remember { mutableStateOf(false) }
 
-    val allEvents by dao.getEventsByDay(historyDay.date).collectAsState(emptyList())
+    val allEvents by eventRepository.observeEventsByDay(historyDay.date).collectAsState(emptyList())
 
     LaunchedEffect(isExpanded, allEvents) {
         if (isExpanded && tripLocations.isEmpty()) {
@@ -224,7 +222,7 @@ fun EventListHeader_New(
             try {
                 withContext(Dispatchers.IO) {
                     tripLocations = allEvents.fold(emptyList()) { list, event ->
-                        list + event.toHistoryEvent().getLocations(context)
+                        list + event.getLocations(context)
                     }
                 }
             } catch (e: Exception) {

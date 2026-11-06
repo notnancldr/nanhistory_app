@@ -23,7 +23,7 @@ class AppContainer(private val context: Context) {
     }
 
     val eventRepository: EventRepository by lazy {
-        RoomEventRepository(daoProvider = daoProvider)
+        RoomEventRepository(daoProvider = daoProvider, context = context)
     }
 
     val tagRepository: TagRepository by lazy {

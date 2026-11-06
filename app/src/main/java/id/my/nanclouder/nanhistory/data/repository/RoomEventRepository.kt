@@ -1,17 +1,26 @@
 package id.my.nanclouder.nanhistory.data.repository
 
+import android.content.Context
+import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.db.AppDao
 import id.my.nanclouder.nanhistory.db.DayEntity
+import id.my.nanclouder.nanhistory.db.EventWithTags
 import id.my.nanclouder.nanhistory.db.toEventEntity
+import id.my.nanclouder.nanhistory.db.toHistoryDay
 import id.my.nanclouder.nanhistory.db.toHistoryEvent
+import id.my.nanclouder.nanhistory.domain.model.EventSelectMode
+import id.my.nanclouder.nanhistory.domain.model.HistoryDay
 import id.my.nanclouder.nanhistory.domain.model.HistoryEvent
 import id.my.nanclouder.nanhistory.domain.repository.EventRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import java.time.Instant
+import java.time.LocalDate
 import java.time.ZonedDateTime
 
 /**
@@ -21,6 +30,7 @@ import java.time.ZonedDateTime
  */
 class RoomEventRepository(
     private val daoProvider: () -> AppDao,
+    private val context: Context? = null,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : EventRepository {
 
@@ -33,6 +43,65 @@ class RoomEventRepository(
     override fun observeEventById(id: String): Flow<HistoryEvent?> {
         return daoProvider().getEventFlowById(id)
             .map { it?.toHistoryEvent() }
+            .flowOn(ioDispatcher)
+    }
+
+    override fun observeEventsByDay(date: LocalDate): Flow<List<HistoryEvent>> {
+        return daoProvider().getEventsByDay(date)
+            .map { list -> list.map { it.toHistoryEvent() } }
+            .flowOn(ioDispatcher)
+    }
+
+    override fun observeEventsInRange(
+        from: LocalDate,
+        until: LocalDate,
+        mode: EventSelectMode
+    ): Flow<List<HistoryEvent>> {
+        val dao = daoProvider()
+        return when (mode) {
+            EventSelectMode.FavoriteEvent -> dao.getFavoriteEvents()
+            EventSelectMode.Deleted -> dao.getDeletedEventsFlow()
+            else -> dao.getEventsInRange(from.toString(), until.toString())
+        }.map { list -> list.map { it.toHistoryEvent() } }
+            .flowOn(ioDispatcher)
+    }
+
+    override fun observeDaysInRange(
+        from: LocalDate,
+        until: LocalDate,
+        favoriteOnly: Boolean
+    ): Flow<List<HistoryDay>> {
+        val dao = daoProvider()
+        return if (!favoriteOnly) {
+            dao.getDaysInRange(from, until)
+        } else {
+            dao.getFavoriteDays()
+        }.map { list -> list.map { it.toHistoryDay() } }
+            .flowOn(ioDispatcher)
+    }
+
+    override fun observeEventsByTagIds(tagIds: List<String>): Flow<List<HistoryEvent>> {
+        return daoProvider().getEventsByTagIds(tagIds)
+            .map { list -> list.map { it.toHistoryEvent() } }
+            .flowOn(ioDispatcher)
+    }
+
+    override fun searchEvents(
+        query: String,
+        tagIds: List<String>,
+        matchWholeWord: Boolean
+    ): Flow<List<HistoryEvent>> {
+        val dao = daoProvider()
+        val flow: Flow<List<EventWithTags>> = if (tagIds.isNotEmpty()) {
+            dao.searchEventsWithTagIds(query, tagIds)
+        } else if (matchWholeWord) {
+            dao.searchEventsMatchWholeWord(query)
+        } else if (query.isNotBlank()) {
+            dao.searchEvents(query)
+        } else {
+            flowOf(emptyList())
+        }
+        return flow.map { list -> list.map { it.toHistoryEvent() } }
             .flowOn(ioDispatcher)
     }
 
@@ -54,7 +123,15 @@ class RoomEventRepository(
 
     override suspend fun moveToTrash(eventIds: List<String>) = withContext(ioDispatcher) {
         if (eventIds.isNotEmpty()) {
-            daoProvider().softDeleteEvents(eventIds)
+            val dao = daoProvider()
+            val delete1hour = context?.let {
+                Config.developer1hourAutoDelete.get(it) && Config.developerModeEnabled.get(it)
+            } ?: false
+            if (delete1hour) {
+                dao.softDeleteEvents(eventIds, Instant.now().plusSeconds(3600).toEpochMilli())
+            } else {
+                dao.softDeleteEvents(eventIds)
+            }
         }
     }
 
@@ -75,6 +152,18 @@ class RoomEventRepository(
         } else {
             dao.updateEvent(event.toEventEntity())
         }
+    }
+
+    override suspend fun updateEvent(event: HistoryEvent) = withContext(ioDispatcher) {
+        daoProvider().updateEvent(event.toEventEntity())
+    }
+
+    override suspend fun toggleFavoriteEvent(eventId: String) = withContext(ioDispatcher) {
+        daoProvider().toggleFavoriteEvent(eventId)
+    }
+
+    override suspend fun toggleFavoriteDay(date: LocalDate) = withContext(ioDispatcher) {
+        daoProvider().toggleFavoriteDay(date)
     }
 
     override suspend fun getEventSiblingTimes(

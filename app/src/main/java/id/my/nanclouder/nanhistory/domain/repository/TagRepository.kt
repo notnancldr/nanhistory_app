@@ -14,5 +14,6 @@ interface TagRepository {
     suspend fun insertTag(tag: HistoryTag)
     suspend fun updateTag(tag: HistoryTag)
     suspend fun deleteTag(tag: HistoryTag)
+    suspend fun deleteTags(tags: List<HistoryTag>) {}
     suspend fun getTagById(tagId: String): HistoryTag?
 }

@@ -65,9 +65,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import id.my.nanclouder.nanhistory.NanHistoryApplication
 import id.my.nanclouder.nanhistory.R
-import id.my.nanclouder.nanhistory.db.AppDatabase
-import id.my.nanclouder.nanhistory.db.toEventEntity
 import id.my.nanclouder.nanhistory.ui.MentionModalHandler
 import id.my.nanclouder.nanhistory.ui.MentionModalState
 import id.my.nanclouder.nanhistory.utils.TimeFormatter
@@ -613,8 +612,7 @@ fun TimelineEventItem(
                                                 val eventRange = eventData as? EventRange
 
                                                 scope.launch {
-                                                    val db = AppDatabase.getInstance(context)
-                                                    val dao = db.appDao()
+                                                    val eventRepository = (context.applicationContext as NanHistoryApplication).container.eventRepository
 
                                                     (eventData.metadata["accel_data"] as? String)?.let { paths ->
                                                         paths.split(",").forEach a@{ path ->
@@ -631,7 +629,7 @@ fun TimelineEventItem(
                                                         }
                                                     }
 
-                                                    dao.updateEvent(eventData.toEventEntity())
+                                                    eventRepository.updateEvent(eventData)
                                                     needTransportConfirmation = false
                                                 }
                                             }
@@ -650,12 +648,11 @@ fun TimelineEventItem(
                                                 transportationType = TransportationType.Unspecified
 
                                                 scope.launch {
-                                                    val db = AppDatabase.getInstance(context)
-                                                    val dao = db.appDao()
+                                                    val eventRepository = (context.applicationContext as NanHistoryApplication).container.eventRepository
 
                                                     needTransportConfirmation = false
 
-                                                    dao.updateEvent(eventData.toEventEntity())
+                                                    eventRepository.updateEvent(eventData)
                                                 }
                                             }
                                         ) {
