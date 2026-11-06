@@ -25,3 +25,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "NanHistory"
 include(":app")
+include(":core:common")
+

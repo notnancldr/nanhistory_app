@@ -1,6 +1,7 @@
 package id.my.nanclouder.nanhistory.di
 
 import android.content.Context
+import id.my.nanclouder.nanhistory.core.common.di.CoreContainer
 import id.my.nanclouder.nanhistory.data.repository.AndroidAttachmentStorageRepository
 import id.my.nanclouder.nanhistory.data.repository.RoomCorridorRepository
 import id.my.nanclouder.nanhistory.data.repository.RoomEventRepository
@@ -22,7 +23,7 @@ import id.my.nanclouder.nanhistory.domain.repository.SettingsRepository
 import id.my.nanclouder.nanhistory.domain.usecase.PurgeExpiredTrashUseCase
 import java.time.Clock
 
-class AppContainer(private val context: Context) {
+class AppContainer(private val context: Context) : CoreContainer {
     val clock: Clock = Clock.systemDefaultZone()
 
     // Dynamic DAO provider guarantees active handle even after AppDatabase.clearInstance()

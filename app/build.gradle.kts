@@ -139,6 +139,7 @@ kotlin {
 //}
 
 dependencies {
+    implementation(project(":core:common"))
     implementation("androidx.documentfile:documentfile:1.0.1")
     implementation(libs.capturable)
     implementation(libs.androidx.work.runtime.ktx)
