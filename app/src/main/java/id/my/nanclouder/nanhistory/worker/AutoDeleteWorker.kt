@@ -33,12 +33,7 @@ class AutoDeleteWorker(
         Log.d("AutoDeleteWorker", "Running auto-delete via PurgeExpiredTrashUseCase...")
 
         val container = (applicationContext as NanHistoryApplication).container
-        val purgeUseCase = PurgeExpiredTrashUseCase(
-            eventRepository = container.eventRepository,
-            attachmentStorageRepository = container.attachmentStorageRepository
-        )
-
-        val purgedEvents = purgeUseCase()
+        val purgedEvents = container.purgeExpiredTrashUseCase()
         val deletedCount = purgedEvents.size
 
         val notifyUser = Config.autoDeleteNotifyUser.get(applicationContext)

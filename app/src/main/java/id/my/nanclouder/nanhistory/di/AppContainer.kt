@@ -17,6 +17,9 @@ import id.my.nanclouder.nanhistory.domain.repository.TagRepository
 import id.my.nanclouder.nanhistory.domain.usecase.PermanentlyDeleteEventsUseCase
 import id.my.nanclouder.nanhistory.domain.usecase.RestoreEventsUseCase
 import id.my.nanclouder.nanhistory.domain.usecase.SaveEventUseCase
+import id.my.nanclouder.nanhistory.data.repository.ConfigSettingsRepository
+import id.my.nanclouder.nanhistory.domain.repository.SettingsRepository
+import id.my.nanclouder.nanhistory.domain.usecase.PurgeExpiredTrashUseCase
 import java.time.Clock
 
 class AppContainer(private val context: Context) {
@@ -64,5 +67,16 @@ class AppContainer(private val context: Context) {
 
     val saveEventUseCase: SaveEventUseCase by lazy {
         SaveEventUseCase(eventRepository = eventRepository)
+    }
+
+    val settingsRepository: SettingsRepository by lazy {
+        ConfigSettingsRepository(context = context)
+    }
+
+    val purgeExpiredTrashUseCase: PurgeExpiredTrashUseCase by lazy {
+        PurgeExpiredTrashUseCase(
+            eventRepository = eventRepository,
+            attachmentStorageRepository = attachmentStorageRepository
+        )
     }
 }

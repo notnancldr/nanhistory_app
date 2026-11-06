@@ -112,7 +112,7 @@ object Config {
         }
     }
 
-    private fun getConfigFlow(): StateFlow<Map<String, Any>> {
+    fun getConfigFlow(): StateFlow<Map<String, Any>> {
         return _cache
     }
 
@@ -131,6 +131,20 @@ object Config {
         _currentCache = config
         _cache.value = _currentCache
     }
+
+    
+    fun setRawCache(context: Context, config: Map<String, Any>) {
+        val configFile = File(context.filesDir, PATH)
+        configFile.writeText(Gson().toJson(config))
+        _currentCache = config
+        _cache.value = _currentCache
+    }
+
+    fun setConfigValue(context: Context, name: String, value: Any) {
+        setConfig(context, name, value)
+    }
+
+    fun getConfigMap(context: Context): Map<String, Any> = getConfig(context)
 
     class IntValue internal constructor(val name: String, private val default: Int) {
         fun get(context: Context) =
