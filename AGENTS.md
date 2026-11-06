@@ -155,12 +155,7 @@ Detailed codebase architecture, subsystem behavior, and domain references reside
 Before marking any task done, all of the following commands MUST pass with zero errors (using the `plain` flavor by default):
 1. `./gradlew assemblePlainDebug`
 2. `./gradlew testPlainDebugUnitTest`
-3. `./gradlew lintVitalPlainRelease` (matches `lint-baseline.xml`; if using `lintPlainDebug`, note that pre-existing baseline mismatch warnings may appear)
-
-Environment notes:
-- Requires JDK with `javac` (point `JAVA_HOME` to Android Studio JBR: `/home/nandaahmad/dev/android-studio/jbr`).
-- Gradle commands require sandbox bypass (`BypassSandbox: true`) to access the external Android SDK at `/home/nandaahmad/dev/Android/Sdk` and JBR.
-- If running in restricted shell environments, set `export ANDROID_USER_HOME=/tmp/.android` to provide a writable Android user cache.
+3. `./gradlew lintVitalPlainRelease` (matches `lint-baseline.xml`; if using `lintPlainDebug`, note that pre-existing baseline mismatch warnings may appear
 
 If any command fails for an unrelated reason, report it. Do not fix unrelated failures or suppress warnings to pass.
 
