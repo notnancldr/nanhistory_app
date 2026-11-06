@@ -1,5 +1,8 @@
 package id.my.nanclouder.nanhistory.utils.graph
 
+import id.my.nanclouder.nanhistory.domain.logic.graph.SeriesDataSource
+import id.my.nanclouder.nanhistory.domain.logic.graph.StandardProperty
+
 import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder

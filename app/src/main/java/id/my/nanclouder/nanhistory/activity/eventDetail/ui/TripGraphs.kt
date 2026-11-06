@@ -54,7 +54,7 @@ import id.my.nanclouder.nanhistory.utils.graph.GraphExpressionEvaluator
 import id.my.nanclouder.nanhistory.utils.graph.GraphPreferencesRepository
 import id.my.nanclouder.nanhistory.utils.graph.GraphScaleMode
 import id.my.nanclouder.nanhistory.utils.graph.SeriesConfig
-import id.my.nanclouder.nanhistory.utils.graph.SeriesDataSource
+import id.my.nanclouder.nanhistory.domain.logic.graph.SeriesDataSource
 
 @Composable
 fun TripGraphs(

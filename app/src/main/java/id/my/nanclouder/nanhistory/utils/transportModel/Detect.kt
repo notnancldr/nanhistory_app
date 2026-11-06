@@ -7,9 +7,7 @@ import id.my.nanclouder.nanhistory.utils.history.TransportationType
 import java.time.Duration
 import kotlin.math.abs
 
-enum class TransportMode {
-    STILL, WALKING, BICYCLE, MOTORCYCLE, CAR, TRAIN, AIRPLANE, UNKNOWN
-}
+// TransportMode moved to domain/logic/transport/Detect.kt
 
 fun TransportMode.toTransportationType() = when(this) {
     TransportMode.STILL, TransportMode.UNKNOWN -> TransportationType.Unspecified
@@ -32,11 +30,7 @@ fun TransportationType.toTransportMode() = when(this) {
 }
 
 // Scoring strategy enum
-enum class ScoringStrategy {
-    RANGE_BASED,      // Original: score 1.0 if in range, penalty if out
-    IDEAL_BASED,      // New: score based on distance from ideal value(s)
-    COMBINED           // Use both strategies with weights
-}
+// ScoringStrategy moved to domain/logic/transport/Detect.kt
 
 fun getScore(
     history: List<HistoryLocationData>,

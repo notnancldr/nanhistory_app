@@ -1,5 +1,8 @@
 package id.my.nanclouder.nanhistory.utils.graph
 
+import id.my.nanclouder.nanhistory.domain.logic.graph.SeriesDataSource
+import id.my.nanclouder.nanhistory.domain.logic.graph.StandardProperty
+
 import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
 import org.junit.Assert.assertEquals

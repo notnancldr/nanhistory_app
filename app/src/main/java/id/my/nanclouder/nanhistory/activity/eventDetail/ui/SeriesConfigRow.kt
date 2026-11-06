@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.utils.graph.ColorPreset
 import id.my.nanclouder.nanhistory.utils.graph.SeriesConfig
-import id.my.nanclouder.nanhistory.utils.graph.SeriesDataSource
+import id.my.nanclouder.nanhistory.domain.logic.graph.SeriesDataSource
 import id.my.nanclouder.nanhistory.utils.graph.StandardProperty
 
 /**
