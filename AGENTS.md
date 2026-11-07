@@ -4,7 +4,11 @@ Rules, boundaries, and operational guidelines for AI agents working in this repo
 
 ## 1. Project Overview & Scope
 - **App Purpose**: Note events by adding them into the app, record events with location history, and record events with audio.
-- **Module Structure**: Single module (`:app`), root package `id.my.nanclouder.nanhistory`.
+- **Module Structure**: Multi-module Gradle project:
+  - App Shell: `:app` (Manifest, Application class, Flavors `plain`/`public`/`private`, Keystores, Composition Root `AppContainer`)
+  - Feature Modules: `:feature:timeline`, `:feature:settings`, `:feature:eventdetail`, `:feature:record`, `:feature:map-location`, `:feature:yearlymap`, `:feature:sharemap`, `:feature:trash`, `:feature:tag`
+  - Core Modules: `:core:common`, `:core:domain`, `:core:database`, `:core:data`, `:core:ui`
+  - Root package: `id.my.nanclouder.nanhistory`.
 
 ## 2. Tech Stack & Verified Versions
 - **Kotlin**: `2.4.0` (Compiler plugin `org.jetbrains.kotlin.plugin.compose` v`2.4.0`)
@@ -39,12 +43,19 @@ Detailed codebase architecture, subsystem behavior, and domain references reside
 
 **Maintenance Rule**: Agents MUST update the relevant `docs/*.md` file whenever they change, add, or refactor related code. Documentation must always reflect current verified code behavior, design decisions, and known fragile areas.
 
-## 4. Package Layout & Architecture Dependency Rules
-- **Dependency Direction**: `activity` → `ui` → `state` → `db` / `settings` / `utils`
-- `ui` and `activity` MUST NOT call Room DAOs directly. All DB operations must go through a ViewModel or repository in `state`.
-- `service` and `worker` MAY use DAOs or repositories directly.
-- `db` depends on nothing in the app except `utils`, and NEVER on `ui`, `state`, or `service`.
-- `debug` package MUST NEVER be referenced from release code paths.
+## 4. Module Layout & Architecture Dependency Rules
+- **Directed Acyclic Graph (DAG)**: `:app` → `:feature:*` → `:core:*`.
+- **Feature Isolation**: Features NEVER depend on sibling features or on `:app`.
+- **Navigation**: Multi-Activity Intent navigation routed via `IntentRegistry` in `:core:common`.
+- **Dependency Injection**: Manual DI via container interfaces in `:core:common.di` implemented by `AppContainer` in `:app`.
+- **Core Separation**:
+  - `:core:domain`: Pure Kotlin, zero Android dependencies. Entities, repository interfaces, use cases, math logic.
+  - `:core:database`: Room entity definitions, DAOs, database migrations, Room schemas.
+  - `:core:data`: Concrete repositories implementing domain interfaces using Room and local storage.
+  - `:core:ui`: Shared Compose UI components, themes, base activities, dialogs, styling.
+  - `:core:common`: Cross-module bridges, contracts, intent registry, DI interfaces, utilities.
+- `ui` and `activity` MUST NOT call Room DAOs directly. All DB operations must go through repositories in `:core:data`/`:core:domain`.
+- `debug` code MUST NEVER be referenced from release code paths.
 
 ## 5. State Management & ViewModel Rules
 - Every screen reading from Room, a service, or settings MUST have a ViewModel.
