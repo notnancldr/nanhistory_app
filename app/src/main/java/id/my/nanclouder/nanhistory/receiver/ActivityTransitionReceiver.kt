@@ -8,7 +8,7 @@ import com.google.android.gms.location.ActivityTransition
 import com.google.android.gms.location.ActivityTransitionResult
 import com.google.android.gms.location.DetectedActivity
 import id.my.nanclouder.nanhistory.config.Config
-import id.my.nanclouder.nanhistory.service.RecordService
+import id.my.nanclouder.nanhistory.feature.record.RecordService
 
 /**
  * Receives activity transitions and dispatches start, stop, or still grace commands to [RecordService].

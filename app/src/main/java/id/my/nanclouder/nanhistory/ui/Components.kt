@@ -179,9 +179,7 @@ fun RequestMultiplePermissions(
 
 @Composable
 fun AudioPlayer(path: String) {
-    val useOldUi = Config.appearanceOldUi.getCache()
-    if (!useOldUi) AudioPlayer_New(path)
-    else AudioPlayer_Old(path)
+    id.my.nanclouder.nanhistory.core.ui.AudioPlayer(path)
 }
 
 @Composable

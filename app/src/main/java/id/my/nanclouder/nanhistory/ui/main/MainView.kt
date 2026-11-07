@@ -147,7 +147,7 @@ import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
 import id.my.nanclouder.nanhistory.utils.history.HistoryFileData
 import id.my.nanclouder.nanhistory.utils.history.tint
 import id.my.nanclouder.nanhistory.utils.migration.MigrationState
-import id.my.nanclouder.nanhistory.service.RecordService
+import id.my.nanclouder.nanhistory.feature.record.RecordService
 import id.my.nanclouder.nanhistory.ui.SearchAppBar
 import id.my.nanclouder.nanhistory.ui.SelectionAppBar
 import id.my.nanclouder.nanhistory.ui.style.DangerButtonColors
@@ -165,7 +165,6 @@ import androidx.core.net.toUri
 import id.my.nanclouder.nanhistory.NanHistoryApplication
 import id.my.nanclouder.nanhistory.activity.TagDetailActivity
 import id.my.nanclouder.nanhistory.activity.eventDetail.getActivity
-import id.my.nanclouder.nanhistory.service.RecordService.RecordState
 import id.my.nanclouder.nanhistory.utils.history.HistoryTag
 import id.my.nanclouder.nanhistory.utils.withHaptic
 import id.my.nanclouder.nanhistory.service.RecordTileService
@@ -775,7 +774,7 @@ fun MainView() {
                         previousRecordState = recordStatus
                     }
 
-                    val serviceIsRunning by RecordState.isRunning.collectAsState(false)
+                    val serviceIsRunning by RecordService.RecordState.isRunning.collectAsState(false)
 
                     Log.d("NanHistoryDebug", "RECORD STATUS: $recordStatus")
 

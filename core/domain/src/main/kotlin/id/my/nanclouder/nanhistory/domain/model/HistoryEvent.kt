@@ -8,6 +8,10 @@ import kotlin.random.nextULong
 fun generateEventId(instant: Instant = Instant.now()): String =
     "${instant.toEpochMilli().toString(16)}-${Random.nextULong().toString(16)}"
 
+fun HistoryEvent.updateModifiedTime() {
+    this.modified = ZonedDateTime.now()
+}
+
 abstract class HistoryEvent(
     open var id: String = generateEventId(),
     open var title: String,

@@ -54,7 +54,7 @@ import id.my.nanclouder.nanhistory.NanHistoryApplication
 import id.my.nanclouder.nanhistory.activity.EditEventActivity
 import id.my.nanclouder.nanhistory.activity.eventDetail.EventDetailActivity
 import id.my.nanclouder.nanhistory.config.Config
-import id.my.nanclouder.nanhistory.service.RecordService
+import id.my.nanclouder.nanhistory.feature.record.RecordService
 import id.my.nanclouder.nanhistory.state.SelectionState
 import id.my.nanclouder.nanhistory.ui.list.EventListHeader
 import id.my.nanclouder.nanhistory.ui.list.EventListItem

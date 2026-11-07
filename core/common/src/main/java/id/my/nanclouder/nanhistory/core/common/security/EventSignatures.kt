@@ -9,6 +9,11 @@ import id.my.nanclouder.nanhistory.domain.model.HistoryEvent
 interface EventSignatureVerifier {
     suspend fun generateSignature(context: Context, event: HistoryEvent, apply: Boolean = false): String
     suspend fun validateSignature(context: Context, event: HistoryEvent): Boolean
+    suspend fun generateSignatureV2Incremental(
+        context: Context,
+        event: HistoryEvent,
+        locationDigest: EventLocationDigest?
+    ): String = generateSignature(context, event, true)
 }
 
 /**
@@ -28,4 +33,19 @@ object EventSignatures {
     suspend fun validateSignature(context: Context, event: HistoryEvent): Boolean {
         return verifier?.validateSignature(context, event) ?: true
     }
+
+    suspend fun generateSignatureV2Incremental(
+        context: Context,
+        event: HistoryEvent,
+        locationDigest: EventLocationDigest?
+    ): String {
+        return verifier?.generateSignatureV2Incremental(context, event, locationDigest) ?: ""
+    }
 }
+
+suspend fun HistoryEvent.generateSignature(context: Context, apply: Boolean = false): String =
+    EventSignatures.generateSignature(context, this, apply)
+
+suspend fun HistoryEvent.validateSignature(context: Context): Boolean =
+    EventSignatures.validateSignature(context, this)
+

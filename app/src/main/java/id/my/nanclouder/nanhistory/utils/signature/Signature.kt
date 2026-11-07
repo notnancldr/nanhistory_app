@@ -5,8 +5,8 @@ import android.util.Log
 import id.my.nanclouder.nanhistory.utils.StreamDigest
 import id.my.nanclouder.nanhistory.utils.history.HistoryEvent
 
-class EventDataDigest : StreamDigest("SHA-512")
-class EventLocationDigest : StreamDigest("SHA-512")
+typealias EventDataDigest = id.my.nanclouder.nanhistory.core.common.security.EventDataDigest
+typealias EventLocationDigest = id.my.nanclouder.nanhistory.core.common.security.EventLocationDigest
 
 suspend fun HistoryEvent.generateSignature(
     context: Context,

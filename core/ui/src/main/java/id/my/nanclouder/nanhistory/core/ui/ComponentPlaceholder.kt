@@ -75,3 +75,16 @@ fun ComponentPlaceholder(modifier: Modifier = Modifier) {
             .clip(RoundedCornerShape(16.dp))
     )
 }
+
+@Composable
+fun WithSkeleton(
+    modifier: Modifier = Modifier,
+    value: Any?,
+    component: @Composable () -> Unit,
+) {
+    if (value == null) {
+        ComponentPlaceholder(modifier)
+    } else {
+        component()
+    }
+}

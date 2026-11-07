@@ -36,7 +36,7 @@ import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.config.Config
 import id.my.nanclouder.nanhistory.config.VibrateMode
 import id.my.nanclouder.nanhistory.receiver.ActivityRecognitionEngine
-import id.my.nanclouder.nanhistory.service.RecordService
+import id.my.nanclouder.nanhistory.feature.record.RecordService
 import id.my.nanclouder.nanhistory.utils.RecordStatus
 
 class RecordSettingsActivity : SubSettingsActivity("Event Recording") {

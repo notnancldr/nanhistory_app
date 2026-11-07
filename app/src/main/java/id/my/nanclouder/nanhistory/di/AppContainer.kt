@@ -68,7 +68,7 @@ class AppContainer(private val context: Context) : CoreContainer, TrashContainer
         )
     }
 
-    val saveEventUseCase: SaveEventUseCase by lazy {
+    override val saveEventUseCase: SaveEventUseCase by lazy {
         SaveEventUseCase(eventRepository = eventRepository)
     }
 

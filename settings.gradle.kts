@@ -35,4 +35,6 @@ include(":feature:tag")
 include(":feature:map-location")
 include(":feature:yearlymap")
 include(":feature:sharemap")
+include(":feature:record")
+include(":feature:eventdetail")
 

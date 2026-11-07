@@ -4,6 +4,7 @@ import id.my.nanclouder.nanhistory.domain.repository.CorridorRepository
 import id.my.nanclouder.nanhistory.domain.repository.EventRepository
 import id.my.nanclouder.nanhistory.domain.repository.LocationRepository
 import id.my.nanclouder.nanhistory.domain.repository.TagRepository
+import id.my.nanclouder.nanhistory.domain.usecase.SaveEventUseCase
 import id.my.nanclouder.nanhistory.domain.usecase.PermanentlyDeleteEventsUseCase
 import id.my.nanclouder.nanhistory.domain.usecase.RestoreEventsUseCase
 
@@ -57,6 +58,24 @@ interface ShareMapContainer {
 }
 
 /**
+ * Container contract for the Record feature module.
+ */
+interface RecordContainer {
+    val eventRepository: EventRepository
+    val locationRepository: LocationRepository
+}
+
+/**
+ * Container contract for the EventDetail feature module.
+ */
+interface EventDetailContainer {
+    val eventRepository: EventRepository
+    val locationRepository: LocationRepository
+    val tagRepository: TagRepository
+    val saveEventUseCase: SaveEventUseCase
+}
+
+/**
  * Marker and base interface for the central dependency injection container.
  * Concrete implementations and feature sub-containers are implemented in `:app`.
  */
@@ -66,7 +85,9 @@ interface CoreContainer :
     TagDetailContainer,
     EventLocationContainer,
     YearlyMapContainer,
-    ShareMapContainer
+    ShareMapContainer,
+    RecordContainer,
+    EventDetailContainer
 
 /**
  * Interface implemented by Application or Context wrappers to provide access to [CoreContainer].

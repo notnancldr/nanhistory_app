@@ -256,3 +256,19 @@ data class TrainingResult(
 )
 
 
+
+fun recalibrateModels(
+    history: List<HistoryLocationData>,
+    existing: Map<TransportMode, CalibrationModel>,
+    expected: TransportMode
+): Map<TransportMode, CalibrationModel> {
+    val newModel = computeBatchMetrics(history)
+    val previous = existing[expected]
+    val merged = if (previous != null) {
+        mergeModels(previous, newModel)
+    } else newModel
+
+    return existing.toMutableMap().apply {
+        this[expected] = merged
+    }
+}

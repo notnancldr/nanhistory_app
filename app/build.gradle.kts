@@ -149,6 +149,8 @@ dependencies {
     implementation(project(":feature:map-location"))
     implementation(project(":feature:yearlymap"))
     implementation(project(":feature:sharemap"))
+    implementation(project(":feature:record"))
+    implementation(project(":feature:eventdetail"))
     implementation("androidx.documentfile:documentfile:1.0.1")
     implementation(libs.capturable)
     implementation(libs.androidx.work.runtime.ktx)
