@@ -2,4 +2,5 @@
 <resources>
     <string name="code_block_copy">Copy code</string>
     <string name="code_block_copied">Copied</string>
+    <string name="time_range_custom_title">Select Date Range</string>
 </resources>

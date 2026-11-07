@@ -45,11 +45,11 @@ class AppContainer(private val context: Context) : CoreContainer, TrashContainer
         RoomTagRepository(daoProvider = daoProvider)
     }
 
-    val locationRepository: LocationRepository by lazy {
+    override val locationRepository: LocationRepository by lazy {
         RoomLocationRepository(daoProvider = daoProvider)
     }
 
-    val corridorRepository: CorridorRepository by lazy {
+    override val corridorRepository: CorridorRepository by lazy {
         RoomCorridorRepository(daoProvider = corridorNetworkDaoProvider)
     }
 

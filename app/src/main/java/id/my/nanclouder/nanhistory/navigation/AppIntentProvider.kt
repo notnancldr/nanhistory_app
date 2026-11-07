@@ -3,12 +3,12 @@ package id.my.nanclouder.nanhistory.navigation
 import android.content.Context
 import android.content.Intent
 import id.my.nanclouder.nanhistory.activity.EditEventActivity
-import id.my.nanclouder.nanhistory.activity.EventLocationActivity
+import id.my.nanclouder.nanhistory.feature.maplocation.EventLocationActivity
 import id.my.nanclouder.nanhistory.feature.tag.TagDetailActivity
 import id.my.nanclouder.nanhistory.feature.trash.TrashActivity
-import id.my.nanclouder.nanhistory.activity.YearlyMapActivity
+import id.my.nanclouder.nanhistory.feature.yearlymap.YearlyMapActivity
 import id.my.nanclouder.nanhistory.activity.eventDetail.EventDetailActivity
-import id.my.nanclouder.nanhistory.activity.shareMap.ShareMapActivity
+import id.my.nanclouder.nanhistory.feature.sharemap.ShareMapActivity
 import id.my.nanclouder.nanhistory.core.common.navigation.IntentProvider
 import id.my.nanclouder.nanhistory.debug.DebugActivity
 import id.my.nanclouder.nanhistory.settings.BackupActivity

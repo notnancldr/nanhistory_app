@@ -50,6 +50,9 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
+    implementation(libs.maplibre.compose)
+    implementation(libs.maplibre.compose.runtime.vulkan)
+    implementation(libs.osmdroid.android)
 
     debugImplementation(libs.androidx.ui.tooling)
     testImplementation(libs.junit)

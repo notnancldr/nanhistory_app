@@ -32,8 +32,7 @@ include(":core:data")
 include(":core:ui")
 include(":feature:trash")
 include(":feature:tag")
-
-
-
-
+include(":feature:map-location")
+include(":feature:yearlymap")
+include(":feature:sharemap")
 

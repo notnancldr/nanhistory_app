@@ -49,12 +49,12 @@
             android:label="@string/title_activity_backup"
             android:theme="@style/Theme.NanHistory" />
         <activity
-            android:name=".activity.EventLocationActivity"
+            android:name="id.my.nanclouder.nanhistory.feature.maplocation.EventLocationActivity"
             android:exported="false"
             android:label="@string/title_activity_event_location"
             android:theme="@style/Theme.NanHistory" />
         <activity
-            android:name=".activity.shareMap.ShareMapActivity"
+            android:name="id.my.nanclouder.nanhistory.feature.sharemap.ShareMapActivity"
             android:exported="false"
             android:label="@string/title_activity_share_map"
             android:theme="@style/Theme.NanHistory" />
@@ -151,7 +151,7 @@
             android:foregroundServiceType="dataSync" />
 
         <activity
-            android:name=".activity.YearlyMapActivity"
+            android:name="id.my.nanclouder.nanhistory.feature.yearlymap.YearlyMapActivity"
             android:exported="false"
             android:label="Yearly Trip Map"
             android:theme="@style/Theme.NanHistory" />

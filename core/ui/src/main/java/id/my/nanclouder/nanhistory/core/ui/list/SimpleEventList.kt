@@ -136,3 +136,38 @@ fun SimpleEventList(
         }
     }
 }
+
+@Composable
+fun SimpleEventListItem(
+    event: HistoryEvent,
+    modifier: Modifier = Modifier
+) {
+    ListItem(
+        modifier = modifier,
+        headlineContent = {
+            Text(event.title.ifBlank { "Untitled Event" }, style = MaterialTheme.typography.bodyLarge)
+        },
+        supportingContent = {
+            Column {
+                if (event is EventRange) {
+                    val duration = Duration.between(event.time, event.end)
+                    Text(
+                        "${event.time.format(TimeFormatter)} - ${event.end.format(TimeFormatter)} (${readableTimeHours(duration)})",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text(
+                        event.time.format(TimeFormatter),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (event.tags.isNotEmpty()) {
+                    Box(Modifier.height(4.dp))
+                    TagsView(tags = event.tags, limit = 3)
+                }
+            }
+        }
+    )
+}

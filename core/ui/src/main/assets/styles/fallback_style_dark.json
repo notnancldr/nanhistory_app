@@ -1,0 +1,15 @@
+{
+  "version": 8,
+  "name": "NanHistory Fallback Offline Style Dark",
+  "metadata": {},
+  "sources": {},
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#1A1A1A"
+      }
+    }
+  ]
+}

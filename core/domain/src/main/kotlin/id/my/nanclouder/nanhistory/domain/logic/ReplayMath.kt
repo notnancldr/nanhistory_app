@@ -21,6 +21,8 @@ data class ReplayTelemetry(
     val distanceMeters: Double
 )
 
+typealias ReplayInterpolator = ReplayMath
+
 /**
  * Pure mathematics and coordinate interpolation utilities for route replay.
  */
