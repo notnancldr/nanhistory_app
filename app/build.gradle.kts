@@ -144,6 +144,8 @@ dependencies {
     implementation(project(":core:database"))
     implementation(project(":core:data"))
     implementation(project(":core:ui"))
+    implementation(project(":feature:trash"))
+    implementation(project(":feature:tag"))
     implementation("androidx.documentfile:documentfile:1.0.1")
     implementation(libs.capturable)
     implementation(libs.androidx.work.runtime.ktx)

@@ -39,7 +39,7 @@
         android:theme="@style/Theme.NanHistory"
         tools:targetApi="34">
         <activity
-            android:name=".activity.TrashActivity"
+            android:name="id.my.nanclouder.nanhistory.feature.trash.TrashActivity"
             android:exported="false"
             android:label="@string/title_activity_deleted_event"
             android:theme="@style/Theme.NanHistory" />
@@ -182,7 +182,7 @@
             android:label="@string/title_activity_event_detail"
             android:theme="@style/Theme.NanHistory" />
         <activity
-            android:name=".activity.TagDetailActivity"
+            android:name="id.my.nanclouder.nanhistory.feature.tag.TagDetailActivity"
             android:exported="false"
             android:label="@string/title_activity_tag_detail"
             android:theme="@style/Theme.NanHistory" />

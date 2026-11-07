@@ -30,6 +30,8 @@ include(":core:domain")
 include(":core:database")
 include(":core:data")
 include(":core:ui")
+include(":feature:trash")
+include(":feature:tag")
 
 
 

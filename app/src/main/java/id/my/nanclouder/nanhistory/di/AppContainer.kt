@@ -2,6 +2,8 @@ package id.my.nanclouder.nanhistory.di
 
 import android.content.Context
 import id.my.nanclouder.nanhistory.core.common.di.CoreContainer
+import id.my.nanclouder.nanhistory.core.common.di.TagDetailContainer
+import id.my.nanclouder.nanhistory.core.common.di.TrashContainer
 import id.my.nanclouder.nanhistory.data.repository.AndroidAttachmentStorageRepository
 import id.my.nanclouder.nanhistory.data.repository.RoomCorridorRepository
 import id.my.nanclouder.nanhistory.data.repository.RoomEventRepository
@@ -23,7 +25,7 @@ import id.my.nanclouder.nanhistory.domain.repository.SettingsRepository
 import id.my.nanclouder.nanhistory.domain.usecase.PurgeExpiredTrashUseCase
 import java.time.Clock
 
-class AppContainer(private val context: Context) : CoreContainer {
+class AppContainer(private val context: Context) : CoreContainer, TrashContainer, TagDetailContainer {
     val clock: Clock = Clock.systemDefaultZone()
 
     // Dynamic DAO provider guarantees active handle even after AppDatabase.clearInstance()
@@ -35,11 +37,11 @@ class AppContainer(private val context: Context) : CoreContainer {
         AppDatabase.getInstance(context).corridorNetworkDao()
     }
 
-    val eventRepository: EventRepository by lazy {
+    override val eventRepository: EventRepository by lazy {
         RoomEventRepository(daoProvider = daoProvider, context = context)
     }
 
-    val tagRepository: TagRepository by lazy {
+    override val tagRepository: TagRepository by lazy {
         RoomTagRepository(daoProvider = daoProvider)
     }
 
@@ -55,11 +57,11 @@ class AppContainer(private val context: Context) : CoreContainer {
         AndroidAttachmentStorageRepository(context = context)
     }
 
-    val restoreEventsUseCase: RestoreEventsUseCase by lazy {
+    override val restoreEventsUseCase: RestoreEventsUseCase by lazy {
         RestoreEventsUseCase(eventRepository = eventRepository)
     }
 
-    val permanentlyDeleteEventsUseCase: PermanentlyDeleteEventsUseCase by lazy {
+    override val permanentlyDeleteEventsUseCase: PermanentlyDeleteEventsUseCase by lazy {
         PermanentlyDeleteEventsUseCase(
             eventRepository = eventRepository,
             attachmentStorageRepository = attachmentStorageRepository

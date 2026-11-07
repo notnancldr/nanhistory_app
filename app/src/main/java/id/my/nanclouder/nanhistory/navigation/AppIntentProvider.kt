@@ -4,8 +4,8 @@ import android.content.Context
 import android.content.Intent
 import id.my.nanclouder.nanhistory.activity.EditEventActivity
 import id.my.nanclouder.nanhistory.activity.EventLocationActivity
-import id.my.nanclouder.nanhistory.activity.TagDetailActivity
-import id.my.nanclouder.nanhistory.activity.TrashActivity
+import id.my.nanclouder.nanhistory.feature.tag.TagDetailActivity
+import id.my.nanclouder.nanhistory.feature.trash.TrashActivity
 import id.my.nanclouder.nanhistory.activity.YearlyMapActivity
 import id.my.nanclouder.nanhistory.activity.eventDetail.EventDetailActivity
 import id.my.nanclouder.nanhistory.activity.shareMap.ShareMapActivity

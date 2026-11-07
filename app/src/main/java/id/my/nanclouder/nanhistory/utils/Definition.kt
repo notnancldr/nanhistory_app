@@ -33,9 +33,9 @@ import kotlin.math.round
 // The numbers before 5 is reserved for Flutter application
 const val FILE_VERSION = 6
 
-val DateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE, d MMM yyyy")
-val TimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-val TimeFormatterWithSecond: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
+val DateFormatter: DateTimeFormatter = id.my.nanclouder.nanhistory.core.common.time.DateFormatter
+val TimeFormatter: DateTimeFormatter = id.my.nanclouder.nanhistory.core.common.time.TimeFormatter
+val TimeFormatterWithSecond: DateTimeFormatter = id.my.nanclouder.nanhistory.core.common.time.TimeFormatterWithSecond
 
 object ServiceBroadcast {
     const val ACTION_SERVICE_STATUS = "id.my.nanclouder.nanhistory.ACTION_SERVICE_STATUS"
@@ -187,19 +187,7 @@ fun readableTime(duration: Duration): String {
     return text
 }
 
-fun readableTimeHours(duration: Duration): String {
-    val days = duration.toDays()
-    val hours = duration.toHoursPart()
-    val minutes = duration.toMinutesPart()
-    val seconds = duration.toSecondsPart()
-
-    var text = ""
-    if (days > 0) text += "${days.toString().padStart(2, '0')}:"
-    if (hours > 0) text += "${hours.toString().padStart(2, '0')}:"
-    text += "${minutes.toString().padStart(2, '0')}:"
-    text += seconds.toString().padStart(2, '0')
-    return text
-}
+fun readableTimeHours(duration: Duration): String = id.my.nanclouder.nanhistory.core.common.time.readableTimeHours(duration)
 
 
 fun shareFile(context: Context, fileName: String) {

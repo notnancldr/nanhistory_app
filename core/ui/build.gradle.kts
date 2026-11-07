@@ -48,6 +48,8 @@ dependencies {
     implementation(libs.compose.markdown)
     implementation(libs.highlights)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
 
     debugImplementation(libs.androidx.ui.tooling)
     testImplementation(libs.junit)
