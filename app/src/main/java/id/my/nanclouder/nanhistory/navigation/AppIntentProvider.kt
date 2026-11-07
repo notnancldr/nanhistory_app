@@ -10,9 +10,12 @@ import id.my.nanclouder.nanhistory.feature.yearlymap.YearlyMapActivity
 import id.my.nanclouder.nanhistory.activity.eventDetail.EventDetailActivity
 import id.my.nanclouder.nanhistory.feature.sharemap.ShareMapActivity
 import id.my.nanclouder.nanhistory.core.common.navigation.IntentProvider
+import id.my.nanclouder.nanhistory.feature.timeline.MainActivity
 import id.my.nanclouder.nanhistory.debug.DebugActivity
-import id.my.nanclouder.nanhistory.settings.BackupActivity
-import id.my.nanclouder.nanhistory.settings.SettingsActivity
+import id.my.nanclouder.nanhistory.debug.FilePlayerActivity
+import id.my.nanclouder.nanhistory.debug.FilePreviewActivity
+import id.my.nanclouder.nanhistory.feature.settings.BackupActivity
+import id.my.nanclouder.nanhistory.feature.settings.SettingsActivity
 
 class AppIntentProvider : IntentProvider {
     override fun createEventDetailIntent(context: Context, eventId: String, path: String?): Intent {
@@ -68,6 +71,22 @@ class AppIntentProvider : IntentProvider {
 
     override fun createBackupIntent(context: Context): Intent {
         return Intent(context, BackupActivity::class.java)
+    }
+
+    override fun createMainIntent(context: Context): Intent {
+        return Intent(context, MainActivity::class.java)
+    }
+
+    override fun createFilePlayerIntent(context: Context, path: String): Intent {
+        return Intent(context, FilePlayerActivity::class.java).apply {
+            putExtra("path", path)
+        }
+    }
+
+    override fun createFilePreviewIntent(context: Context, path: String): Intent {
+        return Intent(context, FilePreviewActivity::class.java).apply {
+            putExtra("path", path)
+        }
     }
 
     override fun createDebugIntent(context: Context): Intent {

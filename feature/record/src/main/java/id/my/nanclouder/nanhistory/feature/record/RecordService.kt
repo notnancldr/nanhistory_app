@@ -118,10 +118,10 @@ class RecordService : Service() {
 
     object RecordState {
         val isRecording = id.my.nanclouder.nanhistory.core.common.state.RecordingState.isRecording
-        val isRunning = MutableStateFlow(false)
+        val isRunning = id.my.nanclouder.nanhistory.core.common.state.RecordingState.isRunning
         val isSaving = MutableStateFlow(false)
         val eventId = id.my.nanclouder.nanhistory.core.common.state.RecordingState.activeEventId
-        val status = MutableStateFlow(RecordStatus.READY)
+        val status = id.my.nanclouder.nanhistory.core.common.state.RecordingState.status
         val currentLogic = MutableStateFlow(LocationIterationLogic.Default)
     }
 

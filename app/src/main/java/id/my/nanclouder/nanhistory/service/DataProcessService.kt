@@ -12,8 +12,11 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.net.toUri
-import id.my.nanclouder.nanhistory.settings.BackupProgressStage
-import id.my.nanclouder.nanhistory.settings.ImportProgressStage
+import id.my.nanclouder.nanhistory.core.common.dataprocess.BackupProgressStage
+import id.my.nanclouder.nanhistory.core.common.dataprocess.DataProcessBridge
+import id.my.nanclouder.nanhistory.core.common.dataprocess.DataProcessConstants
+import id.my.nanclouder.nanhistory.core.common.dataprocess.DataProcessState
+import id.my.nanclouder.nanhistory.core.common.dataprocess.ImportProgressStage
 import id.my.nanclouder.nanhistory.R
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.utils.LogData
@@ -43,70 +46,40 @@ import java.util.zip.ZipOutputStream
 
 class DataProcessService : Service() {
     companion object {
-        private const val DATA_PROCESS_CHANNEL_ID = "backup_and_data_channel"
-        private const val MIGRATION_CODE_FILEPATH = "migration_code"
+        const val DATA_PROCESS_CHANNEL_ID = DataProcessConstants.DATA_PROCESS_CHANNEL_ID
+        const val MIGRATION_CODE_FILEPATH = DataProcessConstants.MIGRATION_CODE_FILEPATH
 
-        const val ACTION_CANCEL_SERVICE = "ACTION_CANCEL_SERVICE"
+        const val ACTION_CANCEL_SERVICE = DataProcessConstants.ACTION_CANCEL_SERVICE
 
-        const val OPERATION_UNKNOWN = -1
-        const val OPERATION_BACKUP = 0
-        const val OPERATION_IMPORT = 1
-        const val OPERATION_MIGRATE = 2
+        const val OPERATION_UNKNOWN = DataProcessConstants.OPERATION_UNKNOWN
+        const val OPERATION_BACKUP = DataProcessConstants.OPERATION_BACKUP
+        const val OPERATION_IMPORT = DataProcessConstants.OPERATION_IMPORT
+        const val OPERATION_MIGRATE = DataProcessConstants.OPERATION_MIGRATE
 
-        const val OPERATION_TYPE_EXTRA = "operationType"
-        const val FILE_URI_EXTRA = "fileUri"
-        const val LEGACY_IMPORT_EXTRA = "legacyImport"
+        const val OPERATION_TYPE_EXTRA = DataProcessConstants.OPERATION_TYPE_EXTRA
+        const val FILE_URI_EXTRA = DataProcessConstants.FILE_URI_EXTRA
+        const val LEGACY_IMPORT_EXTRA = DataProcessConstants.LEGACY_IMPORT_EXTRA
 
-        /**
-         * MIGRATIONS CODE HISTORY:
-         * * **`1`** : *Initial*
-         * * **`2`** : Location data migration from files to database.
-         */
-        private const val CURRENT_MIGRATION_CODE = 2
+        private const val CURRENT_MIGRATION_CODE = DataProcessConstants.CURRENT_MIGRATION_CODE
 
-        fun checkMigration(context: Context): Boolean {
-            val migrationCodeFile = File(context.filesDir, MIGRATION_CODE_FILEPATH)
-            if (migrationCodeFile.exists()) migrationCodeFile.readText().let {
-                return it.toInt() == CURRENT_MIGRATION_CODE
-            }
-            else return false
-        }
+        fun checkMigration(context: Context): Boolean = DataProcessState.checkMigration(context)
 
-        fun updateMigrationCode(context: Context) {
-            val migrationCodeFile = File(context.filesDir, MIGRATION_CODE_FILEPATH)
-            migrationCodeFile.writeText(CURRENT_MIGRATION_CODE.toString())
-        }
+        fun updateMigrationCode(context: Context) = DataProcessState.updateMigrationCode(context)
 
-        fun resetMigrationCode(context: Context) {
-            val migrationCodeFile = File(context.filesDir, MIGRATION_CODE_FILEPATH)
-            migrationCodeFile.delete()
-        }
+        fun resetMigrationCode(context: Context) = DataProcessState.resetMigrationCode(context)
 
         fun startMigrationService(context: Context) {
-            val intent = Intent(context, DataProcessService::class.java)
-            intent.putExtra(OPERATION_TYPE_EXTRA, OPERATION_MIGRATE)
-            context.startService(intent)
+            DataProcessBridge.startMigration(context)
         }
+
+        val ServiceState = DataProcessState.ServiceState
+        val BackupState = DataProcessState.BackupState
+        val ImportState = DataProcessState.ImportState
     }
 
-    object ServiceState {
-        val progress = MutableStateFlow(0L)
-        val progressMax = MutableStateFlow(1L)
-        val errorMessage = MutableStateFlow<String?>(null)
-        val isRunning = MutableStateFlow(false)
-        val operationType = MutableStateFlow(-1)
-        val isLegacyImport = MutableStateFlow(false)
-        val safeToUse = MutableStateFlow(false)
-    }
-
-    object BackupState {
-        val stage = MutableStateFlow<BackupProgressStage?>(null)
-    }
-
-    object ImportState {
-        val stage = MutableStateFlow<ImportProgressStage?>(null)
-        val migrationName = MutableStateFlow<String?>(null)
-    }
+    val ServiceState = DataProcessState.ServiceState
+    val BackupState = DataProcessState.BackupState
+    val ImportState = DataProcessState.ImportState
 
     inner class MyBinder : Binder() {
         fun getService(): DataProcessService = this@DataProcessService

@@ -37,4 +37,6 @@ include(":feature:yearlymap")
 include(":feature:sharemap")
 include(":feature:record")
 include(":feature:eventdetail")
+include(":feature:timeline")
+include(":feature:settings")
 

@@ -18,6 +18,9 @@ interface IntentProvider {
     fun createTrashIntent(context: Context): Intent
     fun createSettingsIntent(context: Context): Intent
     fun createBackupIntent(context: Context): Intent
+    fun createMainIntent(context: Context): Intent
+    fun createFilePlayerIntent(context: Context, path: String): Intent?
+    fun createFilePreviewIntent(context: Context, path: String): Intent?
     fun createDebugIntent(context: Context): Intent?
 }
 
@@ -62,6 +65,15 @@ object IntentRegistry {
 
     fun backup(context: Context): Intent =
         getProvider().createBackupIntent(context)
+
+    fun main(context: Context): Intent =
+        getProvider().createMainIntent(context)
+
+    fun filePlayer(context: Context, path: String): Intent? =
+        provider?.createFilePlayerIntent(context, path)
+
+    fun filePreview(context: Context, path: String): Intent? =
+        provider?.createFilePreviewIntent(context, path)
 
     fun debug(context: Context): Intent? =
         provider?.createDebugIntent(context)

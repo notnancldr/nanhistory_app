@@ -1,0 +1,1122 @@
+package id.my.nanclouder.nanhistory.feature.settings
+
+import android.content.Context
+import android.content.Intent
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import id.my.nanclouder.nanhistory.feature.settings.R
+import id.my.nanclouder.nanhistory.config.Config
+import id.my.nanclouder.nanhistory.core.common.navigation.IntentRegistry
+import id.my.nanclouder.nanhistory.core.common.utils.getActivity
+import id.my.nanclouder.nanhistory.core.common.utils.readableSize
+import id.my.nanclouder.nanhistory.utils.getAudioFiles
+import id.my.nanclouder.nanhistory.utils.getLocationFiles
+import id.my.nanclouder.nanhistory.core.ui.ComponentPlaceholder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+
+class StorageSettingsActivity : SubSettingsActivity("Storage") {
+    @Composable
+    override fun ColumnScope.Content() {
+        val useOldUi = Config.appearanceOldUi.getCache()
+        if (!useOldUi) NewUI()
+        else OldUI()
+    }
+
+    @Composable
+    private fun ColumnScope.OldUI() {
+        val context = LocalContext.current
+        val scope = rememberCoroutineScope()
+
+        val eventsColor = Color(0xFF7FB86A)
+        val logsColor = Color(0xFF24AD98)
+        val cacheColor = Color(0xFF558EAD)
+        val audioColor = Color(0xFF5960A2)
+        val otherColor = Color(0xFF906DB3)
+
+        val restColor = Color.Gray
+
+        var dbSize by rememberSaveable { mutableLongStateOf(0L) }
+        var logsSize by rememberSaveable { mutableLongStateOf(0L) }
+        var cacheSize by rememberSaveable { mutableLongStateOf(0L) }
+        var audioSize by rememberSaveable { mutableLongStateOf(0L) }
+        var otherSize by rememberSaveable { mutableLongStateOf(0L) }
+        var dataSize by rememberSaveable { mutableLongStateOf(0L) }
+        var corridorCacheSize by rememberSaveable { mutableLongStateOf(0L) }
+
+        var isLoading by rememberSaveable { mutableStateOf(true) }
+
+        var deleteDialogState by remember { mutableStateOf(false) }
+        var fileToDelete by remember { mutableStateOf<File?>(null) }
+
+        val cacheDirs = remember { mutableStateMapOf<File, Long>() }
+        val dataDirs = remember { mutableStateMapOf<File, Long>() }
+
+        val lazyListState = rememberLazyListState()
+
+        val getSize = { file: File ->
+            file.walk().filter { it.isFile }.map { it.length() }.sum()
+        }
+
+        var unlinkedItemsState by remember { mutableStateOf<List<File>?>(null) }
+        var scanningUnlinked by remember { mutableStateOf(false) }
+
+        val unlinkedItems = unlinkedItemsState
+
+        val loader = suspend {
+            withContext(Dispatchers.IO) {
+                dbSize = getSize(File(dataDir, "databases"))
+                logsSize = getSize(File(filesDir, "logs"))
+                cacheSize = getSize(cacheDir)
+                audioSize = getSize(File(filesDir, "audio"))
+                dataSize = getSize(dataDir)
+                otherSize = dataSize - (dbSize + logsSize + cacheSize + audioSize)
+
+                cacheDirs.clear()
+                dataDirs.clear()
+
+                filesDir.listFiles()?.forEach {
+                    dataDirs[it] = it.walk()
+                        .filter { file -> file.isFile }
+                        .map { file -> file.length() }.sum()
+                }
+                cacheDir.listFiles()?.forEach {
+                    cacheDirs[it] = it.walk()
+                        .filter { file -> file.isFile }
+                        .map { file -> file.length() }.sum()
+                }
+
+                corridorCacheSize = id.my.nanclouder.nanhistory.core.common.utils.CorridorCacheHelper
+                    .getCorridorCacheSize(context)
+
+                isLoading = false
+            }
+        }
+
+        LaunchedEffect(Unit) {
+            loader()
+        }
+
+        if (isLoading) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .size(32.dp)
+                )
+            }
+        } else {
+            val rowLabel =
+                @Composable { color: Color, label: String, size: Float ->
+                    ListItem(
+                        modifier = Modifier,
+                        leadingContent = {
+                            Icon(
+                                painterResource(R.drawable.ic_circle_filled),
+                                "Label color",
+                                tint = color
+                            )
+                        },
+                        headlineContent = {
+                            Text(label)
+                        },
+                        trailingContent = {
+                            Text(readableSize(size), Modifier.width(56.dp), textAlign = TextAlign.End)
+                        },
+                        supportingContent = {
+                            LinearProgressIndicator(
+                                progress = { size / dataSize }
+                            )
+                        }
+                    )
+//                    Row(
+//                        verticalAlignment = Alignment.CenterVertically,
+//                        modifier = Modifier
+//                            .padding(8.dp)
+//                    ) {
+//                        Box(
+//                            modifier = Modifier
+//                                .background(color = color)
+//                                .size(24.dp)
+//                        )
+//                        Text(label, modifier = Modifier.padding(start = 8.dp))
+//                    }
+                }
+            LazyColumn(
+                state = lazyListState
+            ) {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            BarChart(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp)
+                                    .padding(16.dp),
+                                segments = listOf(
+                                    dbSize.toFloat() to eventsColor,
+                                    logsSize.toFloat() to logsColor,
+                                    cacheSize.toFloat() to cacheColor,
+                                    audioSize.toFloat() to audioColor,
+                                    otherSize.toFloat() to otherColor
+                                )
+                            )
+                            Box(Modifier.width(16.dp))
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Used storage", fontWeight = FontWeight.Medium)
+                                Text(
+                                    readableSize(getSize(dataDir)),
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        Column(Modifier
+                            .padding(16.dp)
+                            .clip(RoundedCornerShape(16.dp))) {
+                            rowLabel(eventsColor, "Database", dbSize.toFloat())
+                            rowLabel(logsColor, "Logs data", logsSize.toFloat())
+                            rowLabel(cacheColor, "Cache", cacheSize.toFloat())
+                            rowLabel(audioColor, "Audio", audioSize.toFloat())
+                            rowLabel(otherColor, "Other", otherSize.toFloat())
+                        }
+                    }
+                }
+//                item {
+//                    ListItem(
+//                        headlineContent = {
+//                            Text("cache (${cacheDirs.size})", fontWeight = FontWeight.Medium)
+//                        }
+//                    )
+//                }
+//                itemsIndexed(
+//                    cacheDirs.keys.sortedByDescending { cacheDirs[it] }.toList(),
+//                    key = { _, item -> item.name + item.lastModified() + item.hashCode() }
+//                ) { _, item ->
+//                    val size = cacheDirs[item]!!
+//                    ListItem(
+//                        modifier = Modifier
+//                            .animateItem(),
+//                        leadingContent = {
+//                            Icon(painterResource(R.drawable.ic_folder), "Folder")
+//                        },
+//                        headlineContent = {
+//                            Text(item.name)
+//                        },
+//                        supportingContent = {
+//                            Text(readableSize(size.toFloat()))
+//                        },
+//                        trailingContent = {
+//                            IconButton(
+//                                onClick = {
+//                                    fileToDelete = item
+//                                    deleteDialogState = true
+//                                }
+//                            ) {
+//                                Icon(
+//                                    painterResource(R.drawable.ic_delete),
+//                                    "Delete",
+//                                    tint = Color.Red
+//                                )
+//                            }
+//                        }
+//                    )
+//                }
+                val cacheAvailable = cacheDir.listFiles()?.isNotEmpty() == true
+                item {
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                withContext(Dispatchers.IO) {
+                                    cacheDir.deleteRecursively()
+                                }
+                                loader()
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        enabled = cacheAvailable
+                    ) {
+                        Text("Clear All Cache")
+                    }
+                }
+
+                item {
+                    Button(
+                        onClick = {
+                            scanningUnlinked = true
+                            unlinkedItemsState = null
+                            scope.launch(Dispatchers.IO) {
+                                unlinkedItemsState = scanForUnlinkedFiles()
+                                scanningUnlinked = false
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        enabled = !scanningUnlinked
+                    ) {
+                        Text("Scan for unlinked files")
+                    }
+                }
+
+                if (unlinkedItems != null || scanningUnlinked) item {
+                    Column(
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.surfaceContainer,
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                            .padding(8.dp)
+                    ) {
+                        if (unlinkedItems?.isNotEmpty() == true) {
+                            ListItem(
+                                headlineContent = {
+                                    Text(
+                                        "${unlinkedItems.size} unlinked file${if (unlinkedItems.size > 1) "s" else ""} found",
+                                        style = MaterialTheme.typography.titleMedium,
+                                    )
+                                },
+                                colors = ListItemDefaults.colors(
+                                    containerColor = Color.Transparent
+                                ),
+                                trailingContent = {
+                                    Button(
+                                        onClick = {
+                                            scope.launch(Dispatchers.IO) {
+                                                unlinkedItems.forEach {
+                                                    it.delete()
+                                                    unlinkedItemsState = (unlinkedItemsState ?: emptyList()) - it
+                                                }
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.error,
+                                            contentColor = MaterialTheme.colorScheme.onError
+                                        )
+                                    ) {
+                                        Text("Delete All")
+                                    }
+                                }
+                            )
+                            Column(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .height(256.dp)
+                                    .verticalScroll(rememberScrollState())
+                                    .background(
+                                        color = MaterialTheme.colorScheme.surface,
+                                        shape = RoundedCornerShape(16.dp)
+                                    )
+                            ) {
+                                unlinkedItems.forEach { file ->
+                                    ListItem(
+                                        headlineContent = {
+                                            Text(file.name)
+                                        },
+                                        supportingContent = {
+                                            Text("${file.parentFile?.parentFile?.name}/${file.parentFile?.name}")
+                                        },
+                                        trailingContent = {
+                                            Text(readableSize(file.length()))
+                                        },
+                                        modifier = if (Config.developerModeEnabled.get(context)) Modifier.clickable {
+                                            val audioExtensions = listOf(
+                                                "m4a", "mp3", "aac", "3gp"
+                                            )
+                                            val intent = if (file.extension in audioExtensions) {
+                                                IntentRegistry.filePlayer(context, file.absolutePath)
+                                            } else {
+                                                IntentRegistry.filePreview(context, file.absolutePath)
+                                            }
+                                            intent?.let { context.startActivity(it) }
+                                        } else Modifier,
+                                        colors = ListItemDefaults.colors(
+                                            containerColor = Color.Transparent
+                                        )
+                                    )
+                                }
+                            }
+                        } else if (unlinkedItems?.isEmpty() == true) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("No unlinked events found")
+                            }
+                        } else {
+                            ComponentPlaceholder(Modifier.size(128.dp, 24.dp))
+                        }
+                    }
+                }
+
+//                item {
+//                    ListItem(
+//                        headlineContent = {
+//                            Text("files (${dataDirs.size})", fontWeight = FontWeight.Medium)
+//                        }
+//                    )
+//                }
+//                itemsIndexed(
+//                    dataDirs.keys.sortedByDescending { dataDirs[it] }.toList(),
+//                    key = { _, item -> item.name + item.lastModified() + item.hashCode() }
+//                ) { _, item ->
+//                    val size = dataDirs[item]!!
+//                    val notDeletable = listOf(
+//                        "history",
+//                        "logs",
+//                        "config",
+//                        "audio",
+//                        "locations",
+//                        "migration_code"
+//                    )
+//
+//                    ListItem(
+//                        modifier = Modifier
+//                            .animateItem(),
+//                        leadingContent = {
+//                            Icon(painterResource(R.drawable.ic_folder), "Folder")
+//                        },
+//                        headlineContent = {
+//                            Text(item.name)
+//                        },
+//                        supportingContent = {
+//                            Text(readableSize(size.toFloat()))
+//                        },
+//                        trailingContent = {
+//                            if (!notDeletable.contains(item.name)) {
+//                                IconButton(
+//                                    onClick = {
+//                                        fileToDelete = item
+//                                        deleteDialogState = true
+//                                    }
+//                                ) {
+//                                    Icon(
+//                                        painterResource(R.drawable.ic_delete),
+//                                        "Delete",
+//                                        tint = Color.Red
+//                                    )
+//                                }
+//                            }
+//                        }
+//                    )
+//                }
+            }
+            if (deleteDialogState) {
+                AlertDialog(
+                    icon = {
+                        Icon(Icons.Rounded.Warning, "Warning")
+                    },
+                    onDismissRequest = {
+                        deleteDialogState = false
+                    },
+                    title = {
+                        Text("Delete folder")
+                    },
+                    text = {
+                        Text("This actions is irreversible!")
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = {
+                                deleteDialogState = false
+                            }
+                        ) {
+                            Text("Cancel")
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    withContext(Dispatchers.IO) {
+                                        fileToDelete?.deleteRecursively()
+                                    }
+                                    deleteDialogState = false
+                                    loader()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF910C0C),
+                                contentColor = Color.White,
+                                disabledContainerColor = Color.Gray,
+                                disabledContentColor = Color.White
+                            ),
+                        ) {
+                            Text("Delete")
+                        }
+                    }
+                )
+            }
+        }
+    }
+
+    @Composable
+    private fun ColumnScope.NewUI() {
+        val context = LocalContext.current
+        val scope = rememberCoroutineScope()
+
+        val eventsColor = Color(0xFF7FB86A)
+        val logsColor = Color(0xFF24AD98)
+        val cacheColor = Color(0xFF558EAD)
+        val audioColor = Color(0xFF5960A2)
+        val otherColor = Color(0xFF906DB3)
+
+        var dbSize by rememberSaveable { mutableLongStateOf(0L) }
+        var logsSize by rememberSaveable { mutableLongStateOf(0L) }
+        var cacheSize by rememberSaveable { mutableLongStateOf(0L) }
+        var audioSize by rememberSaveable { mutableLongStateOf(0L) }
+        var otherSize by rememberSaveable { mutableLongStateOf(0L) }
+        var dataSize by rememberSaveable { mutableLongStateOf(0L) }
+        var corridorCacheSize by rememberSaveable { mutableLongStateOf(0L) }
+
+        var isLoading by rememberSaveable { mutableStateOf(true) }
+
+        var deleteDialogState by remember { mutableStateOf(false) }
+        var fileToDelete by remember { mutableStateOf<File?>(null) }
+
+        val cacheDirs = remember { mutableStateMapOf<File, Long>() }
+        val dataDirs = remember { mutableStateMapOf<File, Long>() }
+
+        val lazyListState = rememberLazyListState()
+
+        val getSize = { file: File ->
+            file.walk().filter { it.isFile }.map { it.length() }.sum()
+        }
+
+        var unlinkedItemsState by remember { mutableStateOf<List<File>?>(null) }
+        var scanningUnlinked by remember { mutableStateOf(false) }
+
+        val unlinkedItems = unlinkedItemsState
+
+        val loader = suspend {
+            withContext(Dispatchers.IO) {
+                dbSize = getSize(File(dataDir, "databases"))
+                logsSize = getSize(File(filesDir, "logs"))
+                cacheSize = getSize(cacheDir)
+                audioSize = getSize(File(filesDir, "audio"))
+                dataSize = getSize(dataDir)
+                otherSize = dataSize - (dbSize + logsSize + cacheSize + audioSize)
+
+                cacheDirs.clear()
+                dataDirs.clear()
+
+                filesDir.listFiles()?.forEach {
+                    dataDirs[it] = it.walk()
+                        .filter { file -> file.isFile }
+                        .map { file -> file.length() }.sum()
+                }
+                cacheDir.listFiles()?.forEach {
+                    cacheDirs[it] = it.walk()
+                        .filter { file -> file.isFile }
+                        .map { file -> file.length() }.sum()
+                }
+
+                corridorCacheSize = id.my.nanclouder.nanhistory.core.common.utils.CorridorCacheHelper
+                    .getCorridorCacheSize(context)
+
+                isLoading = false
+            }
+        }
+
+        LaunchedEffect(Unit) {
+            loader()
+        }
+
+        if (isLoading) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(48.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    strokeWidth = 3.dp
+                )
+                Text(
+                    "Calculating storage...",
+                    modifier = Modifier.padding(top = 16.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            LazyColumn(
+                state = lazyListState,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(12.dp)
+            ) {
+                // Storage Overview Card
+                item {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(20.dp)),
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        tonalElevation = 2.dp
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            // Header
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        "Storage Usage",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        readableSize(getSize(dataDir)),
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        painterResource(R.drawable.ic_storage),
+                                        "Storage",
+                                        modifier = Modifier.size(28.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+
+                            // Bar Chart
+                            BarChart(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(64.dp),
+                                segments = listOf(
+                                    dbSize.toFloat() to eventsColor,
+                                    logsSize.toFloat() to logsColor,
+                                    cacheSize.toFloat() to cacheColor,
+                                    audioSize.toFloat() to audioColor,
+                                    otherSize.toFloat() to otherColor
+                                )
+                            )
+
+                            // Legend
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                StorageLegendItem(eventsColor, "Database", dbSize.toFloat(), dataSize.toFloat())
+                                StorageLegendItem(logsColor, "Logs", logsSize.toFloat(), dataSize.toFloat())
+                                StorageLegendItem(cacheColor, "Cache", cacheSize.toFloat(), dataSize.toFloat())
+                                StorageLegendItem(audioColor, "Audio", audioSize.toFloat(), dataSize.toFloat())
+                                StorageLegendItem(otherColor, "Other", otherSize.toFloat(), dataSize.toFloat())
+                            }
+                        }
+                    }
+                }
+
+                // Clear Cache Button
+                item {
+                    val cacheAvailable = cacheDir.listFiles()?.isNotEmpty() == true
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                withContext(Dispatchers.IO) {
+                                    cacheDir.deleteRecursively()
+                                }
+                                loader()
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        enabled = cacheAvailable,
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.ic_delete),
+                            "Clear Cache",
+                            modifier = Modifier
+                                .size(20.dp)
+                                .padding(end = 8.dp)
+                        )
+                        Text("Clear Cache", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+
+                item {
+                    val label = androidx.compose.ui.res.stringResource(
+                        R.string.clear_corridor_map_cache_btn,
+                        readableSize(corridorCacheSize)
+                    )
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                withContext(Dispatchers.IO) {
+                                    id.my.nanclouder.nanhistory.core.common.utils.CorridorCacheHelper
+                                        .clearAllCorridorCaches(context)
+                                    id.my.nanclouder.nanhistory.db.AppDatabase.getInstance(context)
+                                        .corridorNetworkDao().deleteAllCorridorNetworks()
+                                }
+                                loader()
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        enabled = corridorCacheSize > 0L,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.ic_delete),
+                            label,
+                            modifier = Modifier
+                                .size(20.dp)
+                                .padding(end = 8.dp)
+                        )
+                        Text(label, style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+
+                // Scan for Unlinked Files Button
+                item {
+                    Button(
+                        onClick = {
+                            scanningUnlinked = true
+                            unlinkedItemsState = null
+                            scope.launch(Dispatchers.IO) {
+                                unlinkedItemsState = scanForUnlinkedFiles()
+                                scanningUnlinked = false
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.primary
+                        ),
+                        enabled = !scanningUnlinked,
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary),
+                    ) {
+                        if (scanningUnlinked) {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .align(Alignment.CenterVertically)
+                                    .padding(end = 8.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Icon(
+                                painterResource(R.drawable.ic_search),
+                                "Scan Files",
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .padding(end = 8.dp)
+                                    .align(Alignment.CenterVertically),
+                            )
+                        }
+                        Text("Scan for Unlinked Files", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+
+                // Unlinked Files Results
+                if (unlinkedItems != null || scanningUnlinked) {
+                    item {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp)),
+                            color = MaterialTheme.colorScheme.surfaceContainer,
+                            tonalElevation = 2.dp
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                if (unlinkedItems?.isNotEmpty() == true) {
+                                    // Header with delete button
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                "${unlinkedItems.size} Unlinked File${if (unlinkedItems.size > 1) "s" else ""}",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            Text(
+                                                "Total: ${readableSize(unlinkedItems.sumOf { it.length() }.toFloat())}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Button(
+                                            onClick = {
+                                                scope.launch(Dispatchers.IO) {
+                                                    unlinkedItems.forEach {
+                                                        it.delete()
+                                                    }
+                                                    unlinkedItemsState = emptyList()
+                                                }
+                                            },
+                                            modifier = Modifier.height(36.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = MaterialTheme.colorScheme.error,
+                                                contentColor = MaterialTheme.colorScheme.onError
+                                            ),
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = 12.dp)
+                                        ) {
+                                            Text("Delete All", style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
+
+                                    // Unlinked files list
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .heightIn(max = 300.dp),
+                                        color = MaterialTheme.colorScheme.surface,
+                                        tonalElevation = 1.dp
+                                    ) {
+                                        LazyColumn(
+                                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                                        ) {
+                                            items(unlinkedItems.size) { index ->
+                                                val file = unlinkedItems[index]
+                                                UnlinkedFileItem(
+                                                    file = file,
+                                                    context = context,
+                                                    onDelete = {
+                                                        scope.launch(Dispatchers.IO) {
+                                                            file.delete()
+                                                            unlinkedItemsState = unlinkedItems - file
+                                                        }
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else if (unlinkedItems?.isEmpty() == true) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.Check,
+                                            "No unlinked files",
+                                            modifier = Modifier
+                                                .size(20.dp)
+                                                .padding(end = 8.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            "No unlinked files found",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                } else {
+                                    ComponentPlaceholder(Modifier.size(200.dp, 24.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    Box(Modifier.height(8.dp))
+                }
+            }
+
+            // Delete Confirmation Dialog
+            if (deleteDialogState) {
+                AlertDialog(
+                    icon = {
+                        Icon(
+                            Icons.Rounded.Warning,
+                            "Warning",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    },
+                    onDismissRequest = {
+                        deleteDialogState = false
+                    },
+                    title = {
+                        Text("Delete Folder?")
+                    },
+                    text = {
+                        Text("This action cannot be undone. The selected folder and all its contents will be permanently deleted.")
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = {
+                                deleteDialogState = false
+                            }
+                        ) {
+                            Text("Cancel")
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    withContext(Dispatchers.IO) {
+                                        fileToDelete?.deleteRecursively()
+                                    }
+                                    deleteDialogState = false
+                                    loader()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError
+                            ),
+                        ) {
+                            Text("Delete")
+                        }
+                    }
+                )
+            }
+        }
+    }
+
+    private suspend fun scanForUnlinkedFiles(): List<File> {
+        val files = mutableListOf<File>()
+
+        val audioFiles = getAudioFiles(applicationContext)
+        val locationFiles = getLocationFiles(applicationContext)
+        withContext(Dispatchers.IO) {
+            for (file in audioFiles) {
+                if (!file.exists()) continue
+                val events = searchEventsByAudioPath(
+                    applicationContext,
+                    getAttachmentPath(file)
+                )
+                if (events.isEmpty()) files.add(file)
+            }
+
+            for (file in locationFiles) {
+                if (!file.exists()) continue
+                val events = searchEventsByLocationPath(
+                    applicationContext,
+                    getAttachmentPath(file)
+                )
+                if (events.isEmpty()) files.add(file)
+            }
+        }
+        return files
+    }
+}
+
+@Composable
+private fun StorageLegendItem(
+    color: Color,
+    label: String,
+    size: Float,
+    totalSize: Float
+) {
+    val percentage = if (totalSize > 0) (size / totalSize * 100).toInt() else 0
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(12.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(color)
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                "${readableSize(size)} • $percentage%",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun UnlinkedFileItem(
+    file: File,
+    context: Context,
+    onDelete: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = Config.developerModeEnabled.get(context)) {
+                val audioExtensions = listOf("m4a", "mp3", "aac", "3gp")
+                val intent = if (file.extension in audioExtensions) {
+                    IntentRegistry.filePlayer(context, file.absolutePath)
+                } else {
+                    IntentRegistry.filePreview(context, file.absolutePath)
+                }
+                intent?.let { context.startActivity(it) }
+            }
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Icon(
+            painterResource(R.drawable.ic_description),
+            file.extension,
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                file.name,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                "${file.parentFile?.parentFile?.name}/${file.parentFile?.name}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Text(
+            readableSize(file.length()),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}

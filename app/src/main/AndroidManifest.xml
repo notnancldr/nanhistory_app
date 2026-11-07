@@ -44,7 +44,7 @@
             android:label="@string/title_activity_deleted_event"
             android:theme="@style/Theme.NanHistory" />
         <activity
-            android:name=".settings.BackupActivity"
+            android:name="id.my.nanclouder.nanhistory.feature.settings.BackupActivity"
             android:exported="false"
             android:label="@string/title_activity_backup"
             android:theme="@style/Theme.NanHistory" />
@@ -59,42 +59,42 @@
             android:label="@string/title_activity_share_map"
             android:theme="@style/Theme.NanHistory" />
         <activity
-            android:name=".settings.SettingsActivity"
+            android:name="id.my.nanclouder.nanhistory.feature.settings.SettingsActivity"
             android:exported="false"
             android:label="@string/title_activity_settings"
             android:theme="@style/Theme.NanHistory" />
         <activity
-            android:name=".settings.AppearanceSettingsActivity"
+            android:name="id.my.nanclouder.nanhistory.feature.settings.AppearanceSettingsActivity"
             android:exported="false"
             android:label="@string/title_activity_settings_appearance"
             android:theme="@style/Theme.NanHistory" />
         <activity
-            android:name=".settings.RecordSettingsActivity"
+            android:name="id.my.nanclouder.nanhistory.feature.settings.RecordSettingsActivity"
             android:exported="false"
             android:label="@string/title_activity_settings_record"
             android:theme="@style/Theme.NanHistory" />
         <activity
-            android:name=".settings.StorageSettingsActivity"
+            android:name="id.my.nanclouder.nanhistory.feature.settings.StorageSettingsActivity"
             android:exported="false"
             android:label="@string/title_activity_settings_storage"
             android:theme="@style/Theme.NanHistory" />
         <activity
-            android:name=".settings.AutoDeleteSettingsActivity"
+            android:name="id.my.nanclouder.nanhistory.feature.settings.AutoDeleteSettingsActivity"
             android:exported="false"
             android:label="@string/title_activity_settings_auto_delete"
             android:theme="@style/Theme.NanHistory" />
         <activity
-            android:name=".settings.ExperimentalSettingsActivity"
+            android:name="id.my.nanclouder.nanhistory.feature.settings.ExperimentalSettingsActivity"
             android:exported="false"
             android:label="@string/title_activity_settings_experimental"
             android:theme="@style/Theme.NanHistory" />
         <activity
-            android:name=".settings.DeveloperOptionsActivity"
+            android:name="id.my.nanclouder.nanhistory.feature.settings.DeveloperOptionsActivity"
             android:exported="false"
             android:label="@string/title_activity_settings_developer"
             android:theme="@style/Theme.NanHistory" />
         <activity
-            android:name=".settings.AboutActivity"
+            android:name="id.my.nanclouder.nanhistory.feature.settings.AboutActivity"
             android:exported="false"
             android:label="@string/title_activity_about"
             android:theme="@style/Theme.NanHistory" />
@@ -192,7 +192,7 @@
 <!--            android:label="MapLibreTest"-->
 <!--            android:theme="@style/Theme.NanHistory" />-->
         <activity
-            android:name=".activity.MainActivity"
+            android:name="id.my.nanclouder.nanhistory.feature.timeline.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:theme="@style/Theme.NanHistory">

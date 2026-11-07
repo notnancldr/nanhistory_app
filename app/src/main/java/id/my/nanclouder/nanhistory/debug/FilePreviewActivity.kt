@@ -54,9 +54,9 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonSyntaxException
 import com.google.gson.reflect.TypeToken
 import id.my.nanclouder.nanhistory.activity.eventDetail.getActivity
+import id.my.nanclouder.nanhistory.feature.settings.parseAccelerometerData
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import id.my.nanclouder.nanhistory.settings.AccelerometerGraph
-import id.my.nanclouder.nanhistory.settings.parseAccelerometerData
 import java.io.File
 
 class FilePreviewActivity : ComponentActivity() {

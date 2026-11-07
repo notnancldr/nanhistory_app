@@ -48,10 +48,10 @@ import androidx.compose.ui.unit.dp
 import id.my.nanclouder.nanhistory.activity.eventDetail.EventDetailActivity
 import id.my.nanclouder.nanhistory.db.AppDatabase
 import id.my.nanclouder.nanhistory.activity.eventDetail.getActivity
-import id.my.nanclouder.nanhistory.utils.getAttachmentPath
 import id.my.nanclouder.nanhistory.utils.readableSize
-import id.my.nanclouder.nanhistory.ui.AudioPlayer
-import id.my.nanclouder.nanhistory.ui.ComponentPlaceholder
+import id.my.nanclouder.nanhistory.core.ui.AudioPlayer
+import id.my.nanclouder.nanhistory.core.ui.ComponentPlaceholder
+import id.my.nanclouder.nanhistory.feature.settings.getAttachmentPath
 import id.my.nanclouder.nanhistory.ui.theme.NanHistoryTheme
 import java.io.File
 import java.time.Instant

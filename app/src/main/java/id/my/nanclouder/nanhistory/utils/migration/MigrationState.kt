@@ -1,7 +1,3 @@
 package id.my.nanclouder.nanhistory.utils.migration
 
-class MigrationState(
-    val progress: Float,
-    val finish: Boolean
-)
-
+typealias MigrationState = id.my.nanclouder.nanhistory.core.common.migration.MigrationState

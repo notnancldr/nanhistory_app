@@ -126,22 +126,14 @@ object YearlyMapCacheManager {
      * Recursively deletes all cached corridor network files and legacy OSMDroid caches.
      */
     fun clearAllCorridorCaches(context: Context) {
-        clearCache(context)
+        id.my.nanclouder.nanhistory.core.common.utils.CorridorCacheHelper.clearAllCorridorCaches(context)
     }
 
     /**
      * Calculates total storage bytes consumed by corridor caches.
      */
     fun getCorridorCacheSize(context: Context): Long {
-        val renderDir = getRenderCacheDir(context)
-        val legacyDir = getLegacyCacheDir(context)
-        val renderSize = if (renderDir.exists()) {
-            renderDir.walk().filter { it.isFile }.sumOf { it.length() }
-        } else 0L
-        val legacySize = if (legacyDir.exists()) {
-            legacyDir.walk().filter { it.isFile }.sumOf { it.length() }
-        } else 0L
-        return renderSize + legacySize
+        return id.my.nanclouder.nanhistory.core.common.utils.CorridorCacheHelper.getCorridorCacheSize(context)
     }
 
     /* Legacy OSMDroid caching methods below */

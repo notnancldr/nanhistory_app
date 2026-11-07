@@ -10,6 +10,22 @@
           <set>
             <option value="$PROJECT_DIR$" />
             <option value="$PROJECT_DIR$/app" />
+            <option value="$PROJECT_DIR$/core" />
+            <option value="$PROJECT_DIR$/core/common" />
+            <option value="$PROJECT_DIR$/core/data" />
+            <option value="$PROJECT_DIR$/core/database" />
+            <option value="$PROJECT_DIR$/core/domain" />
+            <option value="$PROJECT_DIR$/core/ui" />
+            <option value="$PROJECT_DIR$/feature" />
+            <option value="$PROJECT_DIR$/feature/eventdetail" />
+            <option value="$PROJECT_DIR$/feature/map-location" />
+            <option value="$PROJECT_DIR$/feature/record" />
+            <option value="$PROJECT_DIR$/feature/settings" />
+            <option value="$PROJECT_DIR$/feature/sharemap" />
+            <option value="$PROJECT_DIR$/feature/tag" />
+            <option value="$PROJECT_DIR$/feature/timeline" />
+            <option value="$PROJECT_DIR$/feature/trash" />
+            <option value="$PROJECT_DIR$/feature/yearlymap" />
           </set>
         </option>
       </GradleProjectSettings>

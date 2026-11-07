@@ -151,6 +151,8 @@ dependencies {
     implementation(project(":feature:sharemap"))
     implementation(project(":feature:record"))
     implementation(project(":feature:eventdetail"))
+    implementation(project(":feature:timeline"))
+    implementation(project(":feature:settings"))
     implementation("androidx.documentfile:documentfile:1.0.1")
     implementation(libs.capturable)
     implementation(libs.androidx.work.runtime.ktx)
